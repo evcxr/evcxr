@@ -1,0 +1,28 @@
+[package]
+name = "evcxr"
+version = "0.1.0"
+license = "Apache-2.0"
+description = "An Evaluation Context for Rust"
+repository = "https://github.com/google/evcxr"
+readme = "README.md"
+authors = ["David Lattimore <dml@google.com>"]
+
+[dependencies]
+# default-features on the following crates is to disable use of proc-macro, use
+# of which would cause an internal compiler .so file to be dynamically linked,
+# which would necessitate using cargo run or setting LD_LIBRARY_PATH, neither of
+# which we'd want to impose on users.
+syn = { version = "0.15.1", default-features = false, features = ["parsing", "full", "printing", "clone-impls", "extra-traits"] }
+proc-macro2 = { version = "0.4.9", default-features = false }
+# We have to turn off custom derive for failure as well, since otherwise
+# libproc_macro gets pulled in and we can't run our binary.
+failure = { version = "0.1.1", default-features = false, features = [ "std" ] }
+tempfile = "3.0.3"
+libc = "0.2.40"
+json = "0.11.13"
+regex = "1.0.2"
+lazy_static = "1.0.2"
+rand = "0.5.4"
+libloading = "0.5.0"
+sig = "1.0.0"
+backtrace = "0.3.9"

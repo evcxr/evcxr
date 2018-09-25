@@ -1,0 +1,7 @@
+[workspace]
+members = [
+  "evcxr",
+  "evcxr_repl",
+  "evcxr_jupyter",
+  "evcxr_runtime",
+]

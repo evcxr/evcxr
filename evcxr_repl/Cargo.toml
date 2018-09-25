@@ -1,0 +1,17 @@
+[package]
+name = "evcxr_repl"
+version = "0.1.0"
+license = "Apache-2.0"
+description = "A REPL for Rust"
+repository = "https://github.com/google/evcxr"
+readme = "README.md"
+authors = ["David Lattimore <dml@google.com>"]
+
+[dependencies]
+evcxr = { path = "../evcxr" }
+rustyline = "1.0.0"
+colored = "1.6.0"
+dirs = "1.0.2"
+lazy_static = "1.0.2"
+failure = { version = "0.1.1", default-features = false, features = [ "std" ] }
+regex = "1.0.2"
