@@ -1,6 +1,6 @@
 [package]
 name = "evcxr_jupyter"
-version = "0.1.0"
+version = "0.1.1"
 license = "Apache-2.0"
 description = "An Jupyter Kernel for Rust"
 repository = "https://github.com/google/evcxr"
@@ -8,13 +8,13 @@ readme = "README.md"
 authors = ["David Lattimore <dml@google.com>"]
 
 [dependencies]
-evcxr = { version = "0.1.0", path = "../evcxr" }
-json = "0.11.13"
-failure = { version = "0.1.1", default-features = false, features = [ "std" ] }
-zmq = "0.8.2"
-uuid = { version = "0.6.5", features = [ "v4" ] }
-hmac = "0.6.3"
-sha2 = "0.7.1"
-hex = "0.3.2"
-colored = "1.6.0"
-home = "0.3.3"
+evcxr = { version = "=0.1.1", path = "../evcxr" }
+json = "=0.11.13"
+failure = { version = "=0.1.1", default-features = false, features = [ "std" ] }
+zmq = "=0.8.2"
+uuid = { version = "=0.6.5", features = [ "v4" ] }
+hmac = "=0.6.3"
+sha2 = "=0.7.1"
+hex = "=0.3.2"
+colored = "=1.6.0"
+home = "=0.3.3"
