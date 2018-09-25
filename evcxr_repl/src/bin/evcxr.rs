@@ -104,7 +104,7 @@ impl Repl {
 
 fn main() {
     evcxr::runtime_hook();
-    println!("Welcome to evcxr. For help, type .help");
+    println!("Welcome to evcxr. For help, type :help");
     let mut repl = match Repl::new() {
         Ok(c) => c,
         Err(error) => {
