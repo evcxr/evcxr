@@ -8,7 +8,7 @@ readme = "README.md"
 authors = ["David Lattimore <dml@google.com>"]
 
 [dependencies]
-evcxr = { path = "../evcxr" }
+evcxr = { version = "0.1.0", path = "../evcxr" }
 rustyline = "1.0.0"
 colored = "1.6.0"
 dirs = "1.0.2"
