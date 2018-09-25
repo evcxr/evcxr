@@ -44,6 +44,6 @@ evcxr
 
 ## Similar projects
 
-* [rusti](https://github.com/murath/rusti). From a quick look, it appears to
+* [rusti](https://github.com/murarth/rusti). From a quick look, it appears to
   require a nightly compiler from 2016 and doesn't appear to persist variable
   values. So I suspect the way that it works is pretty different.
