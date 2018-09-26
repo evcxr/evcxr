@@ -25,7 +25,7 @@ use std::fs;
 use std::io;
 use std::sync::mpsc;
 
-const PROMPT: &str = "# ";
+const PROMPT: &str = ">> ";
 
 struct Repl {
     command_context: CommandContext,
