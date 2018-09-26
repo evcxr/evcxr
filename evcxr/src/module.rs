@@ -23,7 +23,7 @@ use EvalContext;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     if cfg!(target_os = "macos") {
-        format!("{}.dylib", crate_name)
+        format!("lib{}.dylib", crate_name)
     } else if cfg!(target_os = "windows") {
         format!("{}.dll", crate_name)
     } else {
