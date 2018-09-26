@@ -46,6 +46,12 @@ pub(crate) fn uninstall() -> Result<(), Error> {
 }
 
 fn get_kernel_dir() -> Result<PathBuf, Error> {
-    let home_dir = home_dir().ok_or_else(|| format_err!("Couldn't get home directory"))?;
-    Ok(home_dir.join(".ipython").join("kernels").join("rust"))
+    let jupyter_dir = if let Ok(dir) = env::var("JUPYTER_CONFIG_DIR") {
+        PathBuf::from(dir)
+    } else if let Some(home) = home_dir() {
+        home.join(".local").join("share").join("jupyter")
+    } else {
+        bail!("Couldn't get home directory");
+    };
+    Ok(jupyter_dir.join("kernels").join("rust"))
 }
