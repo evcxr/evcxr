@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use failure::Error;
-use home::home_dir;
+use dirs;
 use std::path::PathBuf;
 use std::{env, fs};
 
@@ -48,10 +48,10 @@ pub(crate) fn uninstall() -> Result<(), Error> {
 fn get_kernel_dir() -> Result<PathBuf, Error> {
     let jupyter_dir = if let Ok(dir) = env::var("JUPYTER_CONFIG_DIR") {
         PathBuf::from(dir)
-    } else if let Some(home) = home_dir() {
-        home.join(".local").join("share").join("jupyter")
+    } else if let Some(data_dir) = dirs::data_dir() {
+        data_dir.join("jupyter")
     } else {
-        bail!("Couldn't get home directory");
+        bail!("Couldn't get XDG data directory");
     };
     Ok(jupyter_dir.join("kernels").join("rust"))
 }

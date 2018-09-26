@@ -20,7 +20,7 @@ extern crate failure;
 extern crate colored;
 extern crate hex;
 extern crate hmac;
-extern crate home;
+extern crate dirs;
 extern crate sha2;
 extern crate uuid;
 extern crate zmq;
