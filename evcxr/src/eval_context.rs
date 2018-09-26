@@ -16,6 +16,7 @@ use child_process::ChildProcess;
 use code_block::{CodeBlock, CodeOrigin};
 use errors::{CompilationError, Error};
 use evcxr_internal_runtime;
+use idents;
 use item;
 use module::Module;
 use rand;
@@ -326,8 +327,7 @@ impl EvalContext {
             self,
             &CodeBlock::new().generated(include_str!("evcxr_internal_runtime.rs")),
         )?;
-        self
-            .state
+        self.state
             .modules
             .push(ModuleState::new(runtime_module, Vec::new()));
         Ok(())
@@ -673,33 +673,23 @@ impl EvalContext {
     }
 
     fn record_new_locals(&mut self, pat: &syn::Pat) {
-        match pat {
-            syn::Pat::Ident(ref pat_ident) => {
-                // Default new variables to some type, say String. Assuming it isn't a String, we'll
-                // get a compilation error when we try to move the variable into our variable store,
-                // then we'll see what type the error message says and fix it up. Hacky huh?
-                self.variable_states.insert(
-                    pat_ident.ident.to_string(),
-                    VariableState {
-                        type_name: "String".to_owned(),
-                        is_mut: pat_ident.mutability.is_some(),
-                        // All new locals will initially be defined only inside our catch_unwind
-                        // block.
-                        move_state: VariableMoveState::MovedIntoCatchUnwind,
-                        // Assume it's copy until we find out it's not.
-                        is_copy_type: true,
-                    },
-                );
-            }
-            syn::Pat::Struct(ref pat_struct) => {
-                for field in &pat_struct.fields {
-                    self.record_new_locals(&field.pat);
-                }
-            }
-            x => {
-                println!("Unhandled pat kind: {:?}", x);
-            }
-        }
+        idents::idents_do(pat, &mut |pat_ident: &syn::PatIdent| {
+            // Default new variables to some type, say String. Assuming it isn't a String, we'll
+            // get a compilation error when we try to move the variable into our variable store,
+            // then we'll see what type the error message says and fix it up. Hacky huh?
+            self.variable_states.insert(
+                pat_ident.ident.to_string(),
+                VariableState {
+                    type_name: "String".to_owned(),
+                    is_mut: pat_ident.mutability.is_some(),
+                    // All new locals will initially be defined only inside our catch_unwind
+                    // block.
+                    move_state: VariableMoveState::MovedIntoCatchUnwind,
+                    // Assume it's copy until we find out it's not.
+                    is_copy_type: true,
+                },
+            );
+        });
     }
 
     fn store_variable_statements(&mut self, move_state: &VariableMoveState) -> CodeBlock {

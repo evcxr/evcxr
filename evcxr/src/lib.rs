@@ -35,6 +35,7 @@ mod command_context;
 mod eval_context;
 #[allow(dead_code, private_no_mangle_fns)]
 mod evcxr_internal_runtime;
+mod idents;
 mod item;
 mod module;
 mod runtime;
