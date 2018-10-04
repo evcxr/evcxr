@@ -1,6 +1,7 @@
 # Evcxr
 
 [![Build Status](https://travis-ci.org/google/evcxr.svg?branch=master)](https://travis-ci.org/google/evcxr)
+[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/google/evcxr/master?filepath=evcxr_jupyter%2Fsamples%2Fevcxr_jupyter_tour.ipynb)
 
 An evaluation context for Rust.
 
