@@ -1,0 +1,10 @@
+#!/bin/bash
+
+curl https://sh.rustup.rs -sSf | sh -s -- --default-toolchain=stable -y
+
+echo '. $HOME/.cargo/env' >> ~/.bashrc
+echo '. $HOME/.cargo/env' >> ~/.profile
+source $HOME/.cargo/env
+
+cargo install evcxr_jupyter
+evcxr_jupyter --install
