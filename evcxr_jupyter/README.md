@@ -4,8 +4,20 @@ A [Jupyter](https://jupyter.org/) Kernel for the Rust programming language.
 
 ## Installation
 
+### Linux (Debian/Ubuntu)
+
 ```sh
 sudo apt install libzmq3-dev jupyter-notebook
+cargo install evcxr_jupyter
+evcxr_jupyter --install
+```
+
+### Mac OS X
+
+install jupyter or jupyterlab (eg. via anaconda)
+
+```sh
+brew install zeromq pkg-config
 cargo install evcxr_jupyter
 evcxr_jupyter --install
 ```
