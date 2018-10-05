@@ -14,6 +14,7 @@
 
 use child_process::ChildProcess;
 use code_block::{CodeBlock, CodeOrigin};
+use crate_config::ExternalCrate;
 use errors::{CompilationError, Error};
 use evcxr_internal_runtime;
 use idents;
@@ -167,9 +168,8 @@ impl EvalContext {
                         self.state
                             .external_deps
                             .entry(normalized_name)
-                            .or_insert_with(|| ExternalCrate {
-                                name: crate_name,
-                                config: "\"*\"".to_owned(),
+                            .or_insert_with(|| {
+                                ExternalCrate::new(crate_name, "\"*\"".to_owned()).unwrap()
                             });
                     }
                     syn::Stmt::Item(syn::Item::Macro(_)) | syn::Stmt::Semi(..) => {
@@ -256,7 +256,7 @@ impl EvalContext {
         let to_run = format!("extern crate {};", normalized_name);
         self.state
             .external_deps
-            .insert(normalized_name, ExternalCrate { name, config });
+            .insert(normalized_name, ExternalCrate::new(name, config)?);
         self.eval(&to_run).map(|_| ())
     }
 
@@ -854,16 +854,6 @@ enum VariableMoveState {
     Available,
     CopiedIntoCatchUnwind,
     MovedIntoCatchUnwind,
-}
-
-#[derive(Clone)]
-struct ExternalCrate {
-    // The name, as it appears in the crate registry. This may be different than the key against
-    // which this ExternalCrate is stored. If this name is "foo-bar", the key would be normalized as
-    // "foo_bar".
-    name: String,
-    // Everything after the '=' in Cargo.toml.
-    config: String,
 }
 
 struct ExecutionArtifacts {

@@ -32,6 +32,7 @@ mod errors;
 mod child_process;
 mod code_block;
 mod command_context;
+mod crate_config;
 mod eval_context;
 #[allow(dead_code, private_no_mangle_fns)]
 mod evcxr_internal_runtime;
