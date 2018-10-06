@@ -18,9 +18,9 @@ extern crate json;
 #[macro_use]
 extern crate failure;
 extern crate colored;
+extern crate dirs;
 extern crate hex;
 extern crate hmac;
-extern crate dirs;
 extern crate sha2;
 extern crate uuid;
 extern crate zmq;
