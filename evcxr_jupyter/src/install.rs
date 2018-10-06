@@ -49,6 +49,8 @@ pub(crate) fn uninstall() -> Result<(), Error> {
 fn get_kernel_dir() -> Result<PathBuf, Error> {
     let jupyter_dir = if let Ok(dir) = env::var("JUPYTER_CONFIG_DIR") {
         PathBuf::from(dir)
+    } else if let Ok(dir) = env::var("JUPYTER_PATH") {
+        PathBuf::from(dir)
     } else if let Some(dir) = get_user_kernel_dir() {
         dir
     } else {
