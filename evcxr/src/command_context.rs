@@ -44,16 +44,25 @@ impl CommandContext {
         if to_run.starts_with(':') {
             return self.process_command(to_run);
         }
-        let result;
+        let mut result;
         if self.print_timings {
             use std::time::Instant;
             let start = Instant::now();
             result = self.eval_context.eval(to_run);
             let duration = start.elapsed();
-            println!(
-                "Took {}ms",
-                duration.as_secs() * 1000 + u64::from(duration.subsec_millis())
-            );
+            if let Ok(outputs) = &mut result {
+                let text = outputs
+                    .content_by_mime_type
+                    .entry("text/plain".to_owned())
+                    .or_insert_with(String::new);
+                if !text.ends_with("\n") {
+                    text.push('\n');
+                }
+                text.push_str(&format!(
+                    "Took {}ms",
+                    duration.as_secs() * 1000 + u64::from(duration.subsec_millis())
+                ));
+            }
         } else {
             result = self.eval_context.eval(to_run);
         }
@@ -86,8 +95,8 @@ impl CommandContext {
         }
         if line == ":internal_debug" {
             let debug_mode = !self.eval_context.debug_mode();
-            println!("Internals debugging: {}", debug_mode);
             self.eval_context.set_debug_mode(debug_mode);
+            return text_output(format!("Internals debugging: {}", debug_mode));
         } else if line == ":vars" {
             let mut outputs = EvalOutputs::new();
             outputs
@@ -103,39 +112,43 @@ impl CommandContext {
             if let Err(error) =
                 self.add_extern_crate(captures[1].to_owned(), captures[2].to_owned())
             {
-                println!("{}", error);
+                bail!("{}", error);
             }
         } else if line == ":last_compile_dir" {
             if let Some(dir) = &self.eval_context.last_compile_dir() {
-                println!("{:?}", dir);
+                return text_output(format!("{:?}", dir));
             } else {
-                eprintln!("Nothing has been compiled yet");
+                bail!("Nothing has been compiled yet");
             }
         } else if line == ":opt" {
             self.opt_mode = !self.opt_mode;
-            println!("Optimization: {}", self.opt_mode);
             self.update_flags();
+            return text_output(format!("Optimization: {}", self.opt_mode));
         } else if line == ":timing" {
             self.print_timings = !self.print_timings;
-            println!("Timing: {}", self.print_timings);
+            return text_output(format!("Timing: {}", self.print_timings));
         } else if line == ":explain" {
             if self.last_errors.is_empty() {
-                println!("No last error to explain");
+                bail!("No last error to explain");
             } else {
                 for error in &self.last_errors {
                     if let Some(explanation) = error.explanation() {
-                        println!("{}", explanation);
+                        return text_output(explanation);
                     } else {
-                        println!("Sorry, last error has no explanation");
+                        bail!("Sorry, last error has no explanation");
                     }
                 }
             }
         } else if line == ":last_error_json" {
+            let mut errors_out = String::new();
             for error in &self.last_errors {
-                println!("{:#}", error.json);
+                use std::fmt::Write;
+                write!(&mut errors_out, "{}", error.json)?;
+                errors_out.push('\n');
             }
+            bail!(errors_out);
         } else if line == ":help" {
-            println!(
+            return text_output(
                 ":vars             List bound variables and their types\n\
                  :opt              Toggle optimization\n\
                  :explain          Print explanation of last error\n\
@@ -145,7 +158,7 @@ impl CommandContext {
                  :last_compile_dir Print the directory in which we last compiled\n\
                  :timing           Toggle printing of how long evaluations take\n\
                  :last_error_json  Print the last compilation error as JSON (for debugging)\n\
-                 :internal_debug   Toggle various internal debugging code"
+                 :internal_debug   Toggle various internal debugging code",
             );
         } else {
             bail!("Unrecognised command {}", line);
@@ -187,4 +200,12 @@ fn html_escape(input: &str, out: &mut String) {
             x => out.push(x),
         }
     }
+}
+
+fn text_output<T: Into<String>>(text: T) -> Result<EvalOutputs, Error> {
+    let mut outputs = EvalOutputs::new();
+    outputs
+        .content_by_mime_type
+        .insert("text/plain".to_owned(), text.into());
+    Ok(outputs)
 }
