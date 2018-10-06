@@ -55,7 +55,7 @@ impl CommandContext {
                     .content_by_mime_type
                     .entry("text/plain".to_owned())
                     .or_insert_with(String::new);
-                if !text.ends_with("\n") {
+                if !text.ends_with('\n') {
                     text.push('\n');
                 }
                 text.push_str(&format!(
@@ -131,13 +131,15 @@ impl CommandContext {
             if self.last_errors.is_empty() {
                 bail!("No last error to explain");
             } else {
+                let mut all_explanations = String::new();
                 for error in &self.last_errors {
                     if let Some(explanation) = error.explanation() {
-                        return text_output(explanation);
+                        all_explanations.push_str(explanation);
                     } else {
                         bail!("Sorry, last error has no explanation");
                     }
                 }
+                return text_output(all_explanations);
             }
         } else if line == ":last_error_json" {
             let mut errors_out = String::new();
