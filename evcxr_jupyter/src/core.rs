@@ -369,6 +369,7 @@ fn bind_socket(
     Ok(Connection::new(socket, &config.key)?)
 }
 
+/// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)
 fn kernel_info() -> JsonValue {
     object!{
         "protocol_version" => "5.3",
@@ -379,8 +380,15 @@ fn kernel_info() -> JsonValue {
             "version" => "",
             "mimetype" => "text/rust",
             "file_extension" => ".rs",
+            // Pygments lexer, for highlighting Only needed if it differs from the 'name' field.
+            // see http://pygments.org/docs/lexers/#lexers-for-the-rust-language
+            "pygment_lexer" => "rust",
+            // Codemirror mode, for for highlighting in the notebook. Only needed if it differs from the 'name' field.
+            // codemirror use text/x-rustsrc as mimetypes
+            // see https://codemirror.net/mode/rust/
+            "codemirror_mode" => "rust",
         },
-        "banner" => "EvCxR - Evaluation Context for Rust",
+        "banner" => format!("EvCxR {} - Evaluation Context for Rust", env!("CARGO_PKG_VERSION")),
         "help_links" => array![
             object!{"text" => "Rust std docs",
                     "url" => "https://doc.rust-lang.org/stable/std/"}
