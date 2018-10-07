@@ -156,10 +156,6 @@ impl Server {
             let code = message.code();
             execution_count += 1;
             message
-                .new_message("status")
-                .with_content(object!{"execution_state" => "busy"})
-                .send(&mut *self.iopub.lock().unwrap())?;
-            message
                 .new_message("execute_input")
                 .with_content(object!{
                     "execution_count" => execution_count,
@@ -201,10 +197,6 @@ impl Server {
                     })
                 }
             };
-            message
-                .new_message("status")
-                .with_content(object!{"execution_state" => "idle"})
-                .send(&mut *self.iopub.lock().unwrap())?;
             execution_reply_sender.send(reply)?;
         }
     }
@@ -217,7 +209,16 @@ impl Server {
     ) -> Result<(), Error> {
         loop {
             let message = JupyterMessage::read(&mut connection)?;
-
+            // Processing of every message should be enclosed between "busy" and "idle"
+            // see https://jupyter-client.readthedocs.io/en/latest/messaging.html#messages-on-the-shell-router-dealer-channel
+            // Jupiter Lab doesn't use the kernel until it received "idle" for kernel_info_request
+            message
+                .new_message("status")
+                .with_content(object!{"execution_state" => "busy"})
+                .send(&mut *self.iopub.lock().unwrap())?;
+            let idle = message
+                .new_message("status")
+                .with_content(object!{"execution_state" => "idle"});
             if message.message_type() == "kernel_info_request" {
                 message
                     .new_reply()
@@ -242,6 +243,7 @@ impl Server {
                     message.message_type()
                 );
             }
+            idle.send(&mut *self.iopub.lock().unwrap())?;
         }
     }
 
