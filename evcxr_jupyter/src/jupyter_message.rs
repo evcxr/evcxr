@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use chrono::Utc;
 use connection::{Connection, HmacSha256};
 use failure::Error;
 use hex;
@@ -128,6 +129,8 @@ impl JupyterMessage {
         header["msg_type"] = JsonValue::String(msg_type.to_owned());
         header["username"] = JsonValue::String("kernel".to_owned());
         header["msg_id"] = JsonValue::String(Uuid::new_v4().to_string());
+        header["date"] = JsonValue::String(Utc::now().to_rfc3339());
+
         JupyterMessage {
             zmq_identities: Vec::new(),
             header,
