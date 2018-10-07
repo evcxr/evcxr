@@ -1,5 +1,7 @@
 # Evcxr
 
+[![Build Status](https://travis-ci.org/google/evcxr.svg?branch=master)](https://travis-ci.org/google/evcxr)
+
 An evaluation context for Rust.
 
 This project consists of several related crates.
