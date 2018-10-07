@@ -18,8 +18,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
 
-const LOGO_32X32: &'static [u8] = include_bytes!("res/logo-32x32.png");
-const LOGO_64X64: &'static [u8] = include_bytes!("res/logo-64x64.png");
+const LOGO_32X32: &'static [u8] = include_bytes!("../../third_party/rust/rust-logo-32x32.png");
+const LOGO_64X64: &'static [u8] = include_bytes!("../../third_party/rust/rust-logo-64x64.png");
+const LOGO_LICENSE: &'static [u8] = include_bytes!("../../third_party/rust/LICENSE.md");
 
 pub(crate) fn install() -> Result<(), Error> {
     let kernel_dir = get_kernel_dir()?;
@@ -39,6 +40,7 @@ pub(crate) fn install() -> Result<(), Error> {
     kernel_json.write_pretty(&mut fs::File::create(kernel_json_filename)?, 2)?;
     install_resource(&kernel_dir, "logo-32x32.png", LOGO_32X32)?;
     install_resource(&kernel_dir, "logo-64x64.png", LOGO_64X64)?;
+    install_resource(&kernel_dir, "logo-LICENSE.md", LOGO_LICENSE)?;
     println!("Installation complete");
     Ok(())
 }
