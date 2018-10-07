@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use code_block::{CodeBlock, CodeOrigin};
-use json::JsonValue;
+use json::{self, JsonValue};
 use regex::Regex;
 use std;
 use std::fmt;
@@ -337,6 +337,12 @@ impl From<std::fmt::Error> for Error {
 
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
+        Error::JustMessage(error.to_string())
+    }
+}
+
+impl From<json::Error> for Error {
+    fn from(error: json::Error) -> Self {
         Error::JustMessage(error.to_string())
     }
 }

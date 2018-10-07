@@ -29,6 +29,7 @@ extern crate sig;
 
 #[macro_use]
 mod errors;
+mod cargo_metadata;
 mod child_process;
 mod code_block;
 mod command_context;

@@ -84,10 +84,6 @@ impl CommandContext {
         self.eval_context.rust_flags = flags;
     }
 
-    fn add_extern_crate(&mut self, name: String, config: String) -> Result<(), Error> {
-        self.eval_context.add_extern_crate(name, config)
-    }
-
     fn process_command(&mut self, line: &str) -> Result<EvalOutputs, Error> {
         use regex::Regex;
         lazy_static! {
@@ -109,8 +105,9 @@ impl CommandContext {
         } else if line == ":clear" {
             self.eval_context.clear()?;
         } else if let Some(captures) = ADD_DEP_RE.captures(line) {
-            if let Err(error) =
-                self.add_extern_crate(captures[1].to_owned(), captures[2].to_owned())
+            if let Err(error) = self
+                .eval_context
+                .add_extern_crate(captures[1].to_owned(), captures[2].to_owned())
             {
                 bail!("{}", error);
             }

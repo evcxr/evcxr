@@ -164,13 +164,15 @@ impl EvalContext {
                         ident, ..
                     })) => {
                         let crate_name = ident.to_string();
-                        let normalized_name = normalize_crate_name(&crate_name);
-                        self.state
-                            .external_deps
-                            .entry(normalized_name)
-                            .or_insert_with(|| {
-                                ExternalCrate::new(crate_name, "\"*\"".to_owned()).unwrap()
-                            });
+                        if !self.dependency_lib_names()?.contains(&crate_name) {
+                            self.state
+                                .external_deps
+                                .entry(crate_name.clone())
+                                .or_insert_with(|| {
+                                    ExternalCrate::new(crate_name, "\"*\"".to_owned()).unwrap()
+                                });
+                        }
+                        self.state.extern_crate_stmts.insert(stmt_code.to_owned());
                     }
                     syn::Stmt::Item(syn::Item::Macro(_)) | syn::Stmt::Semi(..) => {
                         code_block = code_block.user_code(stmt_code);
@@ -252,12 +254,10 @@ impl EvalContext {
     }
 
     pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<(), Error> {
-        let normalized_name = normalize_crate_name(&name);
-        let to_run = format!("extern crate {};", normalized_name);
         self.state
             .external_deps
-            .insert(normalized_name, ExternalCrate::new(name, config)?);
-        self.eval(&to_run).map(|_| ())
+            .insert(name.clone(), ExternalCrate::new(name, config)?);
+        self.eval("").map(|_| ())
     }
 
     pub fn debug_mode(&self) -> bool {
@@ -342,11 +342,17 @@ impl EvalContext {
             .join("")
     }
 
-    pub(crate) fn last_compile_dir(&self) -> Option<PathBuf> {
-        self.state
-            .modules
-            .last()
-            .map(|module| module.module.crate_dir.clone())
+    pub(crate) fn last_compile_dir(&self) -> &Option<PathBuf> {
+        &self.state.last_compile_dir
+    }
+
+    fn dependency_lib_names(&self) -> Result<Vec<String>, Error> {
+        use cargo_metadata;
+        if let Some(dir) = self.last_compile_dir() {
+            cargo_metadata::get_library_names(&dir)
+        } else {
+            Ok(vec![])
+        }
     }
 
     // If we have just top-level items, compile them. If we have just user-code,
@@ -402,6 +408,7 @@ impl EvalContext {
             match result {
                 Ok(execution_artifacts) => {
                     let module = execution_artifacts.module;
+                    self.state.last_compile_dir = Some(module.crate_dir.clone());
 
                     if !defined_names.is_empty() {
                         self.state
@@ -807,8 +814,8 @@ impl EvalContext {
                 ));
             }
         }
-        for crate_name in self.state.external_deps.keys() {
-            extern_stmts = extern_stmts.generated(format!("extern crate {};\n", crate_name));
+        for stmt in &self.state.extern_crate_stmts {
+            extern_stmts = extern_stmts.user_code(stmt.clone());
         }
         for user_use_stmt in &self.state.use_stmts {
             use_stmts = use_stmts.user_code(user_use_stmt.clone());
@@ -877,6 +884,8 @@ struct ContextState {
     modules: Vec<ModuleState>,
     pub(crate) external_deps: HashMap<String, ExternalCrate>,
     use_stmts: HashSet<String>,
+    extern_crate_stmts: HashSet<String>,
+    last_compile_dir: Option<PathBuf>,
 }
 
 #[derive(Clone)]
@@ -892,8 +901,4 @@ impl ModuleState {
             defined_names,
         }
     }
-}
-
-fn normalize_crate_name(crate_name: &str) -> String {
-    crate_name.replace("-", "_")
 }

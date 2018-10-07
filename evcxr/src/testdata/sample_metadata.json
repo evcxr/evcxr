@@ -1,0 +1,74 @@
+{
+    "packages": [
+        {
+            "name": "direct-1",
+            "targets": [
+                {
+                    "kind": [
+                        "lib"
+                    ],
+                    "crate_types": [
+                        "lib"
+                    ],
+                    "name": "direct1"
+                }
+            ]
+        },
+        {
+            "name": "direct-2",
+            "targets": [
+                {
+                    "kind": [
+                        "lib"
+                    ],
+                    "crate_types": [
+                        "lib"
+                    ],
+                    "name": "direct2"
+                }
+            ]
+        },
+        {
+            "name": "sample",
+            "dependencies": [
+                {
+                    "name": "direct-1"
+                },
+                {
+                    "name": "direct-2"
+                }
+            ],
+            "targets": [
+                {
+                    "kind": [
+                        "bin"
+                    ],
+                    "crate_types": [
+                        "bin"
+                    ],
+                    "name": "metadata"
+                }
+            ],
+            "manifest_path": "/home/foo/project/Cargo.toml"
+        },
+        {
+            "name": "indirect",
+            "dependencies": [
+                {
+                    "name": "indirect2"
+                }
+            ],
+            "targets": [
+                {
+                    "kind": [
+                        "lib"
+                    ],
+                    "crate_types": [
+                        "lib"
+                    ],
+                    "name": "indirect"
+                }
+            ]
+        }
+    ]
+}
