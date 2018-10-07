@@ -1,5 +1,7 @@
 # Evcxr REPL
 
+[![Latest Version](https://img.shields.io/crates/v/evcxr_repl.svg)](https://crates.io/crates/evcxr_repl)
+
 A REPL (Read-Eval-Print loop) for Rust.
 
 ## Installation and usage
