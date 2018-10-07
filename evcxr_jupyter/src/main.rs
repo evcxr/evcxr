@@ -17,6 +17,7 @@ extern crate evcxr;
 extern crate json;
 #[macro_use]
 extern crate failure;
+extern crate chrono;
 extern crate colored;
 extern crate dirs;
 extern crate hex;
