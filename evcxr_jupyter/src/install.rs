@@ -18,9 +18,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
 
-const LOGO_32X32: &'static [u8] = include_bytes!("../../third_party/rust/rust-logo-32x32.png");
-const LOGO_64X64: &'static [u8] = include_bytes!("../../third_party/rust/rust-logo-64x64.png");
-const LOGO_LICENSE: &'static [u8] = include_bytes!("../../third_party/rust/LICENSE.md");
+const LOGO_32X32: &'static [u8] = include_bytes!("../third_party/rust/rust-logo-32x32.png");
+const LOGO_64X64: &'static [u8] = include_bytes!("../third_party/rust/rust-logo-64x64.png");
+const LOGO_LICENSE: &'static [u8] = include_bytes!("../third_party/rust/LICENSE.md");
 
 pub(crate) fn install() -> Result<(), Error> {
     let kernel_dir = get_kernel_dir()?;
