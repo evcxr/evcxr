@@ -5,7 +5,10 @@ license = "Apache-2.0"
 description = "An Evaluation Context for Rust"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
-authors = ["David Lattimore <dml@google.com>"]
+authors = [
+    "David Lattimore <dvdlttmr@google.com>",
+    "Matthias Bussonnier",
+]
 
 [dependencies]
 # default-features on the following crates is to disable use of proc-macro, use
