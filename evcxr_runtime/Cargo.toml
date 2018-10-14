@@ -8,3 +8,4 @@ readme = "README.md"
 authors = ["David Lattimore <dml@google.com>"]
 
 [dependencies]
+base64 = "0.9.3"
