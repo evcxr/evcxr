@@ -27,9 +27,9 @@ pub struct ContentMimeType {
 /// ```
 /// evcxr_runtime::mime_type("text/plain").text("Hello world");
 /// ```
-pub fn mime_type(mime_type: &str) -> ContentMimeType {
+pub fn mime_type<S: Into<String>>(mime_type: S) -> ContentMimeType {
     ContentMimeType {
-        mime_type: mime_type.to_owned(),
+        mime_type: mime_type.into(),
     }
 }
 
@@ -41,10 +41,11 @@ impl ContentMimeType {
     /// evcxr_runtime::mime_type("text/html")
     ///     .text("<span style=\"color: red\">>Hello world</span>");
     /// ```
-    pub fn text(self, text: &str) {
+    pub fn text<S: AsRef<str>>(self, text: S) {
         println!(
             "EVCXR_BEGIN_CONTENT {}\n{}\nEVCXR_END_CONTENT",
-            self.mime_type, text
+            self.mime_type,
+            text.as_ref()
         );
     }
 }
@@ -56,5 +57,10 @@ mod tests {
     #[test]
     fn test_emit_data() {
         mime_type("text/plain").text("Hello world");
+    }
+
+    #[test]
+    fn test_mime_type_accept_string() {
+        mime_type("text/plain".to_owned()).text("Hello world");
     }
 }
