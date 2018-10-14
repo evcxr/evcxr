@@ -9,3 +9,4 @@ authors = ["David Lattimore <dml@google.com>"]
 
 [dependencies]
 base64 = "0.9.3"
+mime ="0.3.9"

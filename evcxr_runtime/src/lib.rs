@@ -12,6 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 extern crate base64;
+extern crate mime;
+
+mod shortcuts;
+
+pub use shortcuts::*;
 
 pub trait Display {
     /// Implementation should emit a representation of itself in one or mime
@@ -54,6 +59,7 @@ impl ContentMimeType {
     /// specified. The content is a binary format (e.g. image/png), the content
     /// should is base64 encoded.
     /// ```
+    /// let buffer: Vec<u8> = vec![];
     /// evcxr_runtime::mime_type("image/png").bytes(&buffer);
     /// ```
     pub fn bytes(self, buffer: &[u8]) {
@@ -64,6 +70,7 @@ impl ContentMimeType {
 #[cfg(test)]
 mod tests {
     use super::mime_type;
+    use mime;
 
     #[test]
     fn test_emit_data() {
@@ -73,5 +80,10 @@ mod tests {
     #[test]
     fn test_mime_type_accept_string() {
         mime_type("text/plain".to_owned()).text("Hello world");
+    }
+
+    #[test]
+    fn test_mime_type_accept_asrefstr() {
+        mime_type(mime::TEXT_PLAIN.as_ref()).text("Hello world");
     }
 }
