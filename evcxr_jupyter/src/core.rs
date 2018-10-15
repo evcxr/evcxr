@@ -168,26 +168,26 @@ impl Server {
                         // less hacky alternative would be to add a print statement, then block
                         // waiting for it.
                         thread::sleep(time::Duration::from_millis(1));
-                        let mut data = HashMap::new();
                         // At the time of writing the json crate appears to have a generic From
                         // implementation for a Vec<T> where T implements Into<JsonValue>. It also
                         // has conversion from HashMap<String, JsonValue>, but it doesn't have
                         // conversion from HashMap<String, T>. Perhaps send a PR? For now, we
                         // convert the values manually.
                         for (k, v) in output.content_by_mime_type {
+                            let mut data = HashMap::new();
                             if k.contains("json") {
                                 data.insert(k, json::parse(&v).unwrap_or(json::from(v)));
                             } else {
                                 data.insert(k, json::from(v));
                             }
+                            message
+                                .new_message("execute_result")
+                                .with_content(object!{
+                                    "execution_count" => execution_count,
+                                    "data" => data,
+                                    "metadata" => HashMap::new(),
+                                }).send(&mut *self.iopub.lock().unwrap())?;
                         }
-                        message
-                            .new_message("execute_result")
-                            .with_content(object!{
-                                "execution_count" => execution_count,
-                                "data" => data,
-                                "metadata" => HashMap::new(),
-                            }).send(&mut *self.iopub.lock().unwrap())?;
                     }
                     message.new_reply().with_content(object!{
                         "status" => "ok",
