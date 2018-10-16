@@ -188,6 +188,26 @@ impl Server {
                                 "data" => data,
                                 "metadata" => HashMap::new(),
                             }).send(&mut *self.iopub.lock().unwrap())?;
+                        if let Some(duration) = output.timing {
+                            // TODO replace by duration.as_millis() when stable
+                            let ms =
+                                duration.as_secs() * 1000 + u64::from(duration.subsec_millis());
+                            let mut data = HashMap::new();
+                            data.insert(
+                                "text/html".into(),
+                                json::from(format!(
+                                    "<span style=\"color: rgba(0,0,0,0.4);\">Took {}ms</span>",
+                                    ms
+                                )),
+                            );
+                            message
+                                .new_message("execute_result")
+                                .with_content(object!{
+                                    "execution_count" => execution_count,
+                                    "data" => data,
+                                    "metadata" => HashMap::new(),
+                                }).send(&mut *self.iopub.lock().unwrap())?;
+                        }
                     }
                     message.new_reply().with_content(object!{
                         "status" => "ok",

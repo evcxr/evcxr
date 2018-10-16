@@ -44,30 +44,17 @@ impl CommandContext {
         if to_run.starts_with(':') {
             return self.process_command(to_run);
         }
-        let mut result;
-        if self.print_timings {
-            use std::time::Instant;
-            let start = Instant::now();
-            result = self.eval_context.eval(to_run);
-            let duration = start.elapsed();
-            if let Ok(outputs) = &mut result {
-                let text = outputs
-                    .content_by_mime_type
-                    .entry("text/plain".to_owned())
-                    .or_insert_with(String::new);
-                if !text.ends_with('\n') {
-                    text.push('\n');
-                }
-                text.push_str(&format!(
-                    "Took {}ms",
-                    duration.as_secs() * 1000 + u64::from(duration.subsec_millis())
-                ));
-            }
-        } else {
-            result = self.eval_context.eval(to_run);
-        }
+        use std::time::Instant;
+        let start = Instant::now();
+        let result = self.eval_context.eval(to_run);
+        let duration = start.elapsed();
         match result {
-            Ok(m) => Ok(m),
+            Ok(mut m) => {
+                if self.print_timings {
+                    m.timing = Some(duration);
+                }
+                Ok(m)
+            }
             Err(Error::CompilationErrors(errors)) => {
                 self.last_errors = errors.clone();
                 Err(Error::CompilationErrors(errors))

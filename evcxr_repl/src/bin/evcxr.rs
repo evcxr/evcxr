@@ -55,6 +55,11 @@ impl Repl {
                 if let Some(text) = output.get("text/plain") {
                     println!("{}", text);
                 }
+                if let Some(duration) = output.timing {
+                    // TODO replace by duration.as_millis() when stable
+                    let ms = duration.as_secs() * 1000 + u64::from(duration.subsec_millis());
+                    println!("Took {}ms", ms);
+                }
             }
             Err(evcxr::Error::CompilationErrors(errors)) => {
                 self.display_errors(errors);
