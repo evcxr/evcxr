@@ -29,6 +29,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use syn;
 use tempfile;
 
@@ -827,12 +828,14 @@ impl EvalContext {
 #[derive(Default, Debug)]
 pub struct EvalOutputs {
     pub content_by_mime_type: HashMap<String, String>,
+    pub timing: Option<Duration>,
 }
 
 impl EvalOutputs {
     pub fn new() -> EvalOutputs {
         EvalOutputs {
             content_by_mime_type: HashMap::new(),
+            timing: None,
         }
     }
 
