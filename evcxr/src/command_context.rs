@@ -18,7 +18,6 @@ use {EvalContext, EvalContextOutputs, EvalOutputs};
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
 pub struct CommandContext {
-    opt_mode: bool,
     print_timings: bool,
     eval_context: EvalContext,
     last_errors: Vec<CompilationError>,
@@ -27,13 +26,11 @@ pub struct CommandContext {
 impl CommandContext {
     pub fn new() -> Result<(CommandContext, EvalContextOutputs), Error> {
         let (eval_context, eval_context_outputs) = EvalContext::new()?;
-        let mut command_context = CommandContext {
-            opt_mode: true,
+        let command_context = CommandContext {
             print_timings: false,
             eval_context,
             last_errors: Vec::new(),
         };
-        command_context.update_flags();
         Ok((command_context, eval_context_outputs))
     }
 
@@ -61,14 +58,6 @@ impl CommandContext {
             }
             x => x,
         }
-    }
-
-    fn update_flags(&mut self) {
-        let mut flags = Vec::new();
-        if self.opt_mode {
-            flags.push("-O".to_owned());
-        }
-        self.eval_context.rust_flags = flags;
     }
 
     fn process_command(&mut self, line: &str) -> Result<EvalOutputs, Error> {
@@ -105,9 +94,13 @@ impl CommandContext {
                 bail!("Nothing has been compiled yet");
             }
         } else if line == ":opt" {
-            self.opt_mode = !self.opt_mode;
-            self.update_flags();
-            return text_output(format!("Optimization: {}", self.opt_mode));
+            let new_level = if self.eval_context.opt_level() == "2" {
+                "0"
+            } else {
+                "2"
+            };
+            self.eval_context.set_opt_level(new_level)?;
+            return text_output(format!("Optimization: {}", self.eval_context.opt_level()));
         } else if line == ":timing" {
             self.print_timings = !self.print_timings;
             return text_output(format!("Timing: {}", self.print_timings));

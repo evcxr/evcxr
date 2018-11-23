@@ -42,8 +42,7 @@ pub struct EvalContext {
     build_num: i32,
     load_variable_statements: CodeBlock,
     pub(crate) debug_mode: bool,
-    // Extra flags to pass to rustc - e.g. -O
-    pub rust_flags: Vec<String>,
+    opt_level: String,
     next_module: Arc<Mutex<Option<Module>>>,
     state: ContextState,
     child_process: ChildProcess,
@@ -105,7 +104,7 @@ impl EvalContext {
             build_num: 0,
             load_variable_statements: CodeBlock::new(),
             debug_mode: false,
-            rust_flags: Vec::new(),
+            opt_level: "2".to_owned(),
             state: ContextState::default(),
             next_module: Arc::new(Mutex::new(None)),
             child_process,
@@ -252,6 +251,21 @@ impl EvalContext {
         self.load_variable_statements = self.load_variable_statements();
 
         Ok(outputs)
+    }
+
+    pub fn opt_level(&self) -> &str {
+        &self.opt_level
+    }
+
+    pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
+        if self.build_num > 0 {
+            bail!("Optimization level cannot be set after code has been executed.");
+        }
+        if level.is_empty() {
+            bail!("Optimization level cannot be an empty string");
+        }
+        self.opt_level = level.to_owned();
+        Ok(())
     }
 
     pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<(), Error> {

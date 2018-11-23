@@ -38,7 +38,6 @@ pub(crate) struct Module {
     target_dir: PathBuf,
     pub(crate) so_path: PathBuf,
     rs_filename: PathBuf,
-    extra_compilation_flags: Vec<String>,
 }
 
 impl Module {
@@ -64,7 +63,6 @@ impl Module {
             crate_dir,
             target_dir,
             rs_filename,
-            extra_compilation_flags: eval_context.rust_flags.clone(),
         };
         if let Some(previous_module) = previous_module {
             // Copy the lock file from our previous compilation, if any, to
@@ -119,7 +117,6 @@ impl Module {
             .arg("rpath")
             .arg("--error-format")
             .arg("json")
-            .args(&self.extra_compilation_flags)
             .current_dir(&self.crate_dir);
         let cargo_output = command.output()?;
         if !cargo_output.status.success() {
@@ -176,11 +173,25 @@ version = "1.0.0"
 [lib]
 crate-type = ["dylib"]
 
+[profile.dev]
+opt-level = {}
+debug = true
+rpath = true
+lto = false
+debug-assertions = true
+codegen-units = 16
+panic = 'unwind'
+incremental = true
+overflow-checks = true
+
 [dependencies]
 {}
 {}
 "#,
-            self.crate_name, loaded_module_deps, crate_imports
+            self.crate_name,
+            eval_context.opt_level(),
+            loaded_module_deps,
+            crate_imports
         )
     }
 }
