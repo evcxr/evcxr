@@ -26,7 +26,7 @@ use runtime;
 use statement_splitter;
 use std;
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -69,14 +69,37 @@ impl Drop for EvalContext {
     }
 }
 
+fn target_dir(tmpdir: &Path) -> PathBuf {
+    tmpdir.join("target")
+}
+
+fn deps_dir(tmpdir: &Path) -> PathBuf {
+    target_dir(tmpdir).join("debug").join("deps")
+}
+
 impl EvalContext {
     pub fn new() -> Result<(EvalContext, EvalContextOutputs), Error> {
         let current_exe = std::env::current_exe()?;
         Self::with_subprocess_command(std::process::Command::new(&current_exe))
     }
 
+    #[cfg(window)]
+    fn apply_platform_specific_vars(tmpdir_path: &Path, command: &mut std::process::Command) {
+        // Windows doesn't support rpath, so we need to set PATH so that it
+        // knows where to find dlls.
+        use std::ffi::OsString;
+        let mut path_var_value = OsString::new();
+        path_var_value.push(&deps_dir(tmpdir_path));
+        path_var_value.push(";");
+        path_var_value.push(std::env::var("PATH").unwrap_or_default());
+        command.env("PATH", path_var_value);
+    }
+
+    #[cfg(not(window))]
+    fn apply_platform_specific_vars(_tmpdir_path: &Path, _command: &mut std::process::Command) {}
+
     pub fn with_subprocess_command(
-        subprocess_command: std::process::Command,
+        mut subprocess_command: std::process::Command,
     ) -> Result<(EvalContext, EvalContextOutputs), Error> {
         let mut opt_tmpdir = None;
         let tmpdir_path;
@@ -92,6 +115,8 @@ impl EvalContext {
             opt_tmpdir = Some(tmpdir);
             crate_suffix = String::new();
         }
+
+        Self::apply_platform_specific_vars(&tmpdir_path, &mut subprocess_command);
 
         let (stdout_sender, stdout_receiver) = mpsc::channel();
         let (stderr_sender, stderr_receiver) = mpsc::channel();
@@ -117,6 +142,14 @@ impl EvalContext {
             stderr: stderr_receiver,
         };
         Ok((context, outputs))
+    }
+
+    pub(crate) fn target_dir(&self) -> PathBuf {
+        target_dir(&self.tmpdir_path)
+    }
+
+    pub(crate) fn deps_dir(&self) -> PathBuf {
+        deps_dir(&self.tmpdir_path)
     }
 
     /// Evaluates the supplied Rust code.
@@ -526,23 +559,24 @@ impl EvalContext {
             .add_all(self.load_variable_statements.clone());
         if compilation_mode == CompilationMode::RunAndCatchPanics {
             code = code
-                    .generated("match std::panic::catch_unwind(")
-                    .generated("  std::panic::AssertUnwindSafe(move ||{")
-                    // Shadow the outer evcxr_variable_store with a local one for variables moved
-                    // into the closure.
-                    .generated("let mut evcxr_variable_store = evcxr_internal_runtime::VariableStore::new();")
-                    .add_all(user_code)
-                    .add_all(self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind))
-                    .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind))
-                    // Return our local variable store from the closure to be merged back into the
-                    // main variable store.
-                    .generated("evcxr_variable_store")
-                    .generated("})) { ")
-                    .generated("  Ok(inner_store) => evcxr_variable_store.merge(inner_store),")
-                    .generated("  Err(_) => {")
-                    .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind))
-                    .generated("    evcxr_internal_runtime::notify_panic()}")
-                    .generated("}");
+                .generated("match std::panic::catch_unwind(")
+                .generated("  std::panic::AssertUnwindSafe(move ||{")
+                // Shadow the outer evcxr_variable_store with a local one for variables moved
+                // into the closure.
+                .generated(
+                    "let mut evcxr_variable_store = evcxr_internal_runtime::VariableStore::new();",
+                ).add_all(user_code)
+                .add_all(self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind))
+                .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind))
+                // Return our local variable store from the closure to be merged back into the
+                // main variable store.
+                .generated("evcxr_variable_store")
+                .generated("})) { ")
+                .generated("  Ok(inner_store) => evcxr_variable_store.merge(inner_store),")
+                .generated("  Err(_) => {")
+                .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind))
+                .generated("    evcxr_internal_runtime::notify_panic()}")
+                .generated("}");
         } else {
             code = code.add_all(user_code);
         }

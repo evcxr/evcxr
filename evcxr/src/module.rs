@@ -46,14 +46,12 @@ impl Module {
         crate_name: &str,
         previous_module: Option<&Module>,
     ) -> Result<Module, Error> {
-        let target_dir = eval_context.tmpdir_path.join("target");
+        let target_dir = eval_context.target_dir();
         let crate_dir = eval_context.tmpdir_path.join(&crate_name);
         let src_dir = crate_dir.join("src");
         fs::create_dir_all(&src_dir)?;
         let rs_filename = src_dir.join("lib.rs");
-        let so_path = target_dir
-            .join("debug")
-            .join("deps")
+        let so_path = eval_context.deps_dir()
             .join(shared_object_name_from_crate_name(crate_name));
 
         let module = Module {
@@ -113,8 +111,6 @@ impl Module {
             .arg("--")
             .arg("-C")
             .arg("prefer-dynamic")
-            .arg("-C")
-            .arg("rpath")
             .arg("--error-format")
             .arg("json")
             .current_dir(&self.crate_dir);
