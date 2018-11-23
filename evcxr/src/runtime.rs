@@ -90,6 +90,7 @@ impl Runtime {
         Ok(())
     }
 
+    #[cfg(unix)]
     pub fn install_crash_handlers(&self) {
         use backtrace::Backtrace;
         use sig::ffi::Sig;
@@ -111,6 +112,9 @@ impl Runtime {
         signal!(Sig::ILL, segfault_handler);
         signal!(Sig::BUS, segfault_handler);
     }
+
+    #[cfg(not(unix))]
+    pub fn install_crash_handlers(&self) {}
 }
 
 impl Drop for Runtime {
