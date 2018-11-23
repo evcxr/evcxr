@@ -8,6 +8,10 @@ matrix:
   allow_failures:
     - rust: nightly
   fast_finish: true
+addons:
+  apt:
+    packages:
+    - libzmq3-dev
 script:
   - cargo build --verbose --all
   - cargo test --verbose --all
