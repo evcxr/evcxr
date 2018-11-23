@@ -57,8 +57,7 @@ impl VariableStore {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn create_variable_store() -> *mut VariableStore {
+pub fn create_variable_store() -> *mut VariableStore {
     Box::into_raw(Box::new(VariableStore::new()))
 }
 
