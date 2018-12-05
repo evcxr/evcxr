@@ -28,7 +28,7 @@ evcxr_jupyter --install
 
 * Functions, structs etc need to all be declared pub, otherwise they can't be
   referenced from later cells.
-* See see what variables you've got defined, type ":vars".
+* To see what variables you've got defined, type ":vars".
 * Don't ask Jupyter to "interrupt kernel", it won't work. Rust threads can't be
   interrupted.
 * If your code panics, any non-copy variables referenced by the code being run
