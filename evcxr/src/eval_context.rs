@@ -708,6 +708,16 @@ impl EvalContext {
                         // cannot find value in scope.
                         self.variable_states.remove(variable_name);
                         retry = true;
+                    } else if error_code == "E0603" {
+                        if let Some(variable_state) = self.variable_states.remove(variable_name) {
+                            bail!(
+                            "Failed to determine type of variable `{}`. rustc suggested type \
+                             {}, but that's private. Sometimes adding an extern crate will help \
+                             rustc suggest the correct public type name.",
+                            variable_name,
+                            variable_state.type_name
+                        );
+                        }
                     }
                 }
                 CodeOrigin::AssertCopyType { variable_name } => {

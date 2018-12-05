@@ -51,7 +51,8 @@ impl Module {
         let src_dir = crate_dir.join("src");
         fs::create_dir_all(&src_dir)?;
         let rs_filename = src_dir.join("lib.rs");
-        let so_path = eval_context.deps_dir()
+        let so_path = eval_context
+            .deps_dir()
             .join(shared_object_name_from_crate_name(crate_name));
 
         let module = Module {
