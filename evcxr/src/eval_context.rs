@@ -189,7 +189,7 @@ impl EvalContext {
                 match &stmt {
                     syn::Stmt::Local(local) => {
                         for pat in &local.pats {
-                            self.record_new_locals(pat);
+                            self.record_new_locals(pat, local.ty.as_ref().map(|ty| &*ty.1));
                         }
                         code_block = code_block.user_code(stmt_code);
                     }
@@ -713,7 +713,8 @@ impl EvalContext {
                             bail!(
                             "Failed to determine type of variable `{}`. rustc suggested type \
                              {}, but that's private. Sometimes adding an extern crate will help \
-                             rustc suggest the correct public type name.",
+                             rustc suggest the correct public type name, or you can give an \
+                             explicit type.",
                             variable_name,
                             variable_state.type_name
                         );
@@ -738,15 +739,23 @@ impl EvalContext {
         Ok(retry)
     }
 
-    fn record_new_locals(&mut self, pat: &syn::Pat) {
+    fn record_new_locals(&mut self, pat: &syn::Pat, ty: Option<&syn::Type>) {
+        use syn::export::ToTokens;
+        // Default new variables to some type, say String. Assuming it isn't a
+        // String, we'll get a compilation error when we try to move the
+        // variable into our variable store, then we'll see what type the error
+        // message says and fix it up. Hacky huh? If the user gave an explicit
+        // type, we'll use that for all variables in that assignment (probably
+        // only correct if it's a single variable). This gives the user a way to
+        // force the type if rustc is giving us a bad suggestion.
+        let type_name = ty
+            .map(|ty| format!("{}", ty.into_token_stream()))
+            .unwrap_or_else(|| "String".to_owned());
         idents::idents_do(pat, &mut |pat_ident: &syn::PatIdent| {
-            // Default new variables to some type, say String. Assuming it isn't a String, we'll
-            // get a compilation error when we try to move the variable into our variable store,
-            // then we'll see what type the error message says and fix it up. Hacky huh?
             self.variable_states.insert(
                 pat_ident.ident.to_string(),
                 VariableState {
-                    type_name: "String".to_owned(),
+                    type_name: type_name.clone(),
                     is_mut: pat_ident.mutability.is_some(),
                     // All new locals will initially be defined only inside our catch_unwind
                     // block.
