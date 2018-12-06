@@ -7,7 +7,7 @@ repository = "https://github.com/google/evcxr"
 readme = "README.md"
 authors = [
     "David Lattimore <dvdlttmr@google.com>",
-    "David Bernard",
+    "David Bernard <david.bernard.31@gmail.com>",
 ]
 
 [dependencies]
