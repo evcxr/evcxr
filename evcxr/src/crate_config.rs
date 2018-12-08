@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use errors::Error;
+use regex::Regex;
+use std::path::Path;
 
 #[derive(Clone)]
 pub(crate) struct ExternalCrate {
@@ -24,8 +26,38 @@ pub(crate) struct ExternalCrate {
     pub(crate) config: String,
 }
 
+fn make_paths_absolute(config: String) -> Result<String, Error> {
+    // Perhaps not the nicest way to do this. Using a toml parser would possibly
+    // be nicer, but when I checked the toml parser used custom derive and if we
+    // use any crate that uses custom derive, we end up with a binary that can't
+    // be run... at least on older compilers. This was just recently fixed, but
+    // I'm not yet ready to drop support for older versions of rustc.
+    lazy_static! {
+        static ref PATH_RE: Regex = Regex::new("^(.*)path *= *\"([^\"]+)\"(.*)$").unwrap();
+    }
+    if let Some(captures) = PATH_RE.captures(&config) {
+        let path = Path::new(&captures[2]);
+        if !path.is_absolute() {
+            match path.canonicalize() {
+                Ok(path) => {
+                    return Ok(captures[1].to_owned()
+                        + "path = \""
+                        + &path.to_string_lossy()
+                        + "\""
+                        + &captures[3]);
+                }
+                Err(err) => {
+                    bail!("{}: {:?}", err, path);
+                }
+            }
+        }
+    }
+    Ok(config)
+}
+
 impl ExternalCrate {
     pub(crate) fn new(name: String, config: String) -> Result<ExternalCrate, Error> {
+        let config = make_paths_absolute(config)?;
         Ok(ExternalCrate { name, config })
     }
 }
@@ -33,20 +65,21 @@ impl ExternalCrate {
 #[cfg(test)]
 mod tests {
     use super::ExternalCrate;
-    use std::env;
+    use std::path::Path;
 
     #[test]
-    #[ignore]
     fn make_paths_absolute() {
-        println!("{:?}", env::current_dir());
-        let krate = ExternalCrate::new("foo".to_owned(), "{ path = \"my_crates/foo\" }".to_owned())
-            .unwrap();
+        let krate =
+            ExternalCrate::new("foo".to_owned(), "{ path = \"src/testdata\" }".to_owned()).unwrap();
         assert_eq!(krate.name, "foo");
         assert_eq!(
             krate.config,
             format!(
-                "{{ path = \"{}/my_crates/foo\" }}",
-                env::current_dir().unwrap().to_string_lossy()
+                "{{ path = \"{}\" }}",
+                Path::new("src/testdata")
+                    .canonicalize()
+                    .unwrap()
+                    .to_string_lossy()
             )
         );
     }
