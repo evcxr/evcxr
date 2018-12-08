@@ -162,17 +162,17 @@ fn function_panics() {
 fn tls_implementing_drop() {
     let mut e = new_context();
     eval!(e, pub struct Foo {}
-          impl Drop for Foo {
-              fn drop(&mut self) {
-                  println!("Dropping Foo");
-              }
-          }
-          pub fn init_foo() {
-              thread_local! {
-                  pub static FOO: Foo = Foo {};
-              }
-              FOO.with(|f| ())
-          });
+    impl Drop for Foo {
+        fn drop(&mut self) {
+            println!("Dropping Foo");
+        }
+    }
+    pub fn init_foo() {
+        thread_local! {
+            pub static FOO: Foo = Foo {};
+        }
+        FOO.with(|f| ())
+    });
     eval!(e, init_foo(););
 }
 

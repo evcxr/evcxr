@@ -157,10 +157,11 @@ impl Server {
             execution_count += 1;
             message
                 .new_message("execute_input")
-                .with_content(object!{
+                .with_content(object! {
                     "execution_count" => execution_count,
                     "code" => code
-                }).send(&mut *self.iopub.lock().unwrap())?;
+                })
+                .send(&mut *self.iopub.lock().unwrap())?;
             let reply = match context.execute(code) {
                 Ok(output) => {
                     if !output.is_empty() {
@@ -183,11 +184,12 @@ impl Server {
                         }
                         message
                             .new_message("execute_result")
-                            .with_content(object!{
+                            .with_content(object! {
                                 "execution_count" => execution_count,
                                 "data" => data,
                                 "metadata" => HashMap::new(),
-                            }).send(&mut *self.iopub.lock().unwrap())?;
+                            })
+                            .send(&mut *self.iopub.lock().unwrap())?;
                         if let Some(duration) = output.timing {
                             // TODO replace by duration.as_millis() when stable
                             let ms =
@@ -202,21 +204,22 @@ impl Server {
                             );
                             message
                                 .new_message("execute_result")
-                                .with_content(object!{
+                                .with_content(object! {
                                     "execution_count" => execution_count,
                                     "data" => data,
                                     "metadata" => HashMap::new(),
-                                }).send(&mut *self.iopub.lock().unwrap())?;
+                                })
+                                .send(&mut *self.iopub.lock().unwrap())?;
                         }
                     }
-                    message.new_reply().with_content(object!{
+                    message.new_reply().with_content(object! {
                         "status" => "ok",
                         "execution_count" => execution_count
                     })
                 }
                 Err(errors) => {
                     self.emit_errors(&errors, &message)?;
-                    message.new_reply().with_content(object!{
+                    message.new_reply().with_content(object! {
                         "status" => "error",
                         "execution_count" => execution_count,
                     })
@@ -239,11 +242,11 @@ impl Server {
             // Jupiter Lab doesn't use the kernel until it received "idle" for kernel_info_request
             message
                 .new_message("status")
-                .with_content(object!{"execution_state" => "busy"})
+                .with_content(object! {"execution_state" => "busy"})
                 .send(&mut *self.iopub.lock().unwrap())?;
             let idle = message
                 .new_message("status")
-                .with_content(object!{"execution_state" => "idle"});
+                .with_content(object! {"execution_state" => "idle"});
             if message.message_type() == "kernel_info_request" {
                 message
                     .new_reply()
@@ -252,7 +255,7 @@ impl Server {
             } else if message.message_type() == "is_complete_request" {
                 message
                     .new_reply()
-                    .with_content(object!{"status" => "complete"})
+                    .with_content(object! {"status" => "complete"})
                     .send(&mut connection)?;
             } else if message.message_type() == "execute_request" {
                 execution_channel.send(message)?;
@@ -306,10 +309,11 @@ impl Server {
                 }
                 if let Some(message) = message {
                     if let Err(error) = message
-                        .with_content(object!{
+                        .with_content(object! {
                             "name" => output_name,
                             "text" => format!("{}\n", line),
-                        }).send(&mut *self.iopub.lock().unwrap())
+                        })
+                        .send(&mut *self.iopub.lock().unwrap())
                     {
                         eprintln!("{}", error);
                     }
@@ -353,21 +357,23 @@ impl Server {
                         traceback.push(error.message());
                         parent_message
                             .new_message("error")
-                            .with_content(object!{
+                            .with_content(object! {
                                 "ename" => "Error",
                                 "evalue" => error.message(),
                                 "traceback" => traceback,
-                            }).send(&mut *self.iopub.lock().unwrap())?;
+                            })
+                            .send(&mut *self.iopub.lock().unwrap())?;
                     } else {
                         parent_message
                             .new_message("error")
-                            .with_content(object!{
+                            .with_content(object! {
                                 "ename" => "Error",
                                 "evalue" => error.message(),
                                 "traceback" => array![
                                     message
                                 ],
-                            }).send(&mut *self.iopub.lock().unwrap())?;
+                            })
+                            .send(&mut *self.iopub.lock().unwrap())?;
                     }
                 }
             }
@@ -375,11 +381,12 @@ impl Server {
                 let displayed_error = format!("{}", error);
                 parent_message
                     .new_message("error")
-                    .with_content(object!{
+                    .with_content(object! {
                         "ename" => "Error",
                         "evalue" => displayed_error.clone(),
                         "traceback" => array![displayed_error],
-                    }).send(&mut *self.iopub.lock().unwrap())?;
+                    })
+                    .send(&mut *self.iopub.lock().unwrap())?;
             }
         }
         Ok(())
@@ -398,7 +405,7 @@ fn bind_socket(
 
 /// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)
 fn kernel_info() -> JsonValue {
-    object!{
+    object! {
         "protocol_version" => "5.3",
         "implementation" => env!("CARGO_PKG_NAME"),
         "implementation_version" => env!("CARGO_PKG_VERSION"),

@@ -29,7 +29,7 @@ pub(crate) fn install() -> Result<(), Error> {
     let current_exe = current_exe_path
         .to_str()
         .ok_or_else(|| format_err!("current exe path isn't valid UTF-8"))?;
-    let kernel_json = object!{
+    let kernel_json = object! {
         "argv" => array![current_exe, "--control_file", "{connection_file}"],
         "display_name" => "Rust",
         "language" => "rust",

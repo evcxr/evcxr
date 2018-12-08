@@ -131,7 +131,8 @@ impl Module {
                             }
                             None
                         })
-                }).collect();
+                })
+                .collect();
             if errors.is_empty() {
                 if let Some(error) = non_json_error {
                     bail!(Error::JustMessage(error.to_owned()));
@@ -158,7 +159,8 @@ impl Module {
                 &mut loaded_module_deps,
                 "{} = {{ path = \"../{}\" }}",
                 m.crate_name, m.crate_name
-            ).unwrap();
+            )
+            .unwrap();
         }
         let crate_imports = eval_context.format_cargo_deps();
         format!(

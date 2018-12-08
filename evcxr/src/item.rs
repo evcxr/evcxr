@@ -37,12 +37,13 @@ pub(crate) fn is_item_public(item: &syn::Item) -> bool {
         syn::Item::Union(i) => is_public(&i.vis),
         syn::Item::Trait(i) => is_public(&i.vis),
         syn::Item::Impl(i) => {
-            i.trait_.is_some() || i.items.iter().all(|i2| match i2 {
-                syn::ImplItem::Const(i) => is_public(&i.vis),
-                syn::ImplItem::Method(i) => is_public(&i.vis),
-                syn::ImplItem::Type(i) => is_public(&i.vis),
-                _ => true,
-            })
+            i.trait_.is_some()
+                || i.items.iter().all(|i2| match i2 {
+                    syn::ImplItem::Const(i) => is_public(&i.vis),
+                    syn::ImplItem::Method(i) => is_public(&i.vis),
+                    syn::ImplItem::Type(i) => is_public(&i.vis),
+                    _ => true,
+                })
         }
         _ => true,
     }

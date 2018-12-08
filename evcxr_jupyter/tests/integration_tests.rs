@@ -29,7 +29,8 @@ fn test_binary_execution() {
             .parent()
             .unwrap()
             .join("evcxr_jupyter"),
-    ).arg("--help")
+    )
+    .arg("--help")
     .env_remove("LD_LIBRARY_PATH")
     .output()
     .unwrap();

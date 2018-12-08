@@ -162,7 +162,8 @@ impl CompilationError {
                         return None;
                     }
                     child["message"].as_str().map(|s| s.to_owned())
-                }).collect()
+                })
+                .collect()
         } else {
             vec![]
         }

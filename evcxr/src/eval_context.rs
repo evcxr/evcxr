@@ -237,7 +237,8 @@ impl EvalContext {
                             CodeBlock::new()
                                 .generated(
                                     "evcxr_internal_runtime::send_text_plain(&format!(\"{:?}\",\n",
-                                ).user_code(stmt_code)
+                                )
+                                .user_code(stmt_code)
                                 .generated("));"),
                         );
                     }
@@ -565,7 +566,8 @@ impl EvalContext {
                 // into the closure.
                 .generated(
                     "let mut evcxr_variable_store = evcxr_internal_runtime::VariableStore::new();",
-                ).add_all(user_code)
+                )
+                .add_all(user_code)
                 .add_all(self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind))
                 .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind))
                 // Return our local variable store from the closure to be merged back into the

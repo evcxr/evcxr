@@ -81,7 +81,8 @@ mod tests {
             library_names_from_metadata(
                 Path::new("/home/foo/project"),
                 include_str!("testdata/sample_metadata.json")
-            ).unwrap(),
+            )
+            .unwrap(),
             vec!["direct1", "direct2"]
         );
     }

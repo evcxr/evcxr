@@ -29,7 +29,8 @@ fn test_binary_execution() {
             .parent()
             .unwrap()
             .join("evcxr"),
-    ).arg("--help")
+    )
+    .arg("--help")
     .env_remove("LD_LIBRARY_PATH")
     .output()
     .unwrap();
