@@ -5,3 +5,7 @@ members = [
   "evcxr_jupyter",
   "evcxr_runtime",
 ]
+
+exclude = [
+  "runtimes"
+]
