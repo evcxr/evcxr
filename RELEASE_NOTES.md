@@ -1,3 +1,9 @@
+# Version 0.3.1
+* Fixed handling of crates with "-" in their name.
+* Support relative crate paths.
+* Don't error if the same extern crate is given multiple times with slightly
+  different formatting.
+
 # Version 0.3.0
 * Fix optimization (wasn't actually working before for some reason).
 * Give better error message if rustc suggests a private type for a variable.
