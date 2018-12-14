@@ -64,7 +64,7 @@ fn library_names_from_metadata(crate_dir: &Path, metadata: &str) -> Result<Vec<S
     let mut library_names = Vec::new();
     for dep_name in direct_dependencies {
         if let Some(lib_name) = crate_to_library_names.get(dep_name) {
-            library_names.push(lib_name.clone());
+            library_names.push(lib_name.replace("-", "_"));
         }
     }
     Ok(library_names)
