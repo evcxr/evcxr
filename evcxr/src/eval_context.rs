@@ -202,10 +202,13 @@ impl EvalContext {
                                 .external_deps
                                 .entry(crate_name.clone())
                                 .or_insert_with(|| {
-                                    ExternalCrate::new(crate_name, "\"*\"".to_owned()).unwrap()
+                                    ExternalCrate::new(crate_name.clone(), "\"*\"".to_owned())
+                                        .unwrap()
                                 });
                         }
-                        self.state.extern_crate_stmts.insert(stmt_code.to_owned());
+                        self.state
+                            .extern_crate_stmts
+                            .insert(crate_name, stmt_code.to_owned());
                     }
                     syn::Stmt::Item(syn::Item::Macro(_)) | syn::Stmt::Semi(..) => {
                         code_block = code_block.user_code(stmt_code);
@@ -884,7 +887,7 @@ impl EvalContext {
                 ));
             }
         }
-        for stmt in &self.state.extern_crate_stmts {
+        for stmt in self.state.extern_crate_stmts.values() {
             extern_stmts = extern_stmts.user_code(stmt.clone());
         }
         for user_use_stmt in &self.state.use_stmts {
@@ -956,7 +959,9 @@ struct ContextState {
     modules: Vec<ModuleState>,
     pub(crate) external_deps: HashMap<String, ExternalCrate>,
     use_stmts: HashSet<String>,
-    extern_crate_stmts: HashSet<String>,
+    // Keyed by crate name. Could use a set, except that the statement might be
+    // formatted slightly differently.
+    extern_crate_stmts: HashMap<String, String>,
     last_compile_dir: Option<PathBuf>,
 }
 
