@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate base64;
 extern crate evcxr_runtime;
 extern crate image;
 
@@ -31,7 +30,7 @@ impl ImageDisplay for image::RgbImage {
                 image::ColorType::RGB(8),
             )
             .unwrap();
-        evcxr_runtime::mime_type("image/png").text(&base64::encode(&buffer));
+        evcxr_runtime::mime_type("image/png").bytes(&buffer);
     }
 }
 
@@ -46,7 +45,7 @@ impl ImageDisplay for image::GrayImage {
                 image::ColorType::Gray(8),
             )
             .unwrap();
-        evcxr_runtime::mime_type("image/png").text(&base64::encode(&buffer));
+        evcxr_runtime::mime_type("image/png").bytes(&buffer);
     }
 }
 
