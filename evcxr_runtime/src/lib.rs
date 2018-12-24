@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+extern crate base64;
 
 pub trait Display {
     /// Implementation should emit a representation of itself in one or mime
@@ -47,6 +48,17 @@ impl ContentMimeType {
             self.mime_type,
             text.as_ref()
         );
+    }
+
+    /// Emits the supplied content, which should be of the mime type already
+    /// specified. The content is a binary format (e.g. image/png), the content
+    /// should is base64 encoded.
+    /// ```
+    /// let buffer: Vec<u8> = vec![];
+    /// evcxr_runtime::mime_type("image/png").bytes(&buffer);
+    /// ```
+    pub fn bytes(self, buffer: &[u8]) {
+        self.text(&base64::encode(buffer))
     }
 }
 
