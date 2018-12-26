@@ -305,11 +305,18 @@ impl EvalContext {
         Ok(())
     }
 
-    pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<(), Error> {
+    pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<EvalOutputs, Error> {
+        let key = name.clone();
         self.state
             .external_deps
-            .insert(name.clone(), ExternalCrate::new(name, config)?);
-        self.eval("").map(|_| ())
+            .insert(key.clone(), ExternalCrate::new(name, config)?);
+        let result = self.eval("");
+        if result.is_err() {
+            self.state
+                .external_deps
+                .remove(&key);
+        }
+        result
     }
 
     pub fn debug_mode(&self) -> bool {
