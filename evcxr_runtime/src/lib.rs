@@ -52,7 +52,7 @@ impl ContentMimeType {
 
     /// Emits the supplied content, which should be of the mime type already
     /// specified. The content is a binary format (e.g. image/png), the content
-    /// should is base64 encoded.
+    /// will be base64 encoded.
     /// ```
     /// let buffer: Vec<u8> = vec![];
     /// evcxr_runtime::mime_type("image/png").bytes(&buffer);
