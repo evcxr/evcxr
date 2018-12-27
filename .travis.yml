@@ -13,5 +13,5 @@ addons:
     packages:
     - libzmq3-dev
 script:
-  - cargo build --verbose --all
+  - cargo build --verbose --all --all-features
   - cargo test --verbose --all
