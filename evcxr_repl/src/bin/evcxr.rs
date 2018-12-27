@@ -58,7 +58,7 @@ impl Repl {
                 if let Some(duration) = output.timing {
                     // TODO replace by duration.as_millis() when stable
                     let ms = duration.as_secs() * 1000 + u64::from(duration.subsec_millis());
-                    println!("Took {}ms", ms);
+                    println!("{}", format!("Took {}ms", ms).blue());
                 }
             }
             Err(evcxr::Error::CompilationErrors(errors)) => {
