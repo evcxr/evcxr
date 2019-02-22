@@ -131,7 +131,7 @@ fn main() {
         let readline = editor.readline(&PROMPT.yellow());
         match readline {
             Ok(line) => {
-                editor.add_history_entry(&line);
+                editor.add_history_entry(line.clone());
                 repl.execute(&line);
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
