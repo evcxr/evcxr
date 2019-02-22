@@ -9,7 +9,7 @@ authors = ["David Lattimore <dvdlttmr@gmail.com>"]
 
 [dependencies]
 evcxr = { version = "=0.3.2", path = "../evcxr" }
-rustyline = "=1.0.0"
+rustyline = "=3.0.0"
 colored = "=1.6.0"
 dirs = "=1.0.2"
 lazy_static = "=1.0.2"
