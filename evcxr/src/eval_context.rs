@@ -83,7 +83,7 @@ impl EvalContext {
         Self::with_subprocess_command(std::process::Command::new(&current_exe))
     }
 
-    #[cfg(window)]
+    #[cfg(windows)]
     fn apply_platform_specific_vars(tmpdir_path: &Path, command: &mut std::process::Command) {
         // Windows doesn't support rpath, so we need to set PATH so that it
         // knows where to find dlls.
@@ -91,11 +91,18 @@ impl EvalContext {
         let mut path_var_value = OsString::new();
         path_var_value.push(&deps_dir(tmpdir_path));
         path_var_value.push(";");
+        
+        let mut sysroot_command = std::process::Command::new("rustc");
+        sysroot_command
+            .arg("--print")
+            .arg("sysroot");
+        path_var_value.push(format!("{}\\bin;", String::from_utf8_lossy(&sysroot_command.output().unwrap().stdout).trim()));
         path_var_value.push(std::env::var("PATH").unwrap_or_default());
+
         command.env("PATH", path_var_value);
     }
 
-    #[cfg(not(window))]
+    #[cfg(not(windows))]
     fn apply_platform_specific_vars(_tmpdir_path: &Path, _command: &mut std::process::Command) {}
 
     pub fn with_subprocess_command(
