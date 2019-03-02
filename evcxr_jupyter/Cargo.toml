@@ -6,7 +6,7 @@ description = "An Jupyter Kernel for Rust"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
 authors = [
-    "David Lattimore <dvdlttmr@google.com>",
+    "David Lattimore <dvdlttmr@gmail.com>",
     "David Bernard <david.bernard.31@gmail.com>",
 ]
 

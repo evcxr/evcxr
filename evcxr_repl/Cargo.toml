@@ -5,11 +5,11 @@ license = "Apache-2.0"
 description = "A REPL for Rust"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
-authors = ["David Lattimore <dvdlttmr@google.com>"]
+authors = ["David Lattimore <dvdlttmr@gmail.com>"]
 
 [dependencies]
 evcxr = { version = "=0.3.2", path = "../evcxr" }
-rustyline = "=1.0.0"
+rustyline = "=3.0.0"
 colored = "=1.6.1"
 dirs = "=1.0.4"
 lazy_static = "=1.2.0"

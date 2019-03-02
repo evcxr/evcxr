@@ -44,6 +44,7 @@ pub struct EvalContext {
     pub(crate) debug_mode: bool,
     opt_level: String,
     next_module: Arc<Mutex<Option<Module>>>,
+    meta_module: Option<Module>,
     state: ContextState,
     child_process: ChildProcess,
     // Whether we'll pre-warm each compiled crate by compiling the same code as
@@ -83,7 +84,7 @@ impl EvalContext {
         Self::with_subprocess_command(std::process::Command::new(&current_exe))
     }
 
-    #[cfg(window)]
+    #[cfg(windows)]
     fn apply_platform_specific_vars(tmpdir_path: &Path, command: &mut std::process::Command) {
         // Windows doesn't support rpath, so we need to set PATH so that it
         // knows where to find dlls.
@@ -91,11 +92,18 @@ impl EvalContext {
         let mut path_var_value = OsString::new();
         path_var_value.push(&deps_dir(tmpdir_path));
         path_var_value.push(";");
+        
+        let mut sysroot_command = std::process::Command::new("rustc");
+        sysroot_command
+            .arg("--print")
+            .arg("sysroot");
+        path_var_value.push(format!("{}\\bin;", String::from_utf8_lossy(&sysroot_command.output().unwrap().stdout).trim()));
         path_var_value.push(std::env::var("PATH").unwrap_or_default());
+
         command.env("PATH", path_var_value);
     }
 
-    #[cfg(not(window))]
+    #[cfg(not(windows))]
     fn apply_platform_specific_vars(_tmpdir_path: &Path, _command: &mut std::process::Command) {}
 
     pub fn with_subprocess_command(
@@ -132,10 +140,12 @@ impl EvalContext {
             opt_level: "2".to_owned(),
             state: ContextState::default(),
             next_module: Arc::new(Mutex::new(None)),
+            meta_module: None,
             child_process,
             should_pre_warm: true,
             stdout_sender,
         };
+        context.meta_module = Some(Module::new(&context, "evcxr_meta_module", None)?);
         context.add_internal_runtime()?;
         let outputs = EvalContextOutputs {
             stdout: stdout_receiver,
@@ -305,11 +315,18 @@ impl EvalContext {
         Ok(())
     }
 
-    pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<(), Error> {
+    pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<EvalOutputs, Error> {
+        let key = name.clone();
         self.state
             .external_deps
-            .insert(name.clone(), ExternalCrate::new(name, config)?);
-        self.eval("").map(|_| ())
+            .insert(key.clone(), ExternalCrate::new(name, config)?);
+        let result = self.eval("");
+        if result.is_err() {
+            self.state
+                .external_deps
+                .remove(&key);
+        }
+        result
     }
 
     pub fn debug_mode(&self) -> bool {
@@ -532,6 +549,17 @@ impl EvalContext {
             *self.next_module.lock().unwrap() = Some(module);
             return Err(error);
         }
+
+        let mut meta_module = self.meta_module.take().unwrap();
+        meta_module.add_dep(&module);
+        let meta_result = meta_module.write_sources_and_compile(self, &CodeBlock::new());
+        self.meta_module.replace(meta_module);
+
+        if let Err(error) = meta_result {
+            *self.next_module.lock().unwrap() = Some(module);
+            return Err(error);
+        }
+
         if compilation_mode == CompilationMode::NoCatchExpectError {
             // Uh-oh, caller was expecting an error, return OK and the caller can return the
             // original error.

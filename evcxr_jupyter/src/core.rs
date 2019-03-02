@@ -153,77 +153,90 @@ impl Server {
             // If we want this clone to be cheaper, we probably only need the header, not the
             // whole message.
             *self.latest_execution_request.lock().unwrap() = Some(message.clone());
-            let code = message.code();
+            let src = message.code();
             execution_count += 1;
             message
                 .new_message("execute_input")
                 .with_content(object! {
                     "execution_count" => execution_count,
-                    "code" => code
+                    "code" => src
                 })
                 .send(&mut *self.iopub.lock().unwrap())?;
-            let reply = match context.execute(code) {
-                Ok(output) => {
-                    if !output.is_empty() {
-                        // Increase the odds that stdout will have been finished being sent. A
-                        // less hacky alternative would be to add a print statement, then block
-                        // waiting for it.
-                        thread::sleep(time::Duration::from_millis(1));
-                        let mut data = HashMap::new();
-                        // At the time of writing the json crate appears to have a generic From
-                        // implementation for a Vec<T> where T implements Into<JsonValue>. It also
-                        // has conversion from HashMap<String, JsonValue>, but it doesn't have
-                        // conversion from HashMap<String, T>. Perhaps send a PR? For now, we
-                        // convert the values manually.
-                        for (k, v) in output.content_by_mime_type {
-                            if k.contains("json") {
-                                data.insert(k, json::parse(&v).unwrap_or_else(|_| json::from(v)));
-                            } else {
-                                data.insert(k, json::from(v));
+            let mut has_error = false;
+            for code in split_code_and_command(src) {
+                // stop execution after the first error
+                has_error = has_error
+                    || match context.execute(&code) {
+                        Ok(output) => {
+                            if !output.is_empty() {
+                                // Increase the odds that stdout will have been finished being sent. A
+                                // less hacky alternative would be to add a print statement, then block
+                                // waiting for it.
+                                thread::sleep(time::Duration::from_millis(1));
+                                let mut data = HashMap::new();
+                                // At the time of writing the json crate appears to have a generic From
+                                // implementation for a Vec<T> where T implements Into<JsonValue>. It also
+                                // has conversion from HashMap<String, JsonValue>, but it doesn't have
+                                // conversion from HashMap<String, T>. Perhaps send a PR? For now, we
+                                // convert the values manually.
+                                for (k, v) in output.content_by_mime_type {
+                                    if k.contains("json") {
+                                        data.insert(
+                                            k,
+                                            json::parse(&v).unwrap_or_else(|_| json::from(v)),
+                                        );
+                                    } else {
+                                        data.insert(k, json::from(v));
+                                    }
+                                }
+                                message
+                                    .new_message("execute_result")
+                                    .with_content(object! {
+                                        "execution_count" => execution_count,
+                                        "data" => data,
+                                        "metadata" => HashMap::new(),
+                                    })
+                                    .send(&mut *self.iopub.lock().unwrap())?;
                             }
+                            if let Some(duration) = output.timing {
+                                // TODO replace by duration.as_millis() when stable
+                                let ms =
+                                    duration.as_secs() * 1000 + u64::from(duration.subsec_millis());
+                                let mut data = HashMap::new();
+                                data.insert(
+                                    "text/html".into(),
+                                    json::from(format!(
+                                        "<span style=\"color: rgba(0,0,0,0.4);\">Took {}ms</span>",
+                                        ms
+                                    )),
+                                );
+                                message
+                                    .new_message("execute_result")
+                                    .with_content(object! {
+                                        "execution_count" => execution_count,
+                                        "data" => data,
+                                        "metadata" => HashMap::new(),
+                                    })
+                                    .send(&mut *self.iopub.lock().unwrap())?;
+                            }
+                            false
                         }
-                        message
-                            .new_message("execute_result")
-                            .with_content(object! {
-                                "execution_count" => execution_count,
-                                "data" => data,
-                                "metadata" => HashMap::new(),
-                            })
-                            .send(&mut *self.iopub.lock().unwrap())?;
-                        if let Some(duration) = output.timing {
-                            // TODO replace by duration.as_millis() when stable
-                            let ms =
-                                duration.as_secs() * 1000 + u64::from(duration.subsec_millis());
-                            let mut data = HashMap::new();
-                            data.insert(
-                                "text/html".into(),
-                                json::from(format!(
-                                    "<span style=\"color: rgba(0,0,0,0.4);\">Took {}ms</span>",
-                                    ms
-                                )),
-                            );
-                            message
-                                .new_message("execute_result")
-                                .with_content(object! {
-                                    "execution_count" => execution_count,
-                                    "data" => data,
-                                    "metadata" => HashMap::new(),
-                                })
-                                .send(&mut *self.iopub.lock().unwrap())?;
+                        Err(errors) => {
+                            self.emit_errors(&errors, &message)?;
+                            true
                         }
-                    }
-                    message.new_reply().with_content(object! {
-                        "status" => "ok",
-                        "execution_count" => execution_count
-                    })
-                }
-                Err(errors) => {
-                    self.emit_errors(&errors, &message)?;
-                    message.new_reply().with_content(object! {
-                        "status" => "error",
-                        "execution_count" => execution_count,
-                    })
-                }
+                    };
+            }
+            let reply = if has_error {
+                message.new_reply().with_content(object! {
+                    "status" => "error",
+                    "execution_count" => execution_count,
+                })
+            } else {
+                message.new_reply().with_content(object! {
+                    "status" => "ok",
+                    "execution_count" => execution_count
+                })
             };
             execution_reply_sender.send(reply)?;
         }
@@ -428,5 +441,70 @@ fn kernel_info() -> JsonValue {
                     "url" => "https://doc.rust-lang.org/stable/std/"}
         ],
         "status" => "ok"
+    }
+}
+
+//TODO optimize by avoiding creation of new String
+fn split_code_and_command(src: &str) -> Vec<String> {
+    src.lines().fold(vec![], |mut acc, l| {
+        if l.starts_with(":") {
+            acc.push(l.to_owned());
+        } else if let Some(last) = acc.pop() {
+            if !last.starts_with(":") {
+                acc.push((last + "\n" + l).to_owned());
+            } else {
+                acc.push(last);
+                acc.push(l.to_owned());
+            }
+        } else {
+            acc.push(l.to_owned());
+        }
+        acc
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const COMMAND_0: &str = r#":dep foo= "0.3.3""#;
+    const CODE_0: &str = r#"println!(":dep code 0");"#;
+    const CODE_1: &str = r#"
+        println!('hello');
+        eprintln!('world');
+    "#;
+
+    #[test]
+    fn split_code_and_command_test_single_command() {
+        let expected = vec![COMMAND_0.to_owned()];
+        let actual = split_code_and_command(&expected.join("\n"));
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn split_code_and_command_test_single_code() {
+        let expected = vec![CODE_1.to_owned()];
+        let actual = split_code_and_command(&expected.join("\n"));
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn split_code_and_command_test_multi_command() {
+        let expected = vec![COMMAND_0.to_owned(), COMMAND_0.to_owned()];
+        let actual = split_code_and_command(&expected.join("\n"));
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn split_code_and_command_test_mixed_command_code() {
+        let expected = vec![
+            COMMAND_0.to_owned(),
+            COMMAND_0.to_owned(),
+            CODE_0.to_owned(),
+            COMMAND_0.to_owned(),
+            CODE_1.to_owned(),
+        ];
+        let actual = split_code_and_command(&expected.join("\n"));
+        assert_eq!(actual, expected);
     }
 }

@@ -6,8 +6,9 @@ description = "An Evaluation Context for Rust"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
 authors = [
-    "David Lattimore <dvdlttmr@google.com>",
+    "David Lattimore <dvdlttmr@gmail.com>",
     "Matthias Bussonnier <bussonniermatthias@gmail.com>",
+    "Daniel Griffen <daniel@griffen.io>",
 ]
 
 [dependencies]
