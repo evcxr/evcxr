@@ -17,6 +17,7 @@ use errors::{CompilationError, Error};
 use json;
 use regex::Regex;
 use std;
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use EvalContext;
@@ -38,6 +39,7 @@ pub(crate) struct Module {
     target_dir: PathBuf,
     pub(crate) so_path: PathBuf,
     rs_filename: PathBuf,
+    manual_deps: Vec<String>,
 }
 
 impl Module {
@@ -62,6 +64,7 @@ impl Module {
             crate_dir,
             target_dir,
             rs_filename,
+            manual_deps: vec![],
         };
         if let Some(previous_module) = previous_module {
             // Copy the lock file from our previous compilation, if any, to
@@ -93,6 +96,10 @@ impl Module {
             self.get_cargo_toml_contents(eval_context),
         )?;
         Ok(())
+    }
+
+    pub(crate) fn add_dep(&mut self, module: &Module) {
+        self.manual_deps.push(module.crate_name.clone());
     }
 
     pub(crate) fn compile(&mut self, code_block: &CodeBlock) -> Result<(), Error> {
@@ -154,11 +161,16 @@ impl Module {
     fn get_cargo_toml_contents(&self, eval_context: &EvalContext) -> String {
         use std::fmt::Write;
         let mut loaded_module_deps = String::new();
-        for m in eval_context.modules_iter() {
+        let combined_deps = eval_context
+            .modules_iter()
+            .map(|m| &m.crate_name)
+            .chain(self.manual_deps.iter())
+            .collect::<HashSet<_>>();
+        for crate_name in combined_deps {
             writeln!(
                 &mut loaded_module_deps,
                 "{} = {{ path = \"../{}\" }}",
-                m.crate_name, m.crate_name
+                crate_name, crate_name
             )
             .unwrap();
         }
