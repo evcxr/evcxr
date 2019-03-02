@@ -44,6 +44,7 @@ pub struct EvalContext {
     pub(crate) debug_mode: bool,
     opt_level: String,
     next_module: Arc<Mutex<Option<Module>>>,
+    meta_module: Option<Module>,
     state: ContextState,
     child_process: ChildProcess,
     // Whether we'll pre-warm each compiled crate by compiling the same code as
@@ -139,10 +140,12 @@ impl EvalContext {
             opt_level: "2".to_owned(),
             state: ContextState::default(),
             next_module: Arc::new(Mutex::new(None)),
+            meta_module: None,
             child_process,
             should_pre_warm: true,
             stdout_sender,
         };
+        context.meta_module = Some(Module::new(&context, "evcxr_meta_module", None)?);
         context.add_internal_runtime()?;
         let outputs = EvalContextOutputs {
             stdout: stdout_receiver,
@@ -546,6 +549,17 @@ impl EvalContext {
             *self.next_module.lock().unwrap() = Some(module);
             return Err(error);
         }
+
+        let mut meta_module = self.meta_module.take().unwrap();
+        meta_module.add_dep(&module);
+        let meta_result = meta_module.write_sources_and_compile(self, &CodeBlock::new());
+        self.meta_module.replace(meta_module);
+
+        if let Err(error) = meta_result {
+            *self.next_module.lock().unwrap() = Some(module);
+            return Err(error);
+        }
+
         if compilation_mode == CompilationMode::NoCatchExpectError {
             // Uh-oh, caller was expecting an error, return OK and the caller can return the
             // original error.
