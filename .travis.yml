@@ -28,6 +28,10 @@ addons:
   apt:
     packages:
     - libzmq3-dev
+  homebrew:
+    packages:
+      - zeromq
+      - pkg-config
 
 install:
   # prevent target re-add error from rustup
