@@ -8,5 +8,5 @@ readme = "README.md"
 authors = ["David Lattimore <dml@google.com>"]
 
 [dependencies]
-image = "0.20.1"
+image = "0.21.0"
 evcxr_runtime = {version = "1.1.0", features = [ "bytes" ]}

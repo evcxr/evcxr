@@ -43,8 +43,9 @@ impl RawMessage {
             jparts,
         };
 
-        if let Some(mac) = &mut connection.mac {
-            raw_message.digest(mac);
+        if let Some(mac_template) = &connection.mac {
+            let mut mac = mac_template.clone();
+            raw_message.digest(&mut mac);
             use hmac::Mac;
             if let Err(error) = mac.verify(&hex::decode(&hmac)?) {
                 bail!("{}", error);
@@ -56,8 +57,9 @@ impl RawMessage {
 
     fn send(self, connection: &mut Connection) -> Result<(), Error> {
         use hmac::Mac;
-        let hmac = if let Some(mac) = &mut connection.mac {
-            self.digest(mac);
+        let hmac = if let Some(mac_template) = &connection.mac {
+            let mut mac = mac_template.clone();
+            self.digest(&mut mac);
             hex::encode(mac.result().code().as_slice())
         } else {
             String::new()
