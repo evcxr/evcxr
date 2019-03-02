@@ -1,10 +1,26 @@
 dist: xenial
 language: rust
-rust:
-  - stable
-  - beta
-  - nightly
+cache:
+  # timeout on windows
+  cargo: true
+  timeout: 2000
 matrix:
+  include:
+    - os: linux
+      rust: stable
+      env: TARGET=x86_64-unknown-linux-gnu
+    - os: linux
+      rust: beta
+      env: TARGET=x86_64-unknown-linux-gnu
+    - os: linux
+      rust: nightly
+      env: TARGET=x86_64-unknown-linux-gnu
+    - os: osx
+      rust: stable
+      env: TARGET=x86_64-apple-darwin
+    - os: windows
+      rust: stable
+      env: TARGET=x86_64-pc-windows-msvc
   allow_failures:
     - rust: nightly
   fast_finish: true
@@ -12,6 +28,14 @@ addons:
   apt:
     packages:
     - libzmq3-dev
+
+install:
+  # prevent target re-add error from rustup
+  - if [[ "$TRAVIS_OS_NAME" = "linux" && "$TARGET" != "x86_64-unknown-linux-gnu" ]]; then rustup target add $TARGET; fi
+
+before_script:
+    - rustup -V; rustc -V; cargo -V
+
 script:
-  - cargo build --verbose --all --all-features
-  - cargo test --verbose --all
+  - travis_wait 30 cargo build --verbose --all --all-features
+  - travis_wait 30 cargo test --verbose --all
