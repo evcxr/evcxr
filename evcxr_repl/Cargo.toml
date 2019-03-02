@@ -10,8 +10,8 @@ authors = ["David Lattimore <dvdlttmr@gmail.com>"]
 [dependencies]
 evcxr = { version = "=0.3.2", path = "../evcxr" }
 rustyline = "=3.0.0"
-colored = "=1.6.1"
-dirs = "=1.0.4"
-lazy_static = "=1.2.0"
-failure = { version = "=0.1.3", default-features = false, features = [ "std" ] }
-regex = "=1.1.0"
+colored = "=1.7.0"
+dirs = "=1.0.5"
+lazy_static = "=1.3.0"
+failure = { version = "=0.1.5", default-features = false, features = [ "std" ] }
+regex = "=1.1.2"

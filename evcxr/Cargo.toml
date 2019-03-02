@@ -16,19 +16,19 @@ authors = [
 # of which would cause an internal compiler .so file to be dynamically linked,
 # which would necessitate using cargo run or setting LD_LIBRARY_PATH, neither of
 # which we'd want to impose on users.
-syn = { version = "=0.15.1", default-features = false, features = ["parsing", "full", "printing", "clone-impls", "extra-traits"] }
-proc-macro2 = { version = "=0.4.9", default-features = false }
+syn = { version = "=0.15.27", default-features = false, features = ["parsing", "full", "printing", "clone-impls", "extra-traits"] }
+proc-macro2 = { version = "=0.4.27", default-features = false }
 # We have to turn off custom derive for failure as well, since otherwise
 # libproc_macro gets pulled in and we can't run our binary.
-failure = { version = "=0.1.3", default-features = false, features = [ "std" ] }
-tempfile = "=3.0.5"
-libc = "0.2.45"
+failure = { version = "=0.1.5", default-features = false, features = [ "std" ] }
+tempfile = "=3.0.7"
+libc = "0.2.49"
 json = "=0.11.13"
-regex = "=1.1.0"
-lazy_static = "=1.2.0"
-rand = "=0.6.1"
+regex = "=1.1.2"
+lazy_static = "=1.3.0"
+rand = "=0.6.5"
 libloading = "=0.5.0"
-backtrace = "0.3.13"
+backtrace = "0.3.14"
 
 [target.'cfg(unix)'.dependencies]
 sig = "=1.0.0"
