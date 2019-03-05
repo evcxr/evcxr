@@ -1,3 +1,7 @@
+# Version 0.3.3
+* Windows and Mac support! Big thanks to Daniel Griffen for the final fixes and
+  David Bernard for Travis setup.
+
 # Version 0.3.1
 * Fixed handling of crates with "-" in their name.
 * Support relative crate paths.

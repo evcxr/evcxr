@@ -24,6 +24,16 @@ cargo install evcxr_jupyter
 evcxr_jupyter --install
 ```
 
+### Windows
+
+* Install jupyter or jupyterlab (eg. via anaconda)
+* Install ZMQ. [These instructions](https://github.com/erickt/rust-zmq/issues/208#issuecomment-380353800) might help.
+
+```sh
+cargo install evcxr_jupyter
+evcxr_jupyter --install
+```
+
 ## Usage notes
 
 * Functions, structs etc need to all be declared pub, otherwise they can't be

@@ -9,6 +9,7 @@ authors = [
     "David Lattimore <dvdlttmr@gmail.com>",
     "Matthias Bussonnier <bussonniermatthias@gmail.com>",
     "Daniel Griffen <daniel@griffen.io>",
+    "David Bernard <david.bernard.31@gmail.com>",
 ]
 
 [dependencies]
