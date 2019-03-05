@@ -1,6 +1,6 @@
 [package]
 name = "evcxr_jupyter"
-version = "0.3.2"
+version = "0.3.3"
 license = "Apache-2.0"
 description = "An Jupyter Kernel for Rust"
 repository = "https://github.com/google/evcxr"
@@ -11,7 +11,7 @@ authors = [
 ]
 
 [dependencies]
-evcxr = { version = "=0.3.2", path = "../evcxr" }
+evcxr = { version = "=0.3.3", path = "../evcxr" }
 json = "0.11.13"
 failure = { version = "0.1.5", default-features = false, features = [ "std" ] }
 zmq = "0.8.2"
