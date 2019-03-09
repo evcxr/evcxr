@@ -38,7 +38,6 @@ pub struct EvalContext {
     _tmpdir: Option<tempfile::TempDir>,
     pub(crate) tmpdir_path: PathBuf,
     crate_suffix: String,
-    variable_states: HashMap<String, VariableState>,
     build_num: i32,
     load_variable_statements: CodeBlock,
     pub(crate) debug_mode: bool,
@@ -92,12 +91,13 @@ impl EvalContext {
         let mut path_var_value = OsString::new();
         path_var_value.push(&deps_dir(tmpdir_path));
         path_var_value.push(";");
-        
+
         let mut sysroot_command = std::process::Command::new("rustc");
-        sysroot_command
-            .arg("--print")
-            .arg("sysroot");
-        path_var_value.push(format!("{}\\bin;", String::from_utf8_lossy(&sysroot_command.output().unwrap().stdout).trim()));
+        sysroot_command.arg("--print").arg("sysroot");
+        path_var_value.push(format!(
+            "{}\\bin;",
+            String::from_utf8_lossy(&sysroot_command.output().unwrap().stdout).trim()
+        ));
         path_var_value.push(std::env::var("PATH").unwrap_or_default());
 
         command.env("PATH", path_var_value);
@@ -133,7 +133,6 @@ impl EvalContext {
             _tmpdir: opt_tmpdir,
             tmpdir_path,
             crate_suffix,
-            variable_states: HashMap::new(),
             build_num: 0,
             load_variable_statements: CodeBlock::new(),
             debug_mode: false,
@@ -177,7 +176,7 @@ impl EvalContext {
         // Any pre-existing, non-copy variables are marked as available, so that we'll take their
         // values from outside of the catch_unwind block. If they remain this way, then this
         // effectively means that they're not being used.
-        for variable_state in self.variable_states.values_mut() {
+        for variable_state in self.state.variable_states.values_mut() {
             variable_state.move_state = if variable_state.is_copy_type {
                 VariableMoveState::CopiedIntoCatchUnwind
             } else {
@@ -322,9 +321,7 @@ impl EvalContext {
             .insert(key.clone(), ExternalCrate::new(name, config)?);
         let result = self.eval("");
         if result.is_err() {
-            self.state
-                .external_deps
-                .remove(&key);
+            self.state.external_deps.remove(&key);
         }
         result
     }
@@ -338,7 +335,8 @@ impl EvalContext {
     }
 
     pub fn variables_and_types(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.variable_states
+        self.state
+            .variable_states
             .iter()
             .map(|(v, t)| (v.as_str(), t.type_name.as_str()))
     }
@@ -384,7 +382,7 @@ impl EvalContext {
     }
 
     fn restart_child_process(&mut self) -> Result<(), Error> {
-        self.variable_states.clear();
+        self.state.variable_states.clear();
         self.load_variable_statements = CodeBlock::new();
         self.child_process = self.child_process.restart()?;
         Ok(())
@@ -670,7 +668,8 @@ impl EvalContext {
         }
         if got_panic {
             let mut lost = Vec::new();
-            self.variable_states
+            self.state
+                .variable_states
                 .retain(|variable_name, variable_state| {
                     if variable_state.move_state == VariableMoveState::MovedIntoCatchUnwind {
                         lost.push(variable_name.clone());
@@ -714,7 +713,8 @@ impl EvalContext {
                             actual_type = actual_type
                                 .replace("{integer}", "i32")
                                 .replace("{float}", "f32");
-                            self.variable_states
+                            self.state
+                                .variable_states
                                 .get_mut(variable_name)
                                 .unwrap()
                                 .type_name = actual_type;
@@ -726,6 +726,7 @@ impl EvalContext {
                         // Use of moved value.
                         let old_move_state = std::mem::replace(
                             &mut self
+                                .state
                                 .variable_states
                                 .get_mut(variable_name)
                                 .unwrap()
@@ -734,15 +735,17 @@ impl EvalContext {
                         );
                         if old_move_state == VariableMoveState::MovedIntoCatchUnwind {
                             // Variable is truly moved, forget about it.
-                            self.variable_states.remove(variable_name);
+                            self.state.variable_states.remove(variable_name);
                         }
                         retry = true;
                     } else if error_code == "E0425" {
                         // cannot find value in scope.
-                        self.variable_states.remove(variable_name);
+                        self.state.variable_states.remove(variable_name);
                         retry = true;
                     } else if error_code == "E0603" {
-                        if let Some(variable_state) = self.variable_states.remove(variable_name) {
+                        if let Some(variable_state) =
+                            self.state.variable_states.remove(variable_name)
+                        {
                             bail!(
                             "Failed to determine type of variable `{}`. rustc suggested type \
                              {}, but that's private. Sometimes adding an extern crate will help \
@@ -756,7 +759,7 @@ impl EvalContext {
                 }
                 CodeOrigin::AssertCopyType { variable_name } => {
                     if error_code == "E0277" {
-                        if let Some(state) = self.variable_states.get_mut(variable_name) {
+                        if let Some(state) = self.state.variable_states.get_mut(variable_name) {
                             state.is_copy_type = false;
                             retry = true;
                         }
@@ -785,7 +788,7 @@ impl EvalContext {
             .map(|ty| format!("{}", ty.into_token_stream()))
             .unwrap_or_else(|| "String".to_owned());
         idents::idents_do(pat, &mut |pat_ident: &syn::PatIdent| {
-            self.variable_states.insert(
+            self.state.variable_states.insert(
                 pat_ident.ident.to_string(),
                 VariableState {
                     type_name: type_name.clone(),
@@ -802,7 +805,7 @@ impl EvalContext {
 
     fn store_variable_statements(&mut self, move_state: &VariableMoveState) -> CodeBlock {
         let mut statements = CodeBlock::new();
-        for (var_name, var_state) in &self.variable_states {
+        for (var_name, var_state) in &self.state.variable_states {
             if var_state.move_state == *move_state {
                 statements.pack_variable(
                     var_name.clone(),
@@ -827,7 +830,7 @@ impl EvalContext {
     // Returns code to load values from the variable store back into their variables.
     fn load_variable_statements(&mut self) -> CodeBlock {
         let mut statements = CodeBlock::new();
-        for (var_name, var_state) in &self.variable_states {
+        for (var_name, var_state) in &self.state.variable_states {
             let mutability = if var_state.is_mut { "mut " } else { "" };
             statements.load_variable(format!(
                 "let {}{} = evcxr_variable_store.take_variable::<{}>(stringify!({}));",
@@ -948,6 +951,7 @@ impl EvalOutputs {
     }
 }
 
+#[derive(Clone)]
 struct VariableState {
     type_name: String,
     is_mut: bool,
@@ -959,7 +963,7 @@ struct VariableState {
     is_copy_type: bool,
 }
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 enum VariableMoveState {
     Available,
     CopiedIntoCatchUnwind,
@@ -991,6 +995,7 @@ struct ContextState {
     // formatted slightly differently.
     extern_crate_stmts: HashMap<String, String>,
     last_compile_dir: Option<PathBuf>,
+    variable_states: HashMap<String, VariableState>,
 }
 
 #[derive(Clone)]

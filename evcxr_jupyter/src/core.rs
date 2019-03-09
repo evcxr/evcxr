@@ -447,10 +447,10 @@ fn kernel_info() -> JsonValue {
 //TODO optimize by avoiding creation of new String
 fn split_code_and_command(src: &str) -> Vec<String> {
     src.lines().fold(vec![], |mut acc, l| {
-        if l.starts_with(":") {
+        if l.starts_with(':') {
             acc.push(l.to_owned());
         } else if let Some(last) = acc.pop() {
-            if !last.starts_with(":") {
+            if !last.starts_with(':') {
                 acc.push((last + "\n" + l).to_owned());
             } else {
                 acc.push(last);
