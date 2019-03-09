@@ -701,6 +701,9 @@ impl EvalContext {
             Some(c) => c,
             _ => return Ok(false),
         };
+        lazy_static! {
+            static ref DISALLOWED_TYPES: Regex = Regex::new("(impl .*|[.*@])").unwrap();
+        }
         for code_origin in &error.code_origins {
             match code_origin {
                 CodeOrigin::PackVariable { variable_name } => {
@@ -713,6 +716,12 @@ impl EvalContext {
                             actual_type = actual_type
                                 .replace("{integer}", "i32")
                                 .replace("{float}", "f32");
+                            if DISALLOWED_TYPES.is_match(&actual_type) {
+                                bail!(
+                                    "Sorry, the type {} cannot currently be persisted",
+                                    actual_type
+                                );
+                            }
                             self.state
                                 .variable_states
                                 .get_mut(variable_name)

@@ -342,3 +342,34 @@ fn variable_assignment_compile_fail_then_use_statement() {
     eval!(e, use std::collections::HashMap;);
     assert_eq!(eval!(e, 42), text_plain("42"));
 }
+
+#[test]
+fn unnamable_type_closure() {
+    let mut e = new_context();
+    let result = e.eval(stringify!(let v = || {42};));
+    if let Err(Error::JustMessage(message)) = result {
+        if !(message.starts_with("Sorry, the type") && message.contains("cannot currently be persisted")) {
+            panic!("Unexpected error: {:?}", message);
+        }
+    } else {
+        panic!("Unexpected result: {:?}", result);
+    }
+}
+
+#[test]
+fn unnamable_type_impl_trait() {
+    let mut e = new_context();
+    let result = e.eval(stringify!(
+        pub trait Bar {}
+        impl Bar for i32 {}
+        pub fn foo() -> impl Bar {42}
+        let v = foo();
+    ));
+    if let Err(Error::JustMessage(message)) = result {
+        if !(message.starts_with("Sorry, the type") && message.contains("cannot currently be persisted")) {
+            panic!("Unexpected error: {:?}", message);
+        }
+    } else {
+        panic!("Unexpected result: {:?}", result);
+    }
+}
