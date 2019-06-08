@@ -1,3 +1,11 @@
+# Version 0.3.4
+* Fix with upcomming beta release (1.36) where Cargo started intercepting and
+  wrapping JSON errors from the compiler.
+* Give proper error message if a closure or an impl trait is stored into a
+  variable.
+* Recover from compilation failure in a case where we previously got out-of-sync
+  with what variables should exist.
+
 # Version 0.3.3
 * Windows and Mac support! Big thanks to Daniel Griffen for the final fixes and
   David Bernard for Travis setup.
