@@ -66,6 +66,11 @@ fn get_code_origins(json: &JsonValue, code_block: &CodeBlock) -> Vec<CodeOrigin>
 
 impl CompilationError {
     pub(crate) fn opt_new(mut json: JsonValue, code_block: &CodeBlock) -> Option<CompilationError> {
+        // From Cargo 1.36 onwards, errors emitted as JSON get wrapped by Cargo.
+        // Retrive the inner message emitted by the compiler.
+        if json["message"].is_object() {
+            json = json["message"].clone();
+        }
         let mut code_origins = get_code_origins(&json, code_block);
         let mut user_error_json = None;
         if let JsonValue::Array(children) = &json["children"] {

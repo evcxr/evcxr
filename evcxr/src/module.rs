@@ -125,9 +125,10 @@ impl Module {
         let cargo_output = command.output()?;
         if !cargo_output.status.success() {
             let stderr = String::from_utf8_lossy(&cargo_output.stderr);
+            let stdout = String::from_utf8_lossy(&cargo_output.stdout);
             let mut non_json_error = None;
             let errors: Vec<CompilationError> = stderr
-                .lines()
+                .lines().chain(stdout.lines())
                 .filter_map(|line| {
                     json::parse(&line)
                         .ok()
@@ -148,7 +149,7 @@ impl Module {
                         "Compilation failed, but no parsable errors were found. STDERR:\n\
                          {}\nSTDOUT:{}\n",
                         stderr,
-                        String::from_utf8_lossy(&cargo_output.stdout)
+                        stdout
                     )));
                 }
             } else {
