@@ -13,8 +13,8 @@ authors = [
 [dependencies]
 evcxr = { version = "=0.3.5", path = "../evcxr" }
 rustyline = "4.1.0"
-colored = "1.7.0"
-dirs = "1.0.5"
+colored = "1.8.0"
+dirs = "2.0.1"
 lazy_static = "1.3.0"
 failure = { version = "0.1.5", default-features = false, features = [ "std" ] }
 regex = "1.1.2"

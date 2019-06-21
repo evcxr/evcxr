@@ -133,10 +133,11 @@ impl Server {
     }
 
     fn handle_hb(connection: &Connection) -> Result<(), Error> {
-        let mut message = zmq::Message::new()?;
+        let mut message = zmq::Message::new();
+        let ping: &[u8] = b"ping";
         loop {
             connection.socket.recv(&mut message, 0)?;
-            connection.socket.send(b"ping", 0)?;
+            connection.socket.send(ping, 0)?;
         }
     }
 
