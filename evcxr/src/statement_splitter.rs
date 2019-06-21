@@ -19,9 +19,9 @@ use syn;
 /// possibly some trailing whitespace. i.e. if we can't parse it as statements, everything from the
 /// point where we can't parse onwards will be returned as a single statement.
 pub fn split_into_statements(mut code: &str) -> Vec<&str> {
-    /// Once proc_macro2::Span can be used, we shouldn't need this - we can instead just put
-    /// everything inside braces and parse it as a block, then get the spans for whichever bits we
-    /// care about. Until then, we have to live with this.
+    // Once proc_macro2::Span can be used, we shouldn't need this - we can instead just put
+    // everything inside braces and parse it as a block, then get the spans for whichever bits we
+    // care about. Until then, we have to live with this.
 
     lazy_static! {
         static ref SEPARATOR: Regex = Regex::new("(;|};?) *\n?").unwrap();

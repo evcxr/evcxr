@@ -23,7 +23,7 @@ use std::{io, process};
 pub const PANIC_NOTIFICATION: &str = "EVCXR_PANIC_NOTIFICATION";
 
 pub struct VariableStore {
-    variables: HashMap<String, Box<Any + 'static>>,
+    variables: HashMap<String, Box<dyn Any + 'static>>,
 }
 
 impl VariableStore {
