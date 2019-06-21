@@ -116,11 +116,10 @@ impl Module {
         command
             .env("CARGO_TARGET_DIR", &self.target_dir)
             .arg("rustc")
+            .arg("--message-format=json")
             .arg("--")
             .arg("-C")
             .arg("prefer-dynamic")
-            .arg("--error-format")
-            .arg("json")
             .current_dir(&self.crate_dir);
         let cargo_output = command.output()?;
         if !cargo_output.status.success() {
