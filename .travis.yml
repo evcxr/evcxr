@@ -21,8 +21,6 @@ matrix:
     # - os: windows
     #   rust: stable
     #   env: TARGET=x86_64-pc-windows-msvc
-  allow_failures:
-    - rust: nightly
   fast_finish: true
 addons:
   apt:
