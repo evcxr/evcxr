@@ -1,3 +1,6 @@
+# Version 0.3.5
+* Fix for another upcoming cargo change (due in 1.37).
+
 # Version 0.3.4
 * Fix with upcomming beta release (1.36) where Cargo started intercepting and
   wrapping JSON errors from the compiler.
