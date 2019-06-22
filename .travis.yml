@@ -28,7 +28,7 @@ addons:
     - libzmq3-dev
   homebrew:
     packages:
-      - zeromq
+      - zmq
       - pkg-config
 
 install:
