@@ -26,14 +26,11 @@ addons:
   apt:
     packages:
     - libzmq3-dev
-  homebrew:
-    packages:
-      - zmq
-      - pkg-config
 
 install:
   # prevent target re-add error from rustup
   - if [[ "$TRAVIS_OS_NAME" = "linux" && "$TARGET" != "x86_64-unknown-linux-gnu" ]]; then rustup target add $TARGET; fi
+  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update && brew install zmq pkg-config; fi
 
 before_script:
     - rustup -V; rustc -V; cargo -V
