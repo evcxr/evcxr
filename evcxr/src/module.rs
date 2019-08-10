@@ -127,7 +127,8 @@ impl Module {
             let stdout = String::from_utf8_lossy(&cargo_output.stdout);
             let mut non_json_error = None;
             let errors: Vec<CompilationError> = stderr
-                .lines().chain(stdout.lines())
+                .lines()
+                .chain(stdout.lines())
                 .filter_map(|line| {
                     json::parse(&line)
                         .ok()
@@ -147,8 +148,7 @@ impl Module {
                     bail!(Error::JustMessage(format!(
                         "Compilation failed, but no parsable errors were found. STDERR:\n\
                          {}\nSTDOUT:{}\n",
-                        stderr,
-                        stdout
+                        stderr, stdout
                     )));
                 }
             } else {
