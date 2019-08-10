@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(feature="bytes")]
+#[cfg(feature = "bytes")]
 extern crate base64;
 
 pub trait Display {
@@ -59,7 +59,7 @@ impl ContentMimeType {
     /// let buffer: Vec<u8> = vec![];
     /// evcxr_runtime::mime_type("image/png").bytes(&buffer);
     /// ```
-    #[cfg(feature="bytes")]
+    #[cfg(feature = "bytes")]
     pub fn bytes(self, buffer: &[u8]) {
         self.text(&base64::encode(buffer))
     }

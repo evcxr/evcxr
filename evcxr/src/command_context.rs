@@ -81,8 +81,7 @@ impl CommandContext {
         } else if line == ":clear" {
             self.eval_context.clear().map(|_| EvalOutputs::new())
         } else if let Some(captures) = ADD_DEP_RE.captures(line) {
-            self
-                .eval_context
+            self.eval_context
                 .add_extern_crate(captures[1].to_owned(), captures[2].to_owned())
         } else if line == ":last_compile_dir" {
             if let Some(dir) = &self.eval_context.last_compile_dir() {

@@ -348,7 +348,9 @@ fn unnamable_type_closure() {
     let mut e = new_context();
     let result = e.eval(stringify!(let v = || {42};));
     if let Err(Error::JustMessage(message)) = result {
-        if !(message.starts_with("Sorry, the type") && message.contains("cannot currently be persisted")) {
+        if !(message.starts_with("Sorry, the type")
+            && message.contains("cannot currently be persisted"))
+        {
             panic!("Unexpected error: {:?}", message);
         }
     } else {
@@ -366,7 +368,9 @@ fn unnamable_type_impl_trait() {
         let v = foo();
     ));
     if let Err(Error::JustMessage(message)) = result {
-        if !(message.starts_with("Sorry, the type") && message.contains("cannot currently be persisted")) {
+        if !(message.starts_with("Sorry, the type")
+            && message.contains("cannot currently be persisted"))
+        {
             panic!("Unexpected error: {:?}", message);
         }
     } else {
