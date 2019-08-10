@@ -56,9 +56,14 @@ impl Repl {
                     println!("{}", text);
                 }
                 if let Some(duration) = output.timing {
-                    // TODO replace by duration.as_millis() when stable
-                    let ms = duration.as_secs() * 1000 + u64::from(duration.subsec_millis());
-                    println!("{}", format!("Took {}ms", ms).blue());
+                    println!("{}", format!("Took {}ms", duration.as_millis()).blue());
+
+                    for phase in output.phases {
+                        println!(
+                            "{}",
+                            format!("  {}: {}ms", phase.name, phase.duration.as_millis()).blue()
+                        );
+                    }
                 }
             }
             Err(evcxr::Error::CompilationErrors(errors)) => {
