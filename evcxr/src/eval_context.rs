@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use syn;
 use tempfile;
 
@@ -173,6 +173,8 @@ impl EvalContext {
             }
         }
 
+        let mut phases = PhaseDetailsBuilder::new();
+
         // Any pre-existing, non-copy variables are marked as available, so that we'll take their
         // values from outside of the catch_unwind block. If they remain this way, then this
         // effectively means that they're not being used.
@@ -270,10 +272,11 @@ impl EvalContext {
             }
         }
 
-        let outputs = match self.compile_items_then_run_statements(
+        let mut outputs = match self.compile_items_then_run_statements(
             code_block,
             &top_level_items,
             defined_names,
+            &mut phases,
         ) {
             Err(error) => {
                 if let Error::ChildProcessTerminated(_) = error {
@@ -295,6 +298,9 @@ impl EvalContext {
         // Our load_variable_statements are only updated if we successfully run
         // the code, which if we get here has happened.
         self.load_variable_statements = self.load_variable_statements();
+
+        phases.phase_complete("Execution");
+        outputs.phases = phases.phases;
 
         Ok(outputs)
     }
@@ -436,21 +442,22 @@ impl EvalContext {
         user_code: CodeBlock,
         top_level_items: &CodeBlock,
         defined_names: Vec<String>,
+        phases: &mut PhaseDetailsBuilder,
     ) -> Result<EvalOutputs, Error> {
         if !top_level_items.is_empty() && !user_code.is_empty() {
             // Both
-            self.run_statements(CodeBlock::new(), top_level_items, defined_names)?;
-            return self.run_statements(user_code, &CodeBlock::new(), vec![]);
+            self.run_statements(CodeBlock::new(), top_level_items, defined_names, phases)?;
+            return self.run_statements(user_code, &CodeBlock::new(), vec![], phases);
         }
         if !top_level_items.is_empty() {
             // Just items.
-            return self.run_statements(CodeBlock::new(), top_level_items, defined_names);
+            return self.run_statements(CodeBlock::new(), top_level_items, defined_names, phases);
         }
         // Either just code, or neither. In the case of neither, we still want
         // to make sure we try building, in case the user ran just a
         // use-statement by itself. Since they're stored separately, the user
         // code and top-level-items will both end up empty.
-        self.run_statements(user_code, &CodeBlock::new(), vec![])
+        self.run_statements(user_code, &CodeBlock::new(), vec![], phases)
     }
 
     fn run_statements(
@@ -458,6 +465,7 @@ impl EvalContext {
         mut user_code: CodeBlock,
         top_level_items: &CodeBlock,
         defined_names: Vec<String>,
+        phases: &mut PhaseDetailsBuilder,
     ) -> Result<EvalOutputs, Error> {
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
@@ -471,6 +479,7 @@ impl EvalContext {
                 user_code.clone(),
                 top_level_items.clone(),
                 CompilationMode::RunAndCatchPanics,
+                phases,
             );
             match result {
                 Ok(execution_artifacts) => {
@@ -491,12 +500,14 @@ impl EvalContext {
                     // whether they've been moved into the catch_unwind block
                     // etc.
                     if remaining_retries > 0 {
-                        let mut retry = false;
+                        let mut fixed = HashSet::new();
                         for error in &errors {
-                            retry |= self.attempt_to_fix_error(error, &mut user_code)?;
+                            self.attempt_to_fix_error(error, &mut user_code, &mut fixed)?;
                         }
-                        if retry {
+                        if !fixed.is_empty() {
                             remaining_retries -= 1;
+                            let fixed_sorted: Vec<_> = fixed.into_iter().collect();
+                            phases.phase_complete(&fixed_sorted.join("|"));
                             continue;
                         }
                     }
@@ -509,6 +520,7 @@ impl EvalContext {
                             user_code.clone(),
                             top_level_items.clone(),
                             CompilationMode::NoCatchExpectError,
+                            phases,
                         )?;
                     }
                     return Err(Error::CompilationErrors(errors));
@@ -523,6 +535,7 @@ impl EvalContext {
         user_code: CodeBlock,
         top_level_items: CodeBlock,
         compilation_mode: CompilationMode,
+        phases: &mut PhaseDetailsBuilder,
     ) -> Result<ExecutionArtifacts, Error> {
         let mut module = match self.take_next_module() {
             Some(m) => m,
@@ -566,6 +579,7 @@ impl EvalContext {
                 module,
             });
         }
+        phases.phase_complete("Final compile");
 
         let output = self.run_and_capture_output(&module)?;
         Ok(ExecutionArtifacts { output, module })
@@ -695,11 +709,11 @@ impl EvalContext {
         &mut self,
         error: &CompilationError,
         user_code: &mut CodeBlock,
-    ) -> Result<bool, Error> {
-        let mut retry = false;
+        fixed_errors: &mut HashSet<&'static str>,
+    ) -> Result<(), Error> {
         let error_code = match error.code() {
             Some(c) => c,
-            _ => return Ok(false),
+            _ => return Ok(()),
         };
         lazy_static! {
             static ref DISALLOWED_TYPES: Regex = Regex::new("(impl .*|[.*@])").unwrap();
@@ -727,7 +741,7 @@ impl EvalContext {
                                 .get_mut(variable_name)
                                 .unwrap()
                                 .type_name = actual_type;
-                            retry = true;
+                            fixed_errors.insert("Variable types");
                         } else {
                             bail!("Got error {} but failed to parse actual type", error_code);
                         }
@@ -746,11 +760,11 @@ impl EvalContext {
                             // Variable is truly moved, forget about it.
                             self.state.variable_states.remove(variable_name);
                         }
-                        retry = true;
+                        fixed_errors.insert("Captured value");
                     } else if error_code == "E0425" {
                         // cannot find value in scope.
                         self.state.variable_states.remove(variable_name);
-                        retry = true;
+                        fixed_errors.insert("Variable moved");
                     } else if error_code == "E0603" {
                         if let Some(variable_state) =
                             self.state.variable_states.remove(variable_name)
@@ -770,18 +784,18 @@ impl EvalContext {
                     if error_code == "E0277" {
                         if let Some(state) = self.state.variable_states.get_mut(variable_name) {
                             state.is_copy_type = false;
-                            retry = true;
+                            fixed_errors.insert("Non-copy type");
                         }
                     }
                 }
                 CodeOrigin::WithFallback(fallback) => {
                     user_code.apply_fallback(fallback);
-                    retry = true;
+                    fixed_errors.insert("Fallback");
                 }
                 _ => {}
             }
         }
-        Ok(retry)
+        Ok(())
     }
 
     fn record_new_locals(&mut self, pat: &syn::Pat, ty: Option<&syn::Type>) {
@@ -937,10 +951,40 @@ impl EvalContext {
     }
 }
 
+#[derive(Debug)]
+pub struct PhaseDetails {
+    pub name: String,
+    pub duration: Duration,
+}
+
+struct PhaseDetailsBuilder {
+    start: Instant,
+    phases: Vec<PhaseDetails>,
+}
+
+impl PhaseDetailsBuilder {
+    fn new() -> PhaseDetailsBuilder {
+        PhaseDetailsBuilder {
+            start: Instant::now(),
+            phases: Vec::new(),
+        }
+    }
+
+    fn phase_complete(&mut self, name: &str) {
+        let new_start = Instant::now();
+        self.phases.push(PhaseDetails {
+            name: name.to_owned(),
+            duration: new_start.duration_since(self.start),
+        });
+        self.start = new_start;
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct EvalOutputs {
     pub content_by_mime_type: HashMap<String, String>,
     pub timing: Option<Duration>,
+    pub phases: Vec<PhaseDetails>,
 }
 
 impl EvalOutputs {
@@ -948,6 +992,7 @@ impl EvalOutputs {
         EvalOutputs {
             content_by_mime_type: HashMap::new(),
             timing: None,
+            phases: Vec::new(),
         }
     }
 
