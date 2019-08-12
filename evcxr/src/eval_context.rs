@@ -49,6 +49,10 @@ pub struct EvalContext {
     // Whether we'll pre-warm each compiled crate by compiling the same code as
     // was in the previous crate, but with the new crate name.
     pub should_pre_warm: bool,
+    // Whether we should preserve variables that are Copy when a panic occurs.
+    // Sounds good, but unfortunately doing so currently requires an extra build
+    // attempt to determine if the type of the variable is copy.
+    pub preserve_copy_vars_on_panic: bool,
     stdout_sender: mpsc::Sender<String>,
 }
 
@@ -142,6 +146,7 @@ impl EvalContext {
             meta_module: None,
             child_process,
             should_pre_warm: true,
+            preserve_copy_vars_on_panic: false,
             stdout_sender,
         };
         context.meta_module = Some(Module::new(&context, "evcxr_meta_module", None)?);
@@ -819,8 +824,9 @@ impl EvalContext {
                     // All new locals will initially be defined only inside our catch_unwind
                     // block.
                     move_state: VariableMoveState::MovedIntoCatchUnwind,
-                    // Assume it's copy until we find out it's not.
-                    is_copy_type: true,
+                    // If we're preserving copy types, then assume this variable
+                    // is copy until we find out it's not.
+                    is_copy_type: self.preserve_copy_vars_on_panic,
                 },
             );
         });
