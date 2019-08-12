@@ -1,3 +1,8 @@
+# Version 0.4.0
+* Don't preserve variables that are Copy on panic.
+  * Results in a small speedup in some evaluation times.
+  * If you really want this, you can opt back in via :preserve_copy_types.
+
 # Version 0.3.5
 * Fix for another upcoming cargo change (due in 1.37).
 

@@ -78,6 +78,18 @@ impl CommandContext {
                 .content_by_mime_type
                 .insert("text/html".to_owned(), self.vars_as_html());
             Ok(outputs)
+        } else if line == ":preserve_copy_types" {
+            // This option doesn't seem super important, especially given that
+            // it comes with a cost of slowing stuff down. Generally important
+            // variables that you want to preserve won't be copy anyway. For
+            // this reason, I'm leaving this command undocumented as I don't
+            // really want to clutter the documentation.
+            self.eval_context.preserve_copy_vars_on_panic =
+                !self.eval_context.preserve_copy_vars_on_panic;
+            text_output(format!(
+                "Preserve copy types on panic: {}",
+                self.eval_context.preserve_copy_vars_on_panic
+            ))
         } else if line == ":clear" {
             self.eval_context.clear().map(|_| EvalOutputs::new())
         } else if let Some(captures) = ADD_DEP_RE.captures(line) {
