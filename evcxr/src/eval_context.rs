@@ -28,7 +28,7 @@ use std;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use syn;
 use tempfile;
@@ -42,13 +42,9 @@ pub struct EvalContext {
     load_variable_statements: CodeBlock,
     pub(crate) debug_mode: bool,
     opt_level: String,
-    next_module: Arc<Mutex<Option<Module>>>,
     meta_module: Option<Module>,
     state: ContextState,
     child_process: ChildProcess,
-    // Whether we'll pre-warm each compiled crate by compiling the same code as
-    // was in the previous crate, but with the new crate name.
-    pub should_pre_warm: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
     // attempt to determine if the type of the variable is copy.
@@ -65,8 +61,6 @@ pub struct EvalContextOutputs {
 
 impl Drop for EvalContext {
     fn drop(&mut self) {
-        // Make sure any warming-up has finished.
-        self.take_next_module();
         // Probably doesn't matter much (since dlclose will just decrement refcount), but seems like
         // we should unload modules in reverse order.
         while self.state.modules.pop().is_some() {}
@@ -142,10 +136,8 @@ impl EvalContext {
             debug_mode: false,
             opt_level: "2".to_owned(),
             state: ContextState::default(),
-            next_module: Arc::new(Mutex::new(None)),
             meta_module: None,
             child_process,
-            should_pre_warm: true,
             preserve_copy_vars_on_panic: false,
             stdout_sender,
         };
@@ -292,13 +284,6 @@ impl EvalContext {
             }
             Ok(x) => x,
         };
-
-        if self.should_pre_warm {
-            if let Some(last_module) = self.state.modules.pop() {
-                self.warm_up_next_module(&CodeBlock::new(), &last_module.module)?;
-                self.state.modules.push(last_module);
-            }
-        }
 
         // Our load_variable_statements are only updated if we successfully run
         // the code, which if we get here has happened.
@@ -542,10 +527,7 @@ impl EvalContext {
         compilation_mode: CompilationMode,
         phases: &mut PhaseDetailsBuilder,
     ) -> Result<ExecutionArtifacts, Error> {
-        let mut module = match self.take_next_module() {
-            Some(m) => m,
-            None => self.create_new_module(None)?,
-        };
+        let mut module = self.create_new_module(None)?;
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports)]")
             .add_all(self.get_imports())
@@ -560,11 +542,7 @@ impl EvalContext {
                 .generated(format!("pub extern \"C\" fn {}(", module.user_fn_name))
                 .generated("mut x: *mut std::os::raw::c_void) -> *mut std::os::raw::c_void {x}");
         }
-        if let Err(error) = module.write_sources_and_compile(self, &code) {
-            // Compilation failed, reuse this module next time.
-            *self.next_module.lock().unwrap() = Some(module);
-            return Err(error);
-        }
+        module.write_sources_and_compile(self, &code)?;
 
         let mut meta_module = self.meta_module.take().unwrap();
         meta_module.add_dep(&module);
@@ -572,7 +550,6 @@ impl EvalContext {
         self.meta_module.replace(meta_module);
 
         if let Err(error) = meta_result {
-            *self.next_module.lock().unwrap() = Some(module);
             return Err(error);
         }
 
@@ -873,55 +850,6 @@ impl EvalContext {
         let crate_name = format!("user_code_{}{}", self.crate_suffix, self.build_num);
         self.build_num += 1;
         Module::new(self, &crate_name, previous_module)
-    }
-
-    // In a background thread, compile our next crate using the code from the
-    // previous crate. At the time of writing (rustc 1.28.0), this appears to
-    // cut our next compilation from about 340ms to 230ms. When experimenting
-    // outside of evcxr, it appears that cargo build is slower if you've just
-    // renamed your crate than if you haven't. I'm guessing something in the
-    // incremental compilation cache includes the crate name. So after we've
-    // finished a compilation, we get a head start on compiling a crate with our
-    // next crate name.
-    fn warm_up_next_module(
-        &mut self,
-        code_block: &CodeBlock,
-        previous_module: &Module,
-    ) -> Result<(), Error> {
-        use std::sync::mpsc::channel;
-        if self.next_module.lock().unwrap().is_some() {
-            return Ok(());
-        }
-        let (started_sender, started_receiver) = channel();
-        let mut module = self.create_new_module(Some(previous_module))?;
-        module.write_cargo_toml(self)?;
-        std::thread::spawn({
-            let next_module_arc = Arc::clone(&self.next_module);
-            let code_block = code_block.clone();
-            move || {
-                let mut next_module_arc_lock = next_module_arc.lock().unwrap();
-                started_sender.send(()).unwrap();
-                let _ = module.compile(&code_block);
-                *next_module_arc_lock = Some(module);
-                // Argh. If we don't sleep for a bit, then tests fail. It seems
-                // that if we ask cargo to compile, then straight away update
-                // the source, then compile again straight away, cargo thinks
-                // that the source hasn't changed and doesn't actually rebuild
-                // with the new source. Looks like the time precision for mtimes
-                // on my file system is O(several ms) and cargo only compares
-                // mtimes to deterimine if it should rebuild.
-                std::thread::sleep(std::time::Duration::from_millis(10));
-            }
-        });
-        // Wait until our thread has locked the next module mutex before we
-        // return. That way if we go on to compile more code, it'll be
-        // guaranteed to wait for then use this module.
-        started_receiver.recv().unwrap();
-        Ok(())
-    }
-
-    fn take_next_module(&mut self) -> Option<Module> {
-        self.next_module.lock().unwrap().take()
     }
 
     // Returns an iterator over the loaded modules.
