@@ -4,6 +4,7 @@ members = [
   "evcxr_repl",
   "evcxr_jupyter",
   "evcxr_runtime",
+  "runtimes/evcxr_image",
 ]
 
 exclude = [
