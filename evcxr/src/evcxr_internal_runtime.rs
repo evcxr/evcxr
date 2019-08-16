@@ -21,6 +21,7 @@ use std::collections::HashMap;
 use std::{io, process};
 
 pub const PANIC_NOTIFICATION: &str = "EVCXR_PANIC_NOTIFICATION";
+pub const VARIABLE_CHANGED_TYPE: &str = "EVCXR_VARIABLE_CHANGED_TYPE:";
 
 pub struct VariableStore {
     variables: HashMap<String, Box<dyn Any + 'static>>,
@@ -39,13 +40,28 @@ impl VariableStore {
         self.variables.insert(name.to_owned(), Box::new(value));
     }
 
+    pub fn check_variable<T: 'static>(&mut self, name: &str) -> bool {
+        if let Some(v) = self.variables.get(name) {
+            if v.downcast_ref::<T>().is_none() {
+                eprintln!(
+                    "The type of the variable {} was redefined, so was lost.",
+                    name
+                );
+                println!("{}{}", VARIABLE_CHANGED_TYPE, name);
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn take_variable<T: 'static>(&mut self, name: &str) -> T {
         match self.variables.remove(name) {
             Some(v) => {
                 if let Ok(value) = v.downcast() {
                     *value
                 } else {
-                    panic!("Variable '{}' unexpectedly changed type", name);
+                    // Shouldn't happen so long as check_variable was called.
+                    panic!("Variable changed type");
                 }
             }
             None => panic!("Variable '{}' has gone missing", name),

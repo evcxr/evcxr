@@ -63,6 +63,12 @@ fn new_context() -> EvalContext {
     context
 }
 
+fn variable_names_and_types(ctx: &EvalContext) -> Vec<(&str, &str)> {
+    let mut var_names = ctx.variables_and_types().collect::<Vec<_>>();
+    var_names.sort();
+    var_names
+}
+
 #[test]
 fn single_statement() {
     let mut e = new_context();
@@ -188,11 +194,11 @@ fn moved_value() {
     let mut e = new_context();
     eval!(e, let a = Some("foo".to_owned()););
     assert_eq!(
-        e.variables_and_types().collect::<Vec<_>>(),
+        variable_names_and_types(&e),
         vec![("a", "std::option::Option<std::string::String>")]
     );
     assert_eq!(eval!(e, a.unwrap()), text_plain("\"foo\""));
-    assert_eq!(e.variables_and_types().collect::<Vec<_>>(), vec![]);
+    assert_eq!(variable_names_and_types(&e), vec![]);
 }
 
 #[test]
@@ -286,30 +292,29 @@ fn multiple_identical_use_statements() {
     eval!(e, use std::collections::HashMap;);
 }
 
-// Defines a type, creates variable of that type (both from the same and from a
-// different compilation unit), then redefines the type and makes sure we can
-// still call an old method on the variables.
 #[test]
-fn redefine_type_reference_old_var() {
+fn redefine_type_with_existing_var() {
     let mut e = new_context();
     eval!(e,
-        pub struct Foo {}
-        impl Foo {
-            pub fn get_value(&self) -> i32 { 42 }
-        }
-        let f = Foo {};
+        struct Foo {x: i32}
+        let f1 = Foo {x: 42};
+        let f2 = Foo {x: 42};
     );
-    eval!(e, let f2 = Foo {};);
+    assert_eq!(
+        variable_names_and_types(&e),
+        vec![("f1", "Foo"), ("f2", "Foo")]
+    );
     eval!(e,
-        pub struct Foo { pub value: i32 }
-        impl Foo {
-            pub fn get_value(&self) -> i32 { self.value }
-        }
+        struct Foo { x: i32, y: i32 }
+        let f3 = Foo {x: 42, y: 43};
     );
-    eval!(
-        e,
-        assert_eq!(f.get_value(), 42);
-        assert_eq!(f2.get_value(), 42);
+    // `f1` and `f2` should have been dropped because the type Foo was
+    // redefined.
+    assert_eq!(variable_names_and_types(&e), vec![("f3", "Foo")]);
+    // Make sure that we actually evaluated the above by checking that f3 is
+    // accessible.
+    eval!(e,
+        assert_eq!(f3.x, 42);
     );
 }
 
@@ -348,7 +353,7 @@ fn variable_assignment_compile_fail_then_use_statement() {
 fn unnamable_type_closure() {
     let mut e = new_context();
     let result = e.eval(stringify!(let v = || {42};));
-    if let Err(Error::JustMessage(message)) = result {
+    if let Err(Error::Message(message)) = result {
         if !(message.starts_with("Sorry, the type")
             && message.contains("cannot currently be persisted"))
         {
@@ -368,7 +373,7 @@ fn unnamable_type_impl_trait() {
         pub fn foo() -> impl Bar {42}
         let v = foo();
     ));
-    if let Err(Error::JustMessage(message)) = result {
+    if let Err(Error::Message(message)) = result {
         if !(message.starts_with("Sorry, the type")
             && message.contains("cannot currently be persisted"))
         {
