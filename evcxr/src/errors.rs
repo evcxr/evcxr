@@ -300,7 +300,8 @@ impl SpannedMessage {
 #[derive(Debug)]
 pub enum Error {
     CompilationErrors(Vec<CompilationError>),
-    JustMessage(String),
+    TypeRedefinedVariablesLost(Vec<String>),
+    Message(String),
     ChildProcessTerminated(String),
 }
 
@@ -327,7 +328,14 @@ impl fmt::Display for Error {
                     write!(f, "{}", error.message())?;
                 }
             }
-            Error::JustMessage(message) | Error::ChildProcessTerminated(message) => {
+            Error::TypeRedefinedVariablesLost(variables) => {
+                write!(
+                    f,
+                    "A type redefinition resulted in the following variables being lost: {}",
+                    variables.join(", ")
+                )?;
+            }
+            Error::Message(message) | Error::ChildProcessTerminated(message) => {
                 write!(f, "{}", message)?
             }
         }
@@ -337,43 +345,43 @@ impl fmt::Display for Error {
 
 impl From<std::fmt::Error> for Error {
     fn from(error: std::fmt::Error) -> Self {
-        Error::JustMessage(error.to_string())
+        Error::Message(error.to_string())
     }
 }
 
 impl From<io::Error> for Error {
     fn from(error: io::Error) -> Self {
-        Error::JustMessage(error.to_string())
+        Error::Message(error.to_string())
     }
 }
 
 impl From<json::Error> for Error {
     fn from(error: json::Error) -> Self {
-        Error::JustMessage(error.to_string())
+        Error::Message(error.to_string())
     }
 }
 
 impl<'a> From<&'a io::Error> for Error {
     fn from(error: &'a io::Error) -> Self {
-        Error::JustMessage(error.to_string())
+        Error::Message(error.to_string())
     }
 }
 
 impl From<std::str::Utf8Error> for Error {
     fn from(error: std::str::Utf8Error) -> Self {
-        Error::JustMessage(error.to_string())
+        Error::Message(error.to_string())
     }
 }
 
 impl From<String> for Error {
     fn from(message: String) -> Self {
-        Error::JustMessage(message)
+        Error::Message(message)
     }
 }
 
 impl<'a> From<&'a str> for Error {
     fn from(message: &str) -> Self {
-        Error::JustMessage(message.to_owned())
+        Error::Message(message.to_owned())
     }
 }
 

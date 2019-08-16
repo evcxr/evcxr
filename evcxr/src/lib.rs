@@ -23,7 +23,6 @@ extern crate tempfile;
 extern crate lazy_static;
 extern crate backtrace;
 extern crate libloading;
-extern crate rand;
 
 #[cfg(unix)]
 #[macro_use]

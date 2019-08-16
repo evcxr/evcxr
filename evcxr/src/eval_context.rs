@@ -19,8 +19,7 @@ use errors::{CompilationError, Error};
 use evcxr_internal_runtime;
 use idents;
 use item;
-use module::Module;
-use rand;
+use module::{Module, SoFile};
 use regex::Regex;
 use runtime;
 use statement_splitter;
@@ -28,7 +27,6 @@ use std;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 use syn;
 use tempfile;
@@ -36,13 +34,10 @@ use tempfile;
 pub struct EvalContext {
     // Our tmpdir if EVCXR_TMPDIR wasn't set - Drop causes tmpdir to be cleaned up.
     _tmpdir: Option<tempfile::TempDir>,
-    pub(crate) tmpdir_path: PathBuf,
-    crate_suffix: String,
     build_num: i32,
-    load_variable_statements: CodeBlock,
     pub(crate) debug_mode: bool,
     opt_level: String,
-    meta_module: Option<Module>,
+    module: Module,
     state: ContextState,
     child_process: ChildProcess,
     // Whether we should preserve variables that are Copy when a panic occurs.
@@ -50,6 +45,7 @@ pub struct EvalContext {
     // attempt to determine if the type of the variable is copy.
     pub preserve_copy_vars_on_panic: bool,
     stdout_sender: mpsc::Sender<String>,
+    stored_variable_states: HashMap<String, VariableState>,
 }
 
 // Outputs from an EvalContext. This is a separate struct since users may want
@@ -59,22 +55,6 @@ pub struct EvalContextOutputs {
     pub stderr: mpsc::Receiver<String>,
 }
 
-impl Drop for EvalContext {
-    fn drop(&mut self) {
-        // Probably doesn't matter much (since dlclose will just decrement refcount), but seems like
-        // we should unload modules in reverse order.
-        while self.state.modules.pop().is_some() {}
-    }
-}
-
-fn target_dir(tmpdir: &Path) -> PathBuf {
-    tmpdir.join("target")
-}
-
-fn deps_dir(tmpdir: &Path) -> PathBuf {
-    target_dir(tmpdir).join("debug").join("deps")
-}
-
 impl EvalContext {
     pub fn new() -> Result<(EvalContext, EvalContextOutputs), Error> {
         let current_exe = std::env::current_exe()?;
@@ -82,12 +62,12 @@ impl EvalContext {
     }
 
     #[cfg(windows)]
-    fn apply_platform_specific_vars(tmpdir_path: &Path, command: &mut std::process::Command) {
+    fn apply_platform_specific_vars(module: &Module, command: &mut std::process::Command) {
         // Windows doesn't support rpath, so we need to set PATH so that it
         // knows where to find dlls.
         use std::ffi::OsString;
         let mut path_var_value = OsString::new();
-        path_var_value.push(&deps_dir(tmpdir_path));
+        path_var_value.push(&module.deps_dir());
         path_var_value.push(";");
 
         let mut sysroot_command = std::process::Command::new("rustc");
@@ -102,60 +82,45 @@ impl EvalContext {
     }
 
     #[cfg(not(windows))]
-    fn apply_platform_specific_vars(_tmpdir_path: &Path, _command: &mut std::process::Command) {}
+    fn apply_platform_specific_vars(_module: &Module, _command: &mut std::process::Command) {}
 
     pub fn with_subprocess_command(
         mut subprocess_command: std::process::Command,
     ) -> Result<(EvalContext, EvalContextOutputs), Error> {
         let mut opt_tmpdir = None;
         let tmpdir_path;
-        let crate_suffix;
         if let Ok(from_env) = std::env::var("EVCXR_TMPDIR") {
             tmpdir_path = PathBuf::from(from_env);
-            // If we've specified a tmpdir, there may be multiple contexts
-            // sharing it, so add a suffix to our crate names.
-            crate_suffix = format!("{:x}_", rand::random::<u32>());
         } else {
             let tmpdir = tempfile::tempdir()?;
             tmpdir_path = PathBuf::from(tmpdir.path());
             opt_tmpdir = Some(tmpdir);
-            crate_suffix = String::new();
         }
 
-        Self::apply_platform_specific_vars(&tmpdir_path, &mut subprocess_command);
+        let module = Module::new(tmpdir_path.clone())?;
+
+        Self::apply_platform_specific_vars(&module, &mut subprocess_command);
 
         let (stdout_sender, stdout_receiver) = mpsc::channel();
         let (stderr_sender, stderr_receiver) = mpsc::channel();
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
-        let mut context = EvalContext {
+        let context = EvalContext {
             _tmpdir: opt_tmpdir,
-            tmpdir_path,
-            crate_suffix,
             build_num: 0,
-            load_variable_statements: CodeBlock::new(),
             debug_mode: false,
             opt_level: "2".to_owned(),
             state: ContextState::default(),
-            meta_module: None,
+            module,
             child_process,
             preserve_copy_vars_on_panic: false,
             stdout_sender,
+            stored_variable_states: HashMap::new(),
         };
-        context.meta_module = Some(Module::new(&context, "evcxr_meta_module", None)?);
-        context.add_internal_runtime()?;
         let outputs = EvalContextOutputs {
             stdout: stdout_receiver,
             stderr: stderr_receiver,
         };
         Ok((context, outputs))
-    }
-
-    pub(crate) fn target_dir(&self) -> PathBuf {
-        target_dir(&self.tmpdir_path)
-    }
-
-    pub(crate) fn deps_dir(&self) -> PathBuf {
-        deps_dir(&self.tmpdir_path)
     }
 
     /// Evaluates the supplied Rust code.
@@ -186,9 +151,8 @@ impl EvalContext {
         // Copy our state, so that changes we make to it can be rolled back if compilation fails.
         let old_state = self.state.clone();
 
-        let mut top_level_items = CodeBlock::new();
+        let mut previous_item_name = None;
         let mut code_block = CodeBlock::new();
-        let mut defined_names = Vec::new();
         for stmt_code in statement_splitter::split_into_statements(code) {
             if let Ok(stmt) = parse_stmt_or_expr(stmt_code) {
                 if self.debug_mode {
@@ -225,16 +189,27 @@ impl EvalContext {
                         self.state.use_stmts.insert(stmt_code.to_owned());
                     }
                     syn::Stmt::Item(item) => {
-                        if !item::is_item_public(item) {
-                            bail!(
-                                "Items currently need to be explicitly made pub along \
-                                 with all fields of structs."
-                            );
-                        }
+                        let item_block = CodeBlock::new().user_code(stmt_code);
                         if let Some(item_name) = item::item_name(item) {
-                            defined_names.push(item_name.to_owned());
+                            *self
+                                .state
+                                .items_by_name
+                                .entry(item_name.to_owned())
+                                .or_default() = item_block;
+                            previous_item_name = Some(item_name);
+                        } else if let Some(item_name) = &previous_item_name {
+                            // unwrap below should never fail because we put
+                            // that key in the map on a previous iteration,
+                            // otherwise we wouldn't have had a value in
+                            // `previous_item_name`.
+                            self.state
+                                .items_by_name
+                                .get_mut(item_name)
+                                .unwrap()
+                                .modify(move |block_for_name| block_for_name.add_all(item_block));
+                        } else {
+                            self.state.unnamed_items.push(item_block);
                         }
-                        top_level_items = top_level_items.user_code(stmt_code);
                     }
                     syn::Stmt::Expr(_) => {
                         code_block = code_block.code_with_fallback(
@@ -261,20 +236,7 @@ impl EvalContext {
             }
         }
 
-        // Find any modules that previously defined the names defined by our new module and prevent
-        // those old definitions from being imported in future.
-        for name in &defined_names {
-            for module in &mut self.state.modules {
-                module.defined_names.retain(|n| n != name);
-            }
-        }
-
-        let mut outputs = match self.compile_items_then_run_statements(
-            code_block,
-            &top_level_items,
-            defined_names,
-            &mut phases,
-        ) {
+        let mut outputs = match self.run_statements(code_block, &mut phases) {
             Err(error) => {
                 if let Error::ChildProcessTerminated(_) = error {
                     self.restart_child_process()?;
@@ -285,9 +247,8 @@ impl EvalContext {
             Ok(x) => x,
         };
 
-        // Our load_variable_statements are only updated if we successfully run
-        // the code, which if we get here has happened.
-        self.load_variable_statements = self.load_variable_statements();
+        // Once, we reach here, our code has successfully executed, so we conclude that variable changes are now applied.
+        self.stored_variable_states = self.state.variable_states.clone();
 
         phases.phase_complete("Execution");
         outputs.phases = phases.phases;
@@ -338,34 +299,7 @@ impl EvalContext {
     }
 
     pub fn defined_item_names(&self) -> impl Iterator<Item = &str> {
-        struct It<'a> {
-            module_iter: std::slice::Iter<'a, ModuleState>,
-            name_iter: Option<std::slice::Iter<'a, String>>,
-        }
-
-        impl<'a> Iterator for It<'a> {
-            type Item = &'a str;
-
-            fn next(&mut self) -> Option<&'a str> {
-                loop {
-                    if let Some(name_iter) = &mut self.name_iter {
-                        if let Some(name) = name_iter.next() {
-                            return Some(name);
-                        }
-                    }
-                    if let Some(module) = self.module_iter.next() {
-                        self.name_iter = Some(module.defined_names.iter());
-                    } else {
-                        return None;
-                    }
-                }
-            }
-        }
-
-        It {
-            module_iter: self.state.modules.iter(),
-            name_iter: None,
-        }
+        self.state.items_by_name.keys().map(String::as_str)
     }
 
     // Clears all state, while keeping tmpdir. This allows us to effectively
@@ -373,26 +307,14 @@ impl EvalContext {
     // compiled.
     pub fn clear(&mut self) -> Result<(), Error> {
         self.state = ContextState::default();
-        self.add_internal_runtime()?;
+        self.stored_variable_states = HashMap::new();
         self.restart_child_process()
     }
 
     fn restart_child_process(&mut self) -> Result<(), Error> {
         self.state.variable_states.clear();
-        self.load_variable_statements = CodeBlock::new();
+        self.stored_variable_states = HashMap::new();
         self.child_process = self.child_process.restart()?;
-        Ok(())
-    }
-
-    fn add_internal_runtime(&mut self) -> Result<(), Error> {
-        let mut runtime_module = Module::new(self, "evcxr_internal_runtime", None)?;
-        runtime_module.write_sources_and_compile(
-            self,
-            &CodeBlock::new().generated(include_str!("evcxr_internal_runtime.rs")),
-        )?;
-        self.state
-            .modules
-            .push(ModuleState::new(runtime_module, Vec::new()));
         Ok(())
     }
 
@@ -405,56 +327,18 @@ impl EvalContext {
             .join("")
     }
 
-    pub(crate) fn last_compile_dir(&self) -> &Option<PathBuf> {
-        &self.state.last_compile_dir
+    pub(crate) fn last_compile_dir(&self) -> &Path {
+        self.module.crate_dir()
     }
 
     fn dependency_lib_names(&self) -> Result<Vec<String>, Error> {
         use cargo_metadata;
-        if let Some(dir) = self.last_compile_dir() {
-            cargo_metadata::get_library_names(&dir)
-        } else {
-            Ok(vec![])
-        }
-    }
-
-    // If we have just top-level items, compile them. If we have just user-code,
-    // compile and run it. If we have both, then process them as separate
-    // crates. It'd be nice if we didn't have to do this, but it's currently
-    // necessary in order to ensure that any variables in the user code that
-    // reference types in the top-level items end up with fully qualified types.
-    // Having types that aren't fully qualified can become a problem if new
-    // types with the same name are later defined, since then the variable
-    // "changes type" from our perspective, which causes us to fail to retrieve
-    // it from the Any.
-    fn compile_items_then_run_statements(
-        &mut self,
-        user_code: CodeBlock,
-        top_level_items: &CodeBlock,
-        defined_names: Vec<String>,
-        phases: &mut PhaseDetailsBuilder,
-    ) -> Result<EvalOutputs, Error> {
-        if !top_level_items.is_empty() && !user_code.is_empty() {
-            // Both
-            self.run_statements(CodeBlock::new(), top_level_items, defined_names, phases)?;
-            return self.run_statements(user_code, &CodeBlock::new(), vec![], phases);
-        }
-        if !top_level_items.is_empty() {
-            // Just items.
-            return self.run_statements(CodeBlock::new(), top_level_items, defined_names, phases);
-        }
-        // Either just code, or neither. In the case of neither, we still want
-        // to make sure we try building, in case the user ran just a
-        // use-statement by itself. Since they're stored separately, the user
-        // code and top-level-items will both end up empty.
-        self.run_statements(user_code, &CodeBlock::new(), vec![], phases)
+        cargo_metadata::get_library_names(self.module.crate_dir())
     }
 
     fn run_statements(
         &mut self,
         mut user_code: CodeBlock,
-        top_level_items: &CodeBlock,
-        defined_names: Vec<String>,
         phases: &mut PhaseDetailsBuilder,
     ) -> Result<EvalOutputs, Error> {
         // In some circumstances we may need a few tries before we get the code right. Note that
@@ -467,20 +351,11 @@ impl EvalContext {
             // Try to compile and run the code.
             let result = self.try_run_statements(
                 user_code.clone(),
-                top_level_items.clone(),
                 CompilationMode::RunAndCatchPanics,
                 phases,
             );
             match result {
                 Ok(execution_artifacts) => {
-                    let module = execution_artifacts.module;
-                    self.state.last_compile_dir = Some(module.crate_dir.clone());
-
-                    if !defined_names.is_empty() {
-                        self.state
-                            .modules
-                            .push(ModuleState::new(module, defined_names));
-                    }
                     return Ok(execution_artifacts.output);
                 }
 
@@ -508,12 +383,19 @@ impl EvalContext {
                         // an `FnOnce` closure `a` as mutable".
                         self.try_run_statements(
                             user_code.clone(),
-                            top_level_items.clone(),
                             CompilationMode::NoCatchExpectError,
                             phases,
                         )?;
                     }
                     return Err(Error::CompilationErrors(errors));
+                }
+
+                Err(Error::TypeRedefinedVariablesLost(variables)) => {
+                    for variable in &variables {
+                        self.state.variable_states.remove(variable);
+                        self.stored_variable_states.remove(variable);
+                    }
+                    remaining_retries -= 1;
                 }
                 Err(error) => return Err(error),
             }
@@ -523,66 +405,72 @@ impl EvalContext {
     fn try_run_statements(
         &mut self,
         user_code: CodeBlock,
-        top_level_items: CodeBlock,
         compilation_mode: CompilationMode,
         phases: &mut PhaseDetailsBuilder,
     ) -> Result<ExecutionArtifacts, Error> {
-        let mut module = self.create_new_module(None)?;
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports)]")
-            .add_all(self.get_imports())
-            .add_all(top_level_items);
+            .add_all(self.get_imports());
+        for item in self
+            .state
+            .items_by_name
+            .values()
+            .chain(self.state.unnamed_items.iter())
+        {
+            code = code.add_all(item.clone());
+        }
+        code = code
+            .generated("mod evcxr_internal_runtime {")
+            .generated(include_str!("evcxr_internal_runtime.rs"))
+            .generated("}");
         let has_user_code = !user_code.is_empty();
         if has_user_code {
-            code = code.add_all(self.wrap_user_code(user_code, compilation_mode, &module));
+            code = code.add_all(self.wrap_user_code(user_code, compilation_mode));
         } else {
             // TODO: Add a mechanism to load a crate without any function to call then remove this.
             code = code
                 .generated("#[no_mangle]")
-                .generated(format!("pub extern \"C\" fn {}(", module.user_fn_name))
+                .generated(format!(
+                    "pub extern \"C\" fn {}(",
+                    self.current_user_fn_name()
+                ))
                 .generated("mut x: *mut std::os::raw::c_void) -> *mut std::os::raw::c_void {x}");
         }
-        module.write_sources_and_compile(self, &code)?;
-
-        let mut meta_module = self.meta_module.take().unwrap();
-        meta_module.add_dep(&module);
-        let meta_result = meta_module.write_sources_and_compile(self, &CodeBlock::new());
-        self.meta_module.replace(meta_module);
-
-        if let Err(error) = meta_result {
-            return Err(error);
-        }
+        self.module.write_cargo_toml(self)?;
+        let so_file = self.module.compile(&code)?;
 
         if compilation_mode == CompilationMode::NoCatchExpectError {
             // Uh-oh, caller was expecting an error, return OK and the caller can return the
             // original error.
             return Ok(ExecutionArtifacts {
                 output: EvalOutputs::new(),
-                module,
             });
         }
         phases.phase_complete("Final compile");
 
-        let output = self.run_and_capture_output(&module)?;
-        Ok(ExecutionArtifacts { output, module })
+        let output = self.run_and_capture_output(&so_file)?;
+        Ok(ExecutionArtifacts { output })
     }
 
     fn wrap_user_code(
         &mut self,
         user_code: CodeBlock,
         compilation_mode: CompilationMode,
-        module: &Module,
     ) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#[no_mangle]")
-            .generated(format!("pub extern \"C\" fn {}(", module.user_fn_name))
+            .generated(format!(
+                "pub extern \"C\" fn {}(",
+                self.current_user_fn_name()
+            ))
             .generated("mut evcxr_variable_store: *mut evcxr_internal_runtime::VariableStore)")
             .generated("  -> *mut evcxr_internal_runtime::VariableStore {")
             .generated("if evcxr_variable_store.is_null() {")
             .generated("  evcxr_variable_store = evcxr_internal_runtime::create_variable_store();")
             .generated("}")
             .generated("let evcxr_variable_store = unsafe {&mut *evcxr_variable_store};")
-            .add_all(self.load_variable_statements.clone());
+            .add_all(self.check_variable_statements())
+            .add_all(self.load_variable_statements());
         if compilation_mode == CompilationMode::RunAndCatchPanics {
             code = code
                 .generated("match std::panic::catch_unwind(")
@@ -617,16 +505,25 @@ impl EvalContext {
         code
     }
 
-    fn run_and_capture_output(&mut self, module: &Module) -> Result<EvalOutputs, Error> {
-        let mut output = EvalOutputs::new();
+    fn current_user_fn_name(&self) -> String {
+        format!("run_user_code_{}", self.build_num)
+    }
 
+    fn run_and_capture_output(&mut self, so_file: &SoFile) -> Result<EvalOutputs, Error> {
+        let mut output = EvalOutputs::new();
+        // TODO: We should probably send an OsString not a String. Otherwise
+        // things won't work if the path isn't UTF-8 - apparently that's a thing
+        // on some platforms.
         self.child_process.send(&format!(
             "LOAD_AND_RUN {} {}",
-            module.so_path.to_str().unwrap(),
-            module.user_fn_name,
+            so_file.path.to_string_lossy(),
+            self.current_user_fn_name(),
         ))?;
 
+        self.build_num += 1;
+
         let mut got_panic = false;
+        let mut lost_variables = Vec::new();
         lazy_static! {
             static ref MIME_OUTPUT: Regex = Regex::new("EVCXR_BEGIN_CONTENT ([^ ]+)").unwrap();
         }
@@ -637,6 +534,9 @@ impl EvalContext {
             }
             if line == evcxr_internal_runtime::PANIC_NOTIFICATION {
                 got_panic = true;
+            } else if line.starts_with(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE) {
+                let variable_name = &line[evcxr_internal_runtime::VARIABLE_CHANGED_TYPE.len()..];
+                lost_variables.push(variable_name.to_owned());
             } else if let Some(captures) = MIME_OUTPUT.captures(&line) {
                 let mime_type = captures[1].to_owned();
                 let mut content = String::new();
@@ -683,7 +583,9 @@ impl EvalContext {
                     ),
                 );
             }
-        };
+        } else if !lost_variables.is_empty() {
+            return Err(Error::TypeRedefinedVariablesLost(lost_variables));
+        }
         Ok(output)
     }
 
@@ -833,10 +735,21 @@ impl EvalContext {
         statements
     }
 
+    fn check_variable_statements(&mut self) -> CodeBlock {
+        let mut statements = CodeBlock::new().generated("{let mut vars_ok = true;");
+        for (var_name, var_state) in &self.stored_variable_states {
+            statements = statements.generated(format!(
+                "vars_ok &= evcxr_variable_store.check_variable::<{}>(stringify!({}));",
+                var_state.type_name, var_name
+            ));
+        }
+        statements.generated("if !vars_ok {return evcxr_variable_store;}}")
+    }
+
     // Returns code to load values from the variable store back into their variables.
     fn load_variable_statements(&mut self) -> CodeBlock {
         let mut statements = CodeBlock::new();
-        for (var_name, var_state) in &self.state.variable_states {
+        for (var_name, var_state) in &self.stored_variable_states {
             let mutability = if var_state.is_mut { "mut " } else { "" };
             statements.load_variable(format!(
                 "let {}{} = evcxr_variable_store.take_variable::<{}>(stringify!({}));",
@@ -846,35 +759,9 @@ impl EvalContext {
         statements
     }
 
-    fn create_new_module(&mut self, previous_module: Option<&Module>) -> Result<Module, Error> {
-        let crate_name = format!("user_code_{}{}", self.crate_suffix, self.build_num);
-        self.build_num += 1;
-        Module::new(self, &crate_name, previous_module)
-    }
-
-    // Returns an iterator over the loaded modules.
-    pub(crate) fn modules_iter(&self) -> impl Iterator<Item = &Module> + Clone {
-        self.state.modules.iter().map(|m| &*m.module)
-    }
-
     fn get_imports(&self) -> CodeBlock {
         let mut extern_stmts = CodeBlock::new();
         let mut use_stmts = CodeBlock::new();
-        for module_state in &self.state.modules {
-            let crate_name = &module_state.module.crate_name;
-            let defined_names = &module_state.defined_names;
-            // We still import the crate, even if all its defined names have
-            // been superceeded by later crates since there might be variables
-            // with types defined in this crate.
-            extern_stmts = extern_stmts.generated(format!("extern crate {};\n", crate_name));
-            if !defined_names.is_empty() {
-                use_stmts = use_stmts.generated(format!(
-                    "use {}::{{{}}};\n",
-                    crate_name,
-                    defined_names.join(",")
-                ));
-            }
-        }
         for stmt in self.state.extern_crate_stmts.values() {
             extern_stmts = extern_stmts.user_code(stmt.clone());
         }
@@ -959,7 +846,6 @@ enum VariableMoveState {
 }
 
 struct ExecutionArtifacts {
-    module: Module,
     output: EvalOutputs,
 }
 
@@ -976,27 +862,12 @@ enum CompilationMode {
 /// succeeds, we keep the modified state, if it fails, we revert to the old state.
 #[derive(Clone, Default)]
 struct ContextState {
-    modules: Vec<ModuleState>,
+    items_by_name: HashMap<String, CodeBlock>,
+    unnamed_items: Vec<CodeBlock>,
     pub(crate) external_deps: HashMap<String, ExternalCrate>,
     use_stmts: HashSet<String>,
     // Keyed by crate name. Could use a set, except that the statement might be
     // formatted slightly differently.
     extern_crate_stmts: HashMap<String, String>,
-    last_compile_dir: Option<PathBuf>,
     variable_states: HashMap<String, VariableState>,
-}
-
-#[derive(Clone)]
-struct ModuleState {
-    module: Arc<Module>,
-    defined_names: Vec<String>,
-}
-
-impl ModuleState {
-    fn new(module: Module, defined_names: Vec<String>) -> ModuleState {
-        ModuleState {
-            module: Arc::new(module),
-            defined_names,
-        }
-    }
 }

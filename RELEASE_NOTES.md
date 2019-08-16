@@ -1,4 +1,9 @@
 # Version 0.4.0
+* New execution model.
+  * A single crate is now reused for all compilation. This is a bit faster than
+    the old model where each execution was a separate crate that had a
+    dependency on the previous crates.
+  * Defined items no longer need to be pub.
 * Don't preserve variables that are Copy on panic.
   * Results in a small speedup in some evaluation times.
   * If you really want this, you can opt back in via :preserve_copy_types.

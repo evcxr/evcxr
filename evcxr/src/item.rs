@@ -15,40 +15,6 @@
 use proc_macro2;
 use syn;
 
-/// Returns whether the suplied item and all its fields (in the case of structs) are marked as pub.
-pub(crate) fn is_item_public(item: &syn::Item) -> bool {
-    fn is_public(vis: &syn::Visibility) -> bool {
-        // syn::Visibility appears to not implement Eq.
-        if let syn::Visibility::Public(..) = vis {
-            true
-        } else {
-            false
-        }
-    }
-
-    match item {
-        syn::Item::Static(i) => is_public(&i.vis),
-        syn::Item::Const(i) => is_public(&i.vis),
-        syn::Item::Fn(i) => is_public(&i.vis),
-        syn::Item::Mod(i) => is_public(&i.vis),
-        syn::Item::Type(i) => is_public(&i.vis),
-        syn::Item::Struct(i) => is_public(&i.vis) && i.fields.iter().all(|f| is_public(&f.vis)),
-        syn::Item::Enum(i) => is_public(&i.vis),
-        syn::Item::Union(i) => is_public(&i.vis),
-        syn::Item::Trait(i) => is_public(&i.vis),
-        syn::Item::Impl(i) => {
-            i.trait_.is_some()
-                || i.items.iter().all(|i2| match i2 {
-                    syn::ImplItem::Const(i) => is_public(&i.vis),
-                    syn::ImplItem::Method(i) => is_public(&i.vis),
-                    syn::ImplItem::Type(i) => is_public(&i.vis),
-                    _ => true,
-                })
-        }
-        _ => true,
-    }
-}
-
 /// Returns the name of an item if it has one.
 pub(crate) fn item_name(item: &syn::Item) -> Option<String> {
     item_ident(item).map(|ident| format!("{}", ident))

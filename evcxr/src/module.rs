@@ -17,9 +17,8 @@ use errors::{CompilationError, Error};
 use json;
 use regex::Regex;
 use std;
-use std::collections::HashSet;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use EvalContext;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
@@ -32,78 +31,70 @@ fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     }
 }
 
-pub(crate) struct Module {
-    pub(crate) crate_name: String,
-    pub(crate) crate_dir: PathBuf,
-    pub(crate) user_fn_name: String,
-    target_dir: PathBuf,
-    pub(crate) so_path: PathBuf,
-    rs_filename: PathBuf,
-    manual_deps: Vec<String>,
+fn create_dir(dir: &Path) -> Result<(), Error> {
+    if let Err(err) = fs::create_dir_all(dir) {
+        bail!("Error creating directory '{:?}': {}", dir, err);
+    }
+    Ok(())
 }
 
-impl Module {
-    pub(crate) fn new(
-        eval_context: &EvalContext,
-        crate_name: &str,
-        previous_module: Option<&Module>,
-    ) -> Result<Module, Error> {
-        let target_dir = eval_context.target_dir();
-        let crate_dir = eval_context.tmpdir_path.join(&crate_name);
-        let src_dir = crate_dir.join("src");
-        fs::create_dir_all(&src_dir)?;
-        let rs_filename = src_dir.join("lib.rs");
-        let so_path = eval_context
-            .deps_dir()
-            .join(shared_object_name_from_crate_name(crate_name));
+fn write_file(dir: &Path, basename: &str, contents: &str) -> Result<(), Error> {
+    create_dir(dir)?;
+    let filename = dir.join(basename);
+    if let Err(err) = fs::write(&filename, contents) {
+        bail!("Error writing '{:?}': {}", filename, err);
+    }
+    Ok(())
+}
 
+pub(crate) struct Module {
+    pub(crate) tmpdir: PathBuf,
+    build_num: i32,
+}
+
+const CRATE_NAME: &str = "ctx";
+
+impl Module {
+    pub(crate) fn new(tmpdir: PathBuf) -> Result<Module, Error> {
         let module = Module {
-            so_path,
-            crate_name: crate_name.to_owned(),
-            user_fn_name: format!("run_{}", crate_name),
-            crate_dir,
-            target_dir,
-            rs_filename,
-            manual_deps: vec![],
+            tmpdir,
+            build_num: 0,
         };
-        if let Some(previous_module) = previous_module {
-            // Copy the lock file from our previous compilation, if any, to
-            // avoid having Cargo recreate it, which would be time consuming
-            // (more than a second on my machine).
-            fs::copy(previous_module.cargo_lock_path(), &module.cargo_lock_path())?;
-        }
         Ok(module)
     }
 
-    fn cargo_lock_path(&self) -> PathBuf {
-        self.crate_dir.join("Cargo.lock")
+    pub(crate) fn deps_dir(&self) -> PathBuf {
+        self.target_dir().join("debug").join("deps")
     }
 
-    pub(crate) fn write_sources_and_compile(
-        &mut self,
-        eval_context: &EvalContext,
-        code_block: &CodeBlock,
-    ) -> Result<(), Error> {
-        self.write_cargo_toml(eval_context)?;
-        self.compile(code_block)
+    fn target_dir(&self) -> PathBuf {
+        self.tmpdir.join("target")
     }
 
-    // Writes Cargo.toml. Should be called before compile (or just use
-    // write_sources_and_compile).
-    pub(crate) fn write_cargo_toml(&mut self, eval_context: &EvalContext) -> Result<(), Error> {
-        fs::write(
-            self.crate_dir.join("Cargo.toml"),
-            self.get_cargo_toml_contents(eval_context),
-        )?;
-        Ok(())
+    fn so_path(&self) -> PathBuf {
+        self.deps_dir()
+            .join(shared_object_name_from_crate_name(CRATE_NAME))
     }
 
-    pub(crate) fn add_dep(&mut self, module: &Module) {
-        self.manual_deps.push(module.crate_name.clone());
+    fn src_dir(&self) -> PathBuf {
+        self.tmpdir.join("src")
     }
 
-    pub(crate) fn compile(&mut self, code_block: &CodeBlock) -> Result<(), Error> {
-        fs::write(self.rs_filename.clone(), code_block.to_string().as_bytes())?;
+    pub(crate) fn crate_dir(&self) -> &Path {
+        &self.tmpdir
+    }
+
+    // Writes Cargo.toml. Should be called before compile.
+    pub(crate) fn write_cargo_toml(&self, eval_context: &EvalContext) -> Result<(), Error> {
+        write_file(
+            self.crate_dir(),
+            "Cargo.toml",
+            &self.get_cargo_toml_contents(eval_context),
+        )
+    }
+
+    pub(crate) fn compile(&mut self, code_block: &CodeBlock) -> Result<SoFile, Error> {
+        write_file(&self.src_dir(), "lib.rs", &code_block.to_string())?;
 
         // Our compiler errors should all be in JSON format, but for errors from Cargo errors, we
         // need to add explicit matching for those errors that we expect we might see.
@@ -114,13 +105,13 @@ impl Module {
 
         let mut command = std::process::Command::new("cargo");
         command
-            .env("CARGO_TARGET_DIR", &self.target_dir)
+            .env("CARGO_TARGET_DIR", &self.target_dir())
             .arg("rustc")
             .arg("--message-format=json")
             .arg("--")
             .arg("-C")
             .arg("prefer-dynamic")
-            .current_dir(&self.crate_dir);
+            .current_dir(self.crate_dir());
         let cargo_output = command.output()?;
         if !cargo_output.status.success() {
             let stderr = String::from_utf8_lossy(&cargo_output.stderr);
@@ -143,9 +134,9 @@ impl Module {
                 .collect();
             if errors.is_empty() {
                 if let Some(error) = non_json_error {
-                    bail!(Error::JustMessage(error.to_owned()));
+                    bail!(Error::Message(error.to_owned()));
                 } else {
-                    bail!(Error::JustMessage(format!(
+                    bail!(Error::Message(format!(
                         "Compilation failed, but no parsable errors were found. STDERR:\n\
                          {}\nSTDOUT:{}\n",
                         stderr, stdout
@@ -155,25 +146,32 @@ impl Module {
                 bail!(Error::CompilationErrors(errors));
             }
         }
-        Ok(())
+        self.build_num += 1;
+        let copied_so_file = self
+            .deps_dir()
+            .join(shared_object_name_from_crate_name(&format!(
+                "code_{}",
+                self.build_num
+            )));
+        // Every time we compile, the output file is the same. We need to copy
+        // it so that we have a unique filename, otherwise we wouldn't be able
+        // to load the result of the next compilation. Also, on Windows, a
+        // loaded dll gets locked, so we couldn't even compile a second time if
+        // we didn't load a copy of the file.
+        if let Err(err) = fs::copy(self.so_path(), &copied_so_file) {
+            bail!(
+                "Error copying '{:?}' to '{:?}': {}",
+                self.so_path(),
+                copied_so_file,
+                err
+            );
+        }
+        Ok(SoFile {
+            path: copied_so_file,
+        })
     }
 
     fn get_cargo_toml_contents(&self, eval_context: &EvalContext) -> String {
-        use std::fmt::Write;
-        let mut loaded_module_deps = String::new();
-        let combined_deps = eval_context
-            .modules_iter()
-            .map(|m| &m.crate_name)
-            .chain(self.manual_deps.iter())
-            .collect::<HashSet<_>>();
-        for crate_name in combined_deps {
-            writeln!(
-                &mut loaded_module_deps,
-                "{} = {{ path = \"../{}\" }}",
-                crate_name, crate_name
-            )
-            .unwrap();
-        }
         let crate_imports = eval_context.format_cargo_deps();
         format!(
             r#"
@@ -197,12 +195,14 @@ overflow-checks = true
 
 [dependencies]
 {}
-{}
 "#,
-            self.crate_name,
+            CRATE_NAME,
             eval_context.opt_level(),
-            loaded_module_deps,
             crate_imports
         )
     }
+}
+
+pub(crate) struct SoFile {
+    pub(crate) path: PathBuf,
 }

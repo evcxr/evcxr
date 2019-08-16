@@ -96,11 +96,7 @@ impl CommandContext {
             self.eval_context
                 .add_extern_crate(captures[1].to_owned(), captures[2].to_owned())
         } else if line == ":last_compile_dir" {
-            if let Some(dir) = &self.eval_context.last_compile_dir() {
-                text_output(format!("{:?}", dir))
-            } else {
-                bail!("Nothing has been compiled yet");
-            }
+            text_output(format!("{:?}", self.eval_context.last_compile_dir()))
         } else if line == ":opt" {
             let new_level = if self.eval_context.opt_level() == "2" {
                 "0"

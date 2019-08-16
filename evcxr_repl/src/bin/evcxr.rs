@@ -69,8 +69,7 @@ impl Repl {
             Err(evcxr::Error::CompilationErrors(errors)) => {
                 self.display_errors(errors);
             }
-            Err(evcxr::Error::ChildProcessTerminated(err))
-            | Err(evcxr::Error::JustMessage(err)) => eprintln!("{}", err.bright_red()),
+            Err(err) => eprintln!("{}", format!("{}", err).bright_red()),
         }
     }
 

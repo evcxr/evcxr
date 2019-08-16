@@ -71,16 +71,23 @@ fn num_lines(code: &str) -> usize {
 }
 
 /// Represents a unit of code to be sent to the compiler.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Default)]
 pub(crate) struct CodeBlock {
     segments: Vec<Segment>,
 }
 
 impl CodeBlock {
     pub(crate) fn new() -> CodeBlock {
-        CodeBlock {
-            segments: Vec::new(),
-        }
+        Self::default()
+    }
+
+    /// Passes `self` as an owned value to `f`, replacing `self` with the return
+    /// value of `f` once done. This is a convenience for when we only have a
+    /// &mut, not an owned value.
+    pub(crate) fn modify<F: FnOnce(CodeBlock) -> CodeBlock>(&mut self, f: F) {
+        let mut block = std::mem::replace(self, CodeBlock::new());
+        block = f(block);
+        std::mem::replace(self, block);
     }
 
     pub(crate) fn is_empty(&self) -> bool {
