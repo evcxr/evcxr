@@ -9,6 +9,7 @@ authors = [
     "David Lattimore <dvdlttmr@gmail.com>",
     "David Bernard <david.bernard.31@gmail.com>",
 ]
+edition = "2018"
 
 [dependencies]
 evcxr = { version = "=0.3.5", path = "../evcxr" }

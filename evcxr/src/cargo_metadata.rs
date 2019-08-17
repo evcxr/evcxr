@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use errors::Error;
+use crate::errors::Error;
 use json::{self, JsonValue};
 use std;
 use std::collections::HashMap;

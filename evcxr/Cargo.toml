@@ -11,6 +11,7 @@ authors = [
     "Daniel Griffen <daniel@griffen.io>",
     "David Bernard <david.bernard.31@gmail.com>",
 ]
+edition = "2018"
 
 [dependencies]
 # default-features on the following crates is to disable use of proc-macro, use

@@ -13,14 +13,14 @@
 // limitations under the License.
 
 use colored::*;
-use connection::Connection;
-use control_file;
+use crate::connection::Connection;
+use crate::control_file;
 use evcxr;
 use evcxr::CommandContext;
 use failure::Error;
 use json;
 use json::JsonValue;
-use jupyter_message::JupyterMessage;
+use crate::jupyter_message::JupyterMessage;
 use std;
 use std::collections::HashMap;
 use std::sync::{mpsc, Arc, Mutex};

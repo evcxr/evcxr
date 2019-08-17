@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use errors::{CompilationError, Error};
-use {EvalContext, EvalContextOutputs, EvalOutputs};
+use crate::errors::{CompilationError, Error};
+use crate::{EvalContext, EvalContextOutputs, EvalOutputs};
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.

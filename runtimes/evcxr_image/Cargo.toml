@@ -6,6 +6,7 @@ description = "Displays images from the image crate in Evcxr Jupyter"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
 authors = ["David Lattimore <dml@google.com>"]
+edition = "2018"
 
 [dependencies]
 image = "0.21.0"
