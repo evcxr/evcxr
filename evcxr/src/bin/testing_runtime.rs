@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate evcxr;
+use evcxr;
 
 fn main() {
     evcxr::runtime_hook();

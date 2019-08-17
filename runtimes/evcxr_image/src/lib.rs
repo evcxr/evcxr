@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate evcxr_runtime;
-extern crate image;
+use evcxr_runtime;
+use image;
 
 pub trait ImageDisplay {
     fn evcxr_display(&self);
