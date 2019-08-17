@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use chrono::Utc;
-use connection::{Connection, HmacSha256};
+use crate::connection::{Connection, HmacSha256};
 use failure::Error;
 use hex;
 use json::{self, JsonValue};

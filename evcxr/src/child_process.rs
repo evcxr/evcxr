@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use errors::Error;
-use runtime;
+use crate::errors::Error;
+use crate::runtime;
 use std;
 use std::io::BufReader;
 use std::process;

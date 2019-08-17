@@ -44,7 +44,7 @@ mod module;
 mod runtime;
 mod statement_splitter;
 
-pub use command_context::CommandContext;
-pub use errors::{CompilationError, Error};
-pub use eval_context::{EvalContext, EvalContextOutputs, EvalOutputs};
-pub use runtime::runtime_hook;
+pub use crate::command_context::CommandContext;
+pub use crate::errors::{CompilationError, Error};
+pub use crate::eval_context::{EvalContext, EvalContextOutputs, EvalOutputs};
+pub use crate::runtime::runtime_hook;

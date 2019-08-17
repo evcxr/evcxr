@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use code_block::{CodeBlock, CodeOrigin};
+use crate::code_block::{CodeBlock, CodeOrigin};
 use json::{self, JsonValue};
 use regex::Regex;
 use std;

@@ -12,17 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use child_process::ChildProcess;
-use code_block::{CodeBlock, CodeOrigin};
-use crate_config::ExternalCrate;
-use errors::{CompilationError, Error};
-use evcxr_internal_runtime;
-use idents;
-use item;
-use module::{Module, SoFile};
+use crate::child_process::ChildProcess;
+use crate::code_block::{CodeBlock, CodeOrigin};
+use crate::crate_config::ExternalCrate;
+use crate::errors::{CompilationError, Error};
+use crate::evcxr_internal_runtime;
+use crate::idents;
+use crate::item;
+use crate::module::{Module, SoFile};
 use regex::Regex;
-use runtime;
-use statement_splitter;
+use crate::runtime;
+use crate::statement_splitter;
 use std;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -332,7 +332,7 @@ impl EvalContext {
     }
 
     fn dependency_lib_names(&self) -> Result<Vec<String>, Error> {
-        use cargo_metadata;
+        use crate::cargo_metadata;
         cargo_metadata::get_library_names(self.module.crate_dir())
     }
 
