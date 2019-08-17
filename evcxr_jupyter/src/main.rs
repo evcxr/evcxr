@@ -12,19 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate evcxr;
+use evcxr;
 #[macro_use]
 extern crate json;
 #[macro_use]
 extern crate failure;
-extern crate chrono;
-extern crate colored;
-extern crate dirs;
-extern crate hex;
-extern crate hmac;
-extern crate sha2;
-extern crate uuid;
-extern crate zmq;
+
+
+
+
+
+
+
+
 
 mod connection;
 mod control_file;

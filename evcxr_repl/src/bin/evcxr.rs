@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-extern crate colored;
-extern crate dirs;
-extern crate evcxr;
-extern crate regex;
-extern crate rustyline;
+
+use dirs;
+use evcxr;
+
+
 
 use colored::*;
 use evcxr::{CommandContext, CompilationError, Error};
