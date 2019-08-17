@@ -153,12 +153,12 @@ impl Module {
                 "code_{}",
                 self.build_num
             )));
-        // Every time we compile, the output file is the same. We need to copy
-        // it so that we have a unique filename, otherwise we wouldn't be able
-        // to load the result of the next compilation. Also, on Windows, a
-        // loaded dll gets locked, so we couldn't even compile a second time if
-        // we didn't load a copy of the file.
-        if let Err(err) = fs::copy(self.so_path(), &copied_so_file) {
+        // Every time we compile, the output file is the same. We need to
+        // renamed it so that we have a unique filename, otherwise we wouldn't
+        // be able to load the result of the next compilation. Also, on Windows,
+        // a loaded dll gets locked, so we couldn't even compile a second time
+        // if we didn't load a different file.
+        if let Err(err) = fs::rename(self.so_path(), &copied_so_file) {
             bail!(
                 "Error copying '{:?}' to '{:?}': {}",
                 self.so_path(),
