@@ -514,10 +514,11 @@ impl EvalContext {
         // TODO: We should probably send an OsString not a String. Otherwise
         // things won't work if the path isn't UTF-8 - apparently that's a thing
         // on some platforms.
+        let fn_name = self.current_user_fn_name();
         self.child_process.send(&format!(
             "LOAD_AND_RUN {} {}",
             so_file.path.to_string_lossy(),
-            self.current_user_fn_name(),
+            fn_name,
         ))?;
 
         self.build_num += 1;
