@@ -65,6 +65,9 @@ impl CommandContext {
         lazy_static! {
             static ref ADD_DEP_RE: Regex = Regex::new(":dep ([^= ]+) *= *(.+)").unwrap();
         }
+        lazy_static! {
+            static ref OPT_RE: Regex = Regex::new(":opt( (0|1|2))?").unwrap();
+        }
         if line == ":internal_debug" {
             let debug_mode = !self.eval_context.debug_mode();
             self.eval_context.set_debug_mode(debug_mode);
@@ -97,8 +100,10 @@ impl CommandContext {
                 .add_extern_crate(captures[1].to_owned(), captures[2].to_owned())
         } else if line == ":last_compile_dir" {
             text_output(format!("{:?}", self.eval_context.last_compile_dir()))
-        } else if line == ":opt" {
-            let new_level = if self.eval_context.opt_level() == "2" {
+        } else if let Some(captures) = OPT_RE.captures(line) {
+            let new_level = if let Some(n) = captures.get(2) {
+                n.as_str()
+            } else if self.eval_context.opt_level() == "2" {
                 "0"
             } else {
                 "2"
@@ -133,7 +138,7 @@ impl CommandContext {
         } else if line == ":help" {
             text_output(
                 ":vars             List bound variables and their types\n\
-                 :opt              Toggle optimization\n\
+                 :opt [level]      Toggle/set optimization level\n\
                  :explain          Print explanation of last error\n\
                  :clear            Clear all state, keeping compilation cache\n\
                  :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\n\

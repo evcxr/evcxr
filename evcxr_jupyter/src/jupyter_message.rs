@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use chrono::Utc;
 use crate::connection::{Connection, HmacSha256};
+use chrono::Utc;
 use failure::Error;
 use hex;
 use json::{self, JsonValue};

@@ -18,14 +18,6 @@ extern crate json;
 #[macro_use]
 extern crate failure;
 
-
-
-
-
-
-
-
-
 mod connection;
 mod control_file;
 mod core;

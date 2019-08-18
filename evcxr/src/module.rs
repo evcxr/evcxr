@@ -14,12 +14,12 @@
 
 use crate::code_block::CodeBlock;
 use crate::errors::{CompilationError, Error};
+use crate::EvalContext;
 use json;
 use regex::Regex;
 use std;
 use std::fs;
 use std::path::{Path, PathBuf};
-use crate::EvalContext;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     if cfg!(target_os = "macos") {

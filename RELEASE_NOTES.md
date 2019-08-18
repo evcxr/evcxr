@@ -4,6 +4,7 @@
     the old model where each execution was a separate crate that had a
     dependency on the previous crates.
   * Defined items no longer need to be pub.
+* Optimization level can now be set (as opposed to just toggled).
 * Now uses Rust 2018 edition.
 * Don't preserve variables that are Copy on panic.
   * Results in a small speedup in some evaluation times.

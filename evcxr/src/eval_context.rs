@@ -20,9 +20,9 @@ use crate::evcxr_internal_runtime;
 use crate::idents;
 use crate::item;
 use crate::module::{Module, SoFile};
-use regex::Regex;
 use crate::runtime;
 use crate::statement_splitter;
+use regex::Regex;
 use std;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -261,9 +261,6 @@ impl EvalContext {
     }
 
     pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
-        if self.build_num > 0 {
-            bail!("Optimization level cannot be set after code has been executed.");
-        }
         if level.is_empty() {
             bail!("Optimization level cannot be an empty string");
         }
