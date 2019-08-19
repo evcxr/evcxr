@@ -181,11 +181,11 @@ version = "1.0.0"
 edition = "2018"
 
 [lib]
-crate-type = ["dylib"]
+crate-type = ["cdylib"]
 
 [profile.dev]
 opt-level = {}
-debug = true
+debug = false
 rpath = true
 lto = false
 debug-assertions = true
