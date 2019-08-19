@@ -91,6 +91,19 @@ stdout at the same time (at least no other Rust code).
 If the content is binary (e.g. mime type "image/png") then it should be base64
 encoded.
 
+## Startup options
+If you always want particular options set, you can add these to init.evcxr
+which, if present will be run on startup. Sample locations:
+* Linux: ~/.config/evcxr/init.evcxr
+* Mac: /Users/Alice/Library/Preferences/evcxr/init.evcxr
+* Windows: C:\Users\Alice\AppData\Roaming\evcxr\init.evcxr
+
+For example, if you want to always turn on optimization (will make stuff slower
+to compile), you might put the following in init.evcxr:
+```
+:opt 2
+```
+
 ## Uninstall
 
 ```sh

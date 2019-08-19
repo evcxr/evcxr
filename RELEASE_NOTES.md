@@ -5,6 +5,8 @@
     dependency on the previous crates.
   * Defined items no longer need to be pub.
 * Optimization level can now be set (as opposed to just toggled).
+* Reads commands (one per line) from a startup file.
+  * e.g. ~/.config/evcxr/init.evcxr (on Linux)
 * Now uses Rust 2018 edition.
 * Don't preserve variables that are Copy on panic.
   * Results in a small speedup in some evaluation times.

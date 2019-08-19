@@ -822,6 +822,12 @@ impl EvalOutputs {
     pub fn get(&self, mime_type: &str) -> Option<&str> {
         self.content_by_mime_type.get(mime_type).map(String::as_str)
     }
+
+    pub fn merge(&mut self, other: EvalOutputs) {
+        for (mime_type, content) in other.content_by_mime_type {
+            self.content_by_mime_type.entry(mime_type).or_default().push_str(&content);
+        }
+    }
 }
 
 #[derive(Clone)]

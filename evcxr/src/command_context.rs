@@ -60,6 +60,21 @@ impl CommandContext {
         }
     }
 
+    fn load_config(&mut self) -> Result<EvalOutputs, Error> {
+                let mut outputs = EvalOutputs::new();
+        if let Some(config_dir) = dirs::config_dir() {
+            let config_file = config_dir.join("evcxr").join("init.evcxr");
+            if config_file.exists() {
+                println!("Loading startup commands from {:?}", config_file);
+                let contents = std::fs::read_to_string(config_file)?;
+                for line in contents.lines() {
+                    outputs.merge(self.execute(line)?);
+                }
+            }
+        }
+        Ok(outputs)
+    }
+
     fn process_command(&mut self, line: &str) -> Result<EvalOutputs, Error> {
         use regex::Regex;
         lazy_static! {
@@ -72,6 +87,8 @@ impl CommandContext {
             let debug_mode = !self.eval_context.debug_mode();
             self.eval_context.set_debug_mode(debug_mode);
             text_output(format!("Internals debugging: {}", debug_mode))
+        } else if line == ":load_config" {
+            self.load_config()
         } else if line == ":vars" {
             let mut outputs = EvalOutputs::new();
             outputs
@@ -191,8 +208,10 @@ fn html_escape(input: &str, out: &mut String) {
 
 fn text_output<T: Into<String>>(text: T) -> Result<EvalOutputs, Error> {
     let mut outputs = EvalOutputs::new();
+    let mut content = text.into();
+    content.push('\n');
     outputs
         .content_by_mime_type
-        .insert("text/plain".to_owned(), text.into());
+        .insert("text/plain".to_owned(), content);
     Ok(outputs)
 }

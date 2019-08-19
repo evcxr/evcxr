@@ -43,7 +43,9 @@ impl Repl {
         let (command_context, outputs) = CommandContext::new()?;
         send_output(outputs.stdout, io::stdout());
         send_output(outputs.stderr, io::stderr());
-        Ok(Repl { command_context })
+        let mut repl = Repl { command_context };
+        repl.execute(":load_config");
+        Ok(repl)
     }
 
     fn execute(&mut self, to_run: &str) {
