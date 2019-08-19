@@ -1,4 +1,8 @@
 # Version 0.4.0
+* Optimization is now off by default, since many people using a REPL or Jupyter
+  kernel are experimenting and faster compile times are more important than
+  faster runtimes.
+    * If you want it always on, see README.md for how to do that.
 * New execution model.
   * A single crate is now reused for all compilation. This is a bit faster than
     the old model where each execution was a separate crate that had a

@@ -108,7 +108,7 @@ impl EvalContext {
             _tmpdir: opt_tmpdir,
             build_num: 0,
             debug_mode: false,
-            opt_level: "2".to_owned(),
+            opt_level: "0".to_owned(),
             state: ContextState::default(),
             module,
             child_process,
