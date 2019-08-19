@@ -61,7 +61,7 @@ impl CommandContext {
     }
 
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {
-                let mut outputs = EvalOutputs::new();
+        let mut outputs = EvalOutputs::new();
         if let Some(config_dir) = dirs::config_dir() {
             let config_file = config_dir.join("evcxr").join("init.evcxr");
             if config_file.exists() {

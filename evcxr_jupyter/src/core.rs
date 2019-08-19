@@ -87,7 +87,8 @@ impl Server {
                 &execution_response_receiver,
             )
         });
-        let (context, outputs) = CommandContext::new()?;
+        let (mut context, outputs) = CommandContext::new()?;
+        context.execute(":load_config")?;
         server.start_thread(move |server: Server| {
             server.handle_execution_requests(
                 context,

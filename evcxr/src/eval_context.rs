@@ -825,7 +825,10 @@ impl EvalOutputs {
 
     pub fn merge(&mut self, other: EvalOutputs) {
         for (mime_type, content) in other.content_by_mime_type {
-            self.content_by_mime_type.entry(mime_type).or_default().push_str(&content);
+            self.content_by_mime_type
+                .entry(mime_type)
+                .or_default()
+                .push_str(&content);
         }
     }
 }
