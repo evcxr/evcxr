@@ -406,7 +406,7 @@ impl EvalContext {
         phases: &mut PhaseDetailsBuilder,
     ) -> Result<ExecutionArtifacts, Error> {
         let mut code = CodeBlock::new()
-            .generated("#![allow(unused_imports)]")
+            .generated("#![allow(unused_imports, unused_mut, dead_code)]")
             .add_all(self.get_imports());
         for item in self
             .state
