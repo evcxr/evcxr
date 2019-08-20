@@ -112,7 +112,7 @@ impl EvalContext {
             state: ContextState::default(),
             module,
             child_process,
-            preserve_copy_vars_on_panic: false,
+            preserve_copy_vars_on_panic: true,
             stdout_sender,
             stored_variable_states: HashMap::new(),
         };

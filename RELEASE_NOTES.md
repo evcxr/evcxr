@@ -1,3 +1,6 @@
+# Version 0.4.1
+* Revert change to not preserve copy variables on panic as it broke mutation of
+  copy variables. Will reenable in future once it's properly fixed.
 # Version 0.4.0
 * Optimization is now off by default, since many people using a REPL or Jupyter
   kernel are experimenting and faster compile times are more important than

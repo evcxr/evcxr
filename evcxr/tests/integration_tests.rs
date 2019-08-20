@@ -78,7 +78,6 @@ fn single_statement() {
 #[test]
 fn save_and_restore_variables() {
     let mut e = new_context();
-    e.preserve_copy_vars_on_panic = true;
 
     eval!(e, let mut a = 34; let b = 8;);
     eval!(e, a = a + b;);
