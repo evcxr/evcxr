@@ -5,6 +5,7 @@ members = [
   "evcxr_jupyter",
   "evcxr_runtime",
   "runtimes/evcxr_image",
+  "print_performance_info",
 ]
 
 exclude = [

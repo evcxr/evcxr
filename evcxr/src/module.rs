@@ -72,6 +72,9 @@ fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
 pub(crate) struct Module {
     pub(crate) tmpdir: PathBuf,
     build_num: i32,
+    /// Whether to pass -Ztime-passes to the compiler and print the result.
+    /// Causes the nightly compiler, which must be installed to be selected.
+    pub(crate) time_passes: bool,
 }
 
 const CRATE_NAME: &str = "ctx";
@@ -81,6 +84,7 @@ impl Module {
         let module = Module {
             tmpdir,
             build_num: 0,
+            time_passes: false,
         };
         Ok(module)
     }
@@ -126,6 +130,9 @@ impl Module {
         }
 
         let mut command = std::process::Command::new("cargo");
+        if self.time_passes {
+            command.arg("+nightly");
+        }
         command
             .env("CARGO_TARGET_DIR", &self.target_dir())
             .arg("rustc")
@@ -134,8 +141,16 @@ impl Module {
             .arg("-C")
             .arg("prefer-dynamic")
             .current_dir(self.crate_dir());
+        if self.time_passes {
+            command.arg("-Ztime-passes");
+        }
         let cargo_output = command.output()?;
-        if !cargo_output.status.success() {
+        if cargo_output.status.success() {
+            if self.time_passes {
+                let stdout = String::from_utf8_lossy(&cargo_output.stdout);
+                eprintln!("{}", stdout);
+            }
+        } else {
             let stderr = String::from_utf8_lossy(&cargo_output.stderr);
             let stdout = String::from_utf8_lossy(&cargo_output.stdout);
             let mut non_json_error = None;

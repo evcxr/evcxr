@@ -262,6 +262,14 @@ impl EvalContext {
         Ok(outputs)
     }
 
+    pub fn time_passes(&self) -> bool {
+        self.module.time_passes
+    }
+
+    pub fn set_time_passes(&mut self, value: bool) {
+        self.module.time_passes = value;
+    }
+
     pub fn opt_level(&self) -> &str {
         &self.opt_level
     }

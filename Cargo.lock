@@ -591,6 +591,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "print_performance_info"
+version = "0.1.0"
+dependencies = [
+ "evcxr 0.4.1",
+]
+
+[[package]]
 name = "proc-macro2"
 version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"

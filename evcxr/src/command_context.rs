@@ -128,6 +128,10 @@ impl CommandContext {
         } else if line == ":timing" {
             self.print_timings = !self.print_timings;
             text_output(format!("Timing: {}", self.print_timings))
+        } else if line == ":time_passes" {
+            self.eval_context
+                .set_time_passes(!self.eval_context.time_passes());
+            text_output(format!("Time passes: {}", self.eval_context.time_passes()))
         } else if line == ":explain" {
             if self.last_errors.is_empty() {
                 bail!("No last error to explain");
@@ -162,6 +166,7 @@ impl CommandContext {
                  :last_compile_dir Print the directory in which we last compiled\n\
                  :timing           Toggle printing of how long evaluations take\n\
                  :last_error_json  Print the last compilation error as JSON (for debugging)\n\
+                 :time_passes      Toggle printing of rustc pass times (requires nightly)\n\
                  :internal_debug   Toggle various internal debugging code",
             )
         } else {

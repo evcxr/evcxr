@@ -12,14 +12,11 @@ matrix:
     - os: linux
       rust: beta
       env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
-    - os: linux
-      rust: nightly
-      env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: osx
-      rust: stable
+      rust: nightly
       env: TARGET=x86_64-apple-darwin EXTRA_ARGS=""
     - os: windows
-      rust: stable
+      rust: nightly
       env: TARGET=x86_64-pc-windows-msvc EXTRA_ARGS="--exclude=evcxr_jupyter"
   fast_finish: true
 addons:
@@ -38,3 +35,4 @@ before_script:
 script:
   - travis_wait 30 cargo build --verbose --all $EXTRA_ARGS --all-features
   - travis_wait 30 cargo test --verbose --all $EXTRA_ARGS
+  - cargo run -p print_performance_info
