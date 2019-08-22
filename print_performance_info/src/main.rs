@@ -41,6 +41,7 @@ fn has_nightly_compiler() -> bool {
 }
 
 fn main() -> Result<(), evcxr::Error> {
+    use std::time::Instant;
     evcxr::runtime_hook();
     if !has_nightly_compiler() {
         println!("print_performance_info: Nightly compiler is required.");
@@ -49,9 +50,14 @@ fn main() -> Result<(), evcxr::Error> {
         return Ok(());
     }
     let (mut ctx, outputs) = EvalContext::new()?;
-    send_output(outputs.stderr, io::stderr());
+    send_output(outputs.stderr, io::stdout());
     ctx.set_time_passes(true);
     ctx.eval("println!(\"41\");")?;
-    ctx.eval("println!(\"42\");")?;
+    let start = Instant::now();
+    let output = ctx.eval("println!(\"42\");")?;
+    println!("Total eval time: {}ms", start.elapsed().as_millis());
+    for phase in output.phases {
+        println!("  {}: {}ms", phase.name, phase.duration.as_millis());
+    }
     Ok(())
 }
