@@ -47,6 +47,28 @@ fn write_file(dir: &Path, basename: &str, contents: &str) -> Result<(), Error> {
     Ok(())
 }
 
+/// On Mac, if we copy the dylib, we get intermittent failures where we end up
+/// with the previous version of the file when we shouldn't. On windows, if
+/// rename the file, we get errors subsequently when something (perhaps the
+/// Windows linker) tries to delete the file that it expects to still be there.
+/// On Linux either renaming or copying works, but renaming should be more
+/// efficient, so we do that.
+#[cfg(windows)]
+fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
+    if let Err(err) = fs::copy(src, dest) {
+        bail!("Error copying '{:?}' to '{:?}': {}", src, dest, err);
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
+    if let Err(err) = fs::rename(src, dest) {
+        bail!("Error renaming '{:?}' to '{:?}': {}", src, dest, err);
+    }
+    Ok(())
+}
+
 pub(crate) struct Module {
     pub(crate) tmpdir: PathBuf,
     build_num: i32,
@@ -158,14 +180,7 @@ impl Module {
         // be able to load the result of the next compilation. Also, on Windows,
         // a loaded dll gets locked, so we couldn't even compile a second time
         // if we didn't load a different file.
-        if let Err(err) = fs::rename(self.so_path(), &copied_so_file) {
-            bail!(
-                "Error copying '{:?}' to '{:?}': {}",
-                self.so_path(),
-                copied_so_file,
-                err
-            );
-        }
+        rename_or_copy_so_file(&self.so_path(), &copied_so_file)?;
         Ok(SoFile {
             path: copied_so_file,
         })
