@@ -8,19 +8,19 @@ matrix:
   include:
     - os: linux
       rust: stable
-      env: TARGET=x86_64-unknown-linux-gnu
+      env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: linux
       rust: beta
-      env: TARGET=x86_64-unknown-linux-gnu
+      env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: linux
       rust: nightly
-      env: TARGET=x86_64-unknown-linux-gnu
+      env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: osx
       rust: stable
-      env: TARGET=x86_64-apple-darwin
-    # - os: windows
-    #   rust: stable
-    #   env: TARGET=x86_64-pc-windows-msvc
+      env: TARGET=x86_64-apple-darwin EXTRA_ARGS=""
+    - os: windows
+      rust: stable
+      env: TARGET=x86_64-pc-windows-msvc EXTRA_ARGS="--exclude=evcxr_jupyter"
   fast_finish: true
 addons:
   apt:
@@ -29,12 +29,12 @@ addons:
 
 install:
   # prevent target re-add error from rustup
-  - if [[ "$TRAVIS_OS_NAME" = "linux" && "$TARGET" != "x86_64-unknown-linux-gnu" ]]; then rustup target add $TARGET; fi
+  - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TARGET" != "x86_64-unknown-linux-gnu" ]]; then rustup target add $TARGET; fi
   - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update && brew install zmq pkg-config; fi
 
 before_script:
     - rustup -V; rustc -V; cargo -V
 
 script:
-  - travis_wait 30 cargo build --verbose --all --all-features
-  - travis_wait 30 cargo test --verbose --all
+  - travis_wait 30 cargo build --verbose --all $EXTRA_ARGS --all-features
+  - travis_wait 30 cargo test --verbose --all $EXTRA_ARGS
