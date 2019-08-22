@@ -26,8 +26,16 @@ evcxr_jupyter --install
 
 ### Windows
 
+Note that Evcxr on Windows appears to be substantially slower than on other
+platforms. We're not yet sure why.
+
 * Install jupyter or jupyterlab (eg. via anaconda)
-* Install ZMQ. [These instructions](https://github.com/erickt/rust-zmq/issues/208#issuecomment-380353800) might help.
+* Install ZMQ
+  * Manually compiling zeromq 4.3.2 (using cmake + Visual Studio) has been
+    reported to work.
+  * [These
+    instructions](https://github.com/erickt/rust-zmq/issues/208#issuecomment-380353800)
+    might or might not help.
 
 ```sh
 cargo install evcxr_jupyter
