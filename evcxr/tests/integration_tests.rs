@@ -344,7 +344,17 @@ fn abort_and_restart() {
     );
     let result = e.eval(stringify!(std::process::abort();));
     if let Err(Error::ChildProcessTerminated(message)) = result {
-        assert_eq!(message, "Child process terminated with status: signal: 6");
+        #[cfg(not(windows))]
+        {
+            assert_eq!(message, "Child process terminated with status: signal: 6");
+        }
+        #[cfg(windows)]
+        {
+            assert_eq!(
+                message,
+                "Child process terminated with status: exit code: 0xc0000409"
+            );
+        }
     } else {
         panic!("Unexpected result: {:?}", result);
     }
