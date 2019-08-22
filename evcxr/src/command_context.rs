@@ -83,6 +83,10 @@ impl CommandContext {
         lazy_static! {
             static ref OPT_RE: Regex = Regex::new(":opt( (0|1|2))?").unwrap();
         }
+        lazy_static! {
+            static ref PRESERVE_VARS_RE: Regex =
+                Regex::new(":preserve_vars_on_panic (0|1)").unwrap();
+        }
         if line == ":internal_debug" {
             let debug_mode = !self.eval_context.debug_mode();
             self.eval_context.set_debug_mode(debug_mode);
@@ -98,17 +102,11 @@ impl CommandContext {
                 .content_by_mime_type
                 .insert("text/html".to_owned(), self.vars_as_html());
             Ok(outputs)
-        } else if line == ":preserve_copy_types" {
-            // This option doesn't seem super important, especially given that
-            // it comes with a cost of slowing stuff down. Generally important
-            // variables that you want to preserve won't be copy anyway. For
-            // this reason, I'm leaving this command undocumented as I don't
-            // really want to clutter the documentation.
-            self.eval_context.preserve_copy_vars_on_panic =
-                !self.eval_context.preserve_copy_vars_on_panic;
+        } else if let Some(captures) = PRESERVE_VARS_RE.captures(line) {
+            self.eval_context.preserve_vars_on_panic = &captures[1] == "1";
             text_output(format!(
-                "Preserve copy types on panic: {}",
-                self.eval_context.preserve_copy_vars_on_panic
+                "Preserve vars on panic: {}",
+                self.eval_context.preserve_vars_on_panic
             ))
         } else if line == ":clear" {
             self.eval_context.clear().map(|_| EvalOutputs::new())
@@ -158,7 +156,8 @@ impl CommandContext {
                  :opt [level]      Toggle/set optimization level\n\
                  :explain          Print explanation of last error\n\
                  :clear            Clear all state, keeping compilation cache\n\
-                 :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\n\
+                 :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\
+                 :preserve_vars_on_panic [0|1]  Try to keep vars on panic\n\n\
                  Mostly for development / debugging purposes:\n\
                  :last_compile_dir Print the directory in which we last compiled\n\
                  :timing           Toggle printing of how long evaluations take\n\

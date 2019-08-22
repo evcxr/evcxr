@@ -43,7 +43,7 @@ pub struct EvalContext {
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
     // attempt to determine if the type of the variable is copy.
-    pub preserve_copy_vars_on_panic: bool,
+    pub preserve_vars_on_panic: bool,
     stdout_sender: mpsc::Sender<String>,
     stored_variable_states: HashMap<String, VariableState>,
 }
@@ -112,7 +112,7 @@ impl EvalContext {
             state: ContextState::default(),
             module,
             child_process,
-            preserve_copy_vars_on_panic: true,
+            preserve_vars_on_panic: true,
             stdout_sender,
             stored_variable_states: HashMap::new(),
         };
@@ -137,15 +137,21 @@ impl EvalContext {
 
         let mut phases = PhaseDetailsBuilder::new();
 
-        // Any pre-existing, non-copy variables are marked as available, so that we'll take their
-        // values from outside of the catch_unwind block. If they remain this way, then this
-        // effectively means that they're not being used.
-        for variable_state in self.state.variable_states.values_mut() {
-            variable_state.move_state = if variable_state.is_copy_type {
-                VariableMoveState::CopiedIntoCatchUnwind
-            } else {
-                VariableMoveState::Available
-            };
+        if self.preserve_vars_on_panic {
+            // Any pre-existing, non-copy variables are marked as available, so that we'll take their
+            // values from outside of the catch_unwind block. If they remain this way, then this
+            // effectively means that they're not being used.
+            for variable_state in self.state.variable_states.values_mut() {
+                variable_state.move_state = if variable_state.is_copy_type {
+                    VariableMoveState::CopiedIntoCatchUnwind
+                } else {
+                    VariableMoveState::Available
+                };
+            }
+        } else {
+            for variable_state in self.state.variable_states.values_mut() {
+                variable_state.move_state = VariableMoveState::MovedIntoCatchUnwind;
+            }
         }
 
         // Copy our state, so that changes we make to it can be rolled back if compilation fails.
@@ -703,7 +709,7 @@ impl EvalContext {
                     move_state: VariableMoveState::MovedIntoCatchUnwind,
                     // If we're preserving copy types, then assume this variable
                     // is copy until we find out it's not.
-                    is_copy_type: self.preserve_copy_vars_on_panic,
+                    is_copy_type: self.preserve_vars_on_panic,
                 },
             );
         });

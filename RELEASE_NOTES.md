@@ -1,6 +1,14 @@
+# Version 0.4.2
+* Fixed runtime error on windows due to something not liking the dll having been
+  renamed.
+* Added option :preserve_vars_on_panic, which still defaults to on, but which if
+  turned off will speed up some compilations at the expense of all variables
+  being lost if a panic occurs.
+
 # Version 0.4.1
 * Revert change to not preserve copy variables on panic as it broke mutation of
   copy variables. Will reenable in future once it's properly fixed.
+
 # Version 0.4.0
 * Optimization is now off by default, since many people using a REPL or Jupyter
   kernel are experimenting and faster compile times are more important than

@@ -148,10 +148,11 @@ fn define_then_call_function() {
 }
 
 #[test]
-fn function_panics() {
+fn function_panics_with_variable_preserving() {
     // Don't allow stderr to be printed here. We don't really want to see the
     // panic stack trace when running tests.
     let (mut e, _) = new_context_and_outputs();
+    e.preserve_vars_on_panic = true;
     eval!(e, let a = vec![1, 2, 3];);
     eval!(e, let b = 42;);
     eval!(e, panic!("Intentional panic {}", b););
@@ -161,6 +162,18 @@ fn function_panics() {
         eval!(e, format!("{:?}, {}", a, b)),
         text_plain("\"[1, 2, 3], 42\"")
     );
+}
+
+#[test]
+fn function_panics_without_variable_preserving() {
+    // Don't allow stderr to be printed here. We don't really want to see the
+    // panic stack trace when running tests.
+    let (mut e, _) = new_context_and_outputs();
+    e.preserve_vars_on_panic = false;
+    eval!(e, let a = vec![1, 2, 3];);
+    eval!(e, let b = 42;);
+    eval!(e, panic!("Intentional panic {}", b););
+    assert_eq!(variable_names_and_types(&e), vec![]);
 }
 
 // Also tests multiple item definitions in the one compilation unit.
