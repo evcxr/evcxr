@@ -9,6 +9,10 @@ if ! git diff-index --quiet HEAD --; then
   exit 1
 fi
 VERSION="$1"
+if ! grep "# Version $VERSION" RELEASE_NOTES.md >/dev/null; then
+  echo "Please add release notes first" >&2
+  exit 1
+fi
 git pull --rebase
 perl -pi -e 's/^version = "[\d\.]+"/version = "'$VERSION'"/;\
     s/^evcxr = \{ version = "=[\d\.]+"/evcxr = \{ version = "='$VERSION'"/' \
