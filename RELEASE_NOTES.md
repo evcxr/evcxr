@@ -1,6 +1,10 @@
 # Version 0.4.3
-* Don't catch panics when preserve_vars_on_panic is disabled.
-  * This significantly speeds up compilation.
+* No longer preserves variables on panic by default.
+  * Turns out this was significantly slowing down compilation.
+  * You can get back the old behavior with `:preserve_vars_on_panic 1`
+  * Put that in your ~/.config/evcxr/init.evcxr or equivalent to always have it.
+* Optimization is now back on by default. With the above change, there's now not
+  really any noticable difference in eval times for small amounts of code.
 
 # Version 0.4.2
 * Fixed runtime error on windows due to something not liking the dll having been
