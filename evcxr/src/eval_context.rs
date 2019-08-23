@@ -48,6 +48,26 @@ pub struct EvalContext {
     stored_variable_states: HashMap<String, VariableState>,
 }
 
+const SEND_TEXT_PLAIN_DEF: &str = stringify!(
+    fn evcxr_send_text_plain(text: &str) {
+        use std::io::{self, Write};
+        fn try_send_text(text: &str) -> io::Result<()> {
+            let stdout = io::stdout();
+            let mut output = stdout.lock();
+            output.write_all(b"EVCXR_BEGIN_CONTENT text/plain\n")?;
+            output.write_all(text.as_bytes())?;
+            output.write_all(b"\nEVCXR_END_CONTENT\n")?;
+            Ok(())
+        }
+        if let Err(error) = try_send_text(text) {
+            eprintln!("Failed to send content to parent: {:?}", error);
+            std::process::exit(1);
+        }
+    }
+);
+
+const PANIC_NOTIFICATION: &str = "EVCXR_PANIC_NOTIFICATION";
+
 // Outputs from an EvalContext. This is a separate struct since users may want
 // destructure this and pass its components to separate threads.
 pub struct EvalContextOutputs {
@@ -227,9 +247,8 @@ impl EvalContext {
                                 .to_string(),
                             // If that fails, we try debug format.
                             CodeBlock::new()
-                                .generated(
-                                    "evcxr_internal_runtime::send_text_plain(&format!(\"{:?}\",\n",
-                                )
+                                .generated(SEND_TEXT_PLAIN_DEF)
+                                .generated("evcxr_send_text_plain(&format!(\"{:?}\",\n")
                                 .user_code(stmt_code)
                                 .generated("));"),
                         );
@@ -369,11 +388,8 @@ impl EvalContext {
         let mut remaining_retries = 5;
         loop {
             // Try to compile and run the code.
-            let result = self.try_run_statements(
-                user_code.clone(),
-                self.compilation_mode(),
-                phases,
-            );
+            let result =
+                self.try_run_statements(user_code.clone(), self.compilation_mode(), phases);
             match result {
                 Ok(execution_artifacts) => {
                     return Ok(execution_artifacts.output);
@@ -439,10 +455,6 @@ impl EvalContext {
         {
             code = code.add_all(item.clone());
         }
-        code = code
-            .generated("mod evcxr_internal_runtime {")
-            .generated(include_str!("evcxr_internal_runtime.rs"))
-            .generated("}");
         let has_user_code = !user_code.is_empty();
         if has_user_code {
             code = code.add_all(self.wrap_user_code(user_code, compilation_mode));
@@ -477,52 +489,87 @@ impl EvalContext {
         user_code: CodeBlock,
         compilation_mode: CompilationMode,
     ) -> CodeBlock {
-        let mut code = CodeBlock::new()
-            .generated("#[no_mangle]")
-            .generated(format!(
-                "pub extern \"C\" fn {}(",
-                self.current_user_fn_name()
-            ))
-            .generated("mut evcxr_variable_store: *mut evcxr_internal_runtime::VariableStore)")
-            .generated("  -> *mut evcxr_internal_runtime::VariableStore {")
-            .generated("if evcxr_variable_store.is_null() {")
-            .generated("  evcxr_variable_store = evcxr_internal_runtime::create_variable_store();")
-            .generated("}")
-            .generated("let evcxr_variable_store = unsafe {&mut *evcxr_variable_store};")
-            .add_all(self.check_variable_statements())
-            .add_all(self.load_variable_statements());
-        if compilation_mode == CompilationMode::RunAndCatchPanics {
+        let needs_variable_store =
+            !self.state.variable_states.is_empty() || !self.stored_variable_states.is_empty();
+        let mut code = CodeBlock::new();
+        if needs_variable_store {
             code = code
-                .generated("match std::panic::catch_unwind(")
-                .generated("  std::panic::AssertUnwindSafe(move ||{")
-                // Shadow the outer evcxr_variable_store with a local one for variables moved
-                // into the closure.
-                .generated(
-                    "let mut evcxr_variable_store = evcxr_internal_runtime::VariableStore::new();",
-                )
-                .add_all(user_code)
-                .add_all(self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind))
-                .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind))
-                // Return our local variable store from the closure to be merged back into the
-                // main variable store.
-                .generated("evcxr_variable_store")
-                .generated("})) { ")
-                .generated("  Ok(inner_store) => evcxr_variable_store.merge(inner_store),")
-                .generated("  Err(_) => {")
-                .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind))
-                .generated("    evcxr_internal_runtime::notify_panic()}")
+                .generated("mod evcxr_internal_runtime {")
+                .generated(include_str!("evcxr_internal_runtime.rs"))
                 .generated("}");
+        }
+        code = code.generated("#[no_mangle]").generated(format!(
+            "pub extern \"C\" fn {}(",
+            self.current_user_fn_name()
+        ));
+        if needs_variable_store {
+            code = code
+                .generated("mut evcxr_variable_store: *mut evcxr_internal_runtime::VariableStore)")
+                .generated("  -> *mut evcxr_internal_runtime::VariableStore {")
+                .generated("if evcxr_variable_store.is_null() {")
+                .generated(
+                    "  evcxr_variable_store = evcxr_internal_runtime::create_variable_store();",
+                )
+                .generated("}")
+                .generated("let evcxr_variable_store = unsafe {&mut *evcxr_variable_store};")
+                .add_all(self.check_variable_statements())
+                .add_all(self.load_variable_statements());
+        } else {
+            code = code.generated(") {");
+        }
+        if compilation_mode == CompilationMode::RunAndCatchPanics {
+            if needs_variable_store {
+                code = code
+                    .generated("match std::panic::catch_unwind(")
+                    .generated("  std::panic::AssertUnwindSafe(move ||{")
+                    // Shadow the outer evcxr_variable_store with a local one for variables moved
+                    // into the closure.
+                    .generated(
+                        "let mut evcxr_variable_store = evcxr_internal_runtime::VariableStore::new();",
+                    )
+                    .add_all(user_code)
+                    .add_all(
+                        self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind),
+                    )
+                    .add_all(
+                        self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind),
+                    )
+                    // Return our local variable store from the closure to be merged back into the
+                    // main variable store.
+                    .generated("evcxr_variable_store")
+                    .generated("})) { ")
+                    .generated("  Ok(inner_store) => evcxr_variable_store.merge(inner_store),")
+                    .generated("  Err(_) => {")
+                    .add_all(
+                        self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind),
+                    )
+                    .generated(format!("    println!(\"{}\");", PANIC_NOTIFICATION))
+                    .generated("}}");
+            } else {
+                code = code
+                    .generated("if std::panic::catch_unwind(||{")
+                    .add_all(user_code)
+                    .generated("}).is_err() {")
+                    .generated(format!("    println!(\"{}\");", PANIC_NOTIFICATION))
+                    .generated("}");
+            }
         } else {
             code = code.add_all(user_code);
         }
-        code = code.add_all(self.store_variable_statements(&VariableMoveState::Available));
-        if compilation_mode != CompilationMode::RunAndCatchPanics {
-            code = code
-                .add_all(self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind))
-                .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind));
+        if needs_variable_store {
+            code = code.add_all(self.store_variable_statements(&VariableMoveState::Available));
+            if compilation_mode != CompilationMode::RunAndCatchPanics {
+                code = code
+                    .add_all(
+                        self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind),
+                    )
+                    .add_all(
+                        self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind),
+                    );
+            }
+            code = code.generated("evcxr_variable_store");
         }
-        code = code.generated("evcxr_variable_store}");
-        code
+        code.generated("}")
     }
 
     fn current_user_fn_name(&self) -> String {
@@ -553,7 +600,7 @@ impl EvalContext {
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
                 break;
             }
-            if line == evcxr_internal_runtime::PANIC_NOTIFICATION {
+            if line == PANIC_NOTIFICATION {
                 got_panic = true;
             } else if line.starts_with(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE) {
                 let variable_name = &line[evcxr_internal_runtime::VARIABLE_CHANGED_TYPE.len()..];
@@ -566,7 +613,7 @@ impl EvalContext {
                     if line == "EVCXR_END_CONTENT" {
                         break;
                     }
-                    if line == evcxr_internal_runtime::PANIC_NOTIFICATION {
+                    if line == PANIC_NOTIFICATION {
                         got_panic = true;
                         break;
                     }

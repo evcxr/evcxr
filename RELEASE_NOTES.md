@@ -1,3 +1,7 @@
+# Version 0.4.3
+* Don't catch panics when preserve_vars_on_panic is disabled.
+  * This significantly speeds up compilation.
+
 # Version 0.4.2
 * Fixed runtime error on windows due to something not liking the dll having been
   renamed.

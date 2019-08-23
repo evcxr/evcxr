@@ -16,21 +16,16 @@
 // built as a crate itself. The latter is the primary use-case. It's included as
 // a submodule only so that constants can be shared.
 
-use std::any::Any;
-use std::collections::HashMap;
-use std::{io, process};
-
-pub const PANIC_NOTIFICATION: &str = "EVCXR_PANIC_NOTIFICATION";
 pub const VARIABLE_CHANGED_TYPE: &str = "EVCXR_VARIABLE_CHANGED_TYPE:";
 
 pub struct VariableStore {
-    variables: HashMap<String, Box<dyn Any + 'static>>,
+    variables: std::collections::HashMap<String, Box<dyn std::any::Any + 'static>>,
 }
 
 impl VariableStore {
     pub fn new() -> VariableStore {
         VariableStore {
-            variables: HashMap::new(),
+            variables: std::collections::HashMap::new(),
         }
     }
 
@@ -75,24 +70,4 @@ impl VariableStore {
 
 pub fn create_variable_store() -> *mut VariableStore {
     Box::into_raw(Box::new(VariableStore::new()))
-}
-
-pub fn send_text_plain(text: &str) {
-    use std::io::Write;
-    fn try_send_text(text: &str) -> io::Result<()> {
-        let stdout = io::stdout();
-        let mut output = stdout.lock();
-        output.write_all(b"EVCXR_BEGIN_CONTENT text/plain\n")?;
-        output.write_all(text.as_bytes())?;
-        output.write_all(b"\nEVCXR_END_CONTENT\n")?;
-        Ok(())
-    }
-    if let Err(error) = try_send_text(text) {
-        eprintln!("Failed to send content to parent: {:?}", error);
-        process::exit(1);
-    }
-}
-
-pub fn notify_panic() {
-    println!("{}", PANIC_NOTIFICATION);
 }
