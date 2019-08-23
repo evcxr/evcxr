@@ -93,6 +93,8 @@ impl CommandContext {
             text_output(format!("Internals debugging: {}", debug_mode))
         } else if line == ":load_config" {
             self.load_config()
+        } else if line == ":version" {
+            text_output(env!("CARGO_PKG_VERSION"))
         } else if line == ":vars" {
             let mut outputs = EvalOutputs::new();
             outputs
@@ -161,6 +163,7 @@ impl CommandContext {
                  :explain          Print explanation of last error\n\
                  :clear            Clear all state, keeping compilation cache\n\
                  :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\
+                 :version          Print Evcxr version\n\
                  :preserve_vars_on_panic [0|1]  Try to keep vars on panic\n\n\
                  Mostly for development / debugging purposes:\n\
                  :last_compile_dir Print the directory in which we last compiled\n\
