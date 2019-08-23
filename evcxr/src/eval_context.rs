@@ -246,8 +246,9 @@ impl EvalContext {
             Err(error) => {
                 if let Error::ChildProcessTerminated(_) = error {
                     self.restart_child_process()?;
+                } else {
+                    self.state = old_state;
                 }
-                self.state = old_state;
                 return Err(error.without_non_reportable_errors());
             }
             Ok(x) => x,
@@ -347,6 +348,14 @@ impl EvalContext {
         cargo_metadata::get_library_names(self.module.crate_dir())
     }
 
+    fn compilation_mode(&self) -> CompilationMode {
+        if self.preserve_vars_on_panic {
+            CompilationMode::RunAndCatchPanics
+        } else {
+            CompilationMode::NoCatch
+        }
+    }
+
     fn run_statements(
         &mut self,
         mut user_code: CodeBlock,
@@ -362,7 +371,7 @@ impl EvalContext {
             // Try to compile and run the code.
             let result = self.try_run_statements(
                 user_code.clone(),
-                CompilationMode::RunAndCatchPanics,
+                self.compilation_mode(),
                 phases,
             );
             match result {
@@ -874,6 +883,8 @@ struct ExecutionArtifacts {
 enum CompilationMode {
     /// User code should be wrapped in catch_unwind and executed.
     RunAndCatchPanics,
+    /// User code should be executed without a catch_unwind.
+    NoCatch,
     /// Recompile without catch_unwind to try to get better error messages. If compilation succeeds
     /// (hopefully can't happen), don't run the code - caller should return the original message.
     NoCatchExpectError,

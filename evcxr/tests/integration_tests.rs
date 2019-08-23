@@ -172,7 +172,12 @@ fn function_panics_without_variable_preserving() {
     e.preserve_vars_on_panic = false;
     eval!(e, let a = vec![1, 2, 3];);
     eval!(e, let b = 42;);
-    eval!(e, panic!("Intentional panic {}", b););
+    let result = e.eval(stringify!(panic!("Intentional panic {}", b);));
+    if let Err(Error::ChildProcessTerminated(message)) = result {
+        assert!(message.contains("Child process terminated"));
+    } else {
+        panic!("Unexpected result: {:?}", result);
+    }
     assert_eq!(variable_names_and_types(&e), vec![]);
 }
 
