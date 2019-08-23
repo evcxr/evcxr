@@ -55,7 +55,15 @@ fn write_file(dir: &Path, basename: &str, contents: &str) -> Result<(), Error> {
 /// efficient, so we do that.
 #[cfg(windows)]
 fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
-    if let Err(err) = fs::copy(src, dest) {
+    // Copy file by reading and writing instead of using std::fs::copy. The src
+    // is a hard-linked file and we want to make extra sure that we end up with
+    // a completely indepent copy.
+    fn alt_copy(src: &Path, dest: &Path) -> Result<(), std::io::Error> {
+        use std::fs::File;
+        std::io::copy(&mut File::open(src)?, &mut File::create(dest)?)?;
+        Ok(())
+    }
+    if let Err(err) = alt_copy(src, dest) {
         bail!("Error copying '{:?}' to '{:?}': {}", src, dest, err);
     }
     Ok(())
