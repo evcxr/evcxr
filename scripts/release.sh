@@ -27,9 +27,10 @@ cargo publish
 # Wait a but before we try to push packages that depend on the version we just
 # pushed above, otherwise the push seems to fail. Seems like write followed by
 # read gives stale results!
-sleep 30
+sleep 60
 cd ../evcxr_repl
 cargo publish
 cd ../evcxr_jupyter
 cargo publish
-git push
+git tag "v$VERSION"
+git push --tags
