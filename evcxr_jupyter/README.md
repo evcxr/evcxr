@@ -111,6 +111,16 @@ to compile), you might put the following in init.evcxr:
 :opt 2
 ```
 
+## sccache integration
+
+sccache caches compilation outputs. If you frequently use the same crates, this
+can speed things up quite a bit.
+
+* `cargo install sccache`
+* Add `:sccache 1` to your init.evcxr (see Startup options above).
+* See [sccache](https://github.com/mozilla/sccache) for more details about
+  sccache.
+
 ## Uninstall
 
 ```sh

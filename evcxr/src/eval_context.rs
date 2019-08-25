@@ -303,6 +303,14 @@ impl EvalContext {
         Ok(())
     }
 
+    pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
+        self.module.set_sccache(enabled)
+    }
+
+    pub fn sccache(&self) -> bool {
+        self.module.sccache()
+    }
+
     // TODO: Remove this function and just use add_dep().
     pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<EvalOutputs, Error> {
         self.add_dep(&name, &config)?;

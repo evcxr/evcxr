@@ -3,6 +3,7 @@
   code to be executed. Where you're loading several large dependencies, this can
   avoid the need to wait for several long compiles and instead just wait for one
   long one.
+* Now support [sccache](https://github.com/mozilla/sccache).
 
 # Version 0.4.3
 * No longer preserves variables on panic by default.

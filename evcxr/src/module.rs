@@ -20,6 +20,7 @@ use regex::Regex;
 use std;
 use std::fs;
 use std::path::{Path, PathBuf};
+use which;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     if cfg!(target_os = "macos") {
@@ -83,6 +84,7 @@ pub(crate) struct Module {
     /// Whether to pass -Ztime-passes to the compiler and print the result.
     /// Causes the nightly compiler, which must be installed to be selected.
     pub(crate) time_passes: bool,
+    sccache: Option<PathBuf>,
 }
 
 const CRATE_NAME: &str = "ctx";
@@ -93,6 +95,7 @@ impl Module {
             tmpdir,
             build_num: 0,
             time_passes: false,
+            sccache: None,
         };
         Ok(module)
     }
@@ -116,6 +119,23 @@ impl Module {
 
     pub(crate) fn crate_dir(&self) -> &Path {
         &self.tmpdir
+    }
+
+    pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
+        if enabled {
+            if let Ok(path) = which::which("sccache") {
+                self.sccache = Some(path);
+            } else {
+                bail!("Couldn't find sccache. Try running `cargo install sscache`.");
+            }
+        } else {
+            self.sccache = None;
+        }
+        Ok(())
+    }
+
+    pub fn sccache(&self) -> bool {
+        self.sccache.is_some()
     }
 
     // Writes Cargo.toml. Should be called before compile.
@@ -148,6 +168,9 @@ impl Module {
             .arg("-C")
             .arg("prefer-dynamic")
             .current_dir(self.crate_dir());
+        if let Some(sccache) = &self.sccache {
+            command.env("RUSTC_WRAPPER", sccache);
+        }
         if self.time_passes {
             command.arg("-Ztime-passes");
         }
