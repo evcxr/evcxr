@@ -142,7 +142,6 @@ impl Module {
             command.arg("+nightly");
         }
         command
-            .env("CARGO_TARGET_DIR", &self.target_dir())
             .arg("rustc")
             .arg("--message-format=json")
             .arg("--")
