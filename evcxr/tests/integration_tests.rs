@@ -245,7 +245,7 @@ impl TmpCrate {
         format!(
             ":dep {} = {{ path = \"{}\" }}",
             self.name,
-            self.tempdir.path().to_string_lossy()
+            self.tempdir.path().to_string_lossy().replace("\\", "\\\\")
         )
     }
 }
