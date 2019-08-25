@@ -1,9 +1,5 @@
 dist: xenial
 language: rust
-cache:
-  # timeout on windows
-  cargo: true
-  timeout: 2000
 matrix:
   include:
     - os: linux
