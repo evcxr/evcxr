@@ -280,7 +280,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
 name = "evcxr"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "backtrace 0.3.35 (registry+https://github.com/rust-lang/crates.io-index)",
  "dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -307,12 +307,12 @@ dependencies = [
 
 [[package]]
 name = "evcxr_jupyter"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "chrono 0.4.7 (registry+https://github.com/rust-lang/crates.io-index)",
  "colored 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "evcxr 0.4.3",
+ "evcxr 0.4.4",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "hex 0.3.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "hmac 0.7.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -324,11 +324,11 @@ dependencies = [
 
 [[package]]
 name = "evcxr_repl"
-version = "0.4.3"
+version = "0.4.4"
 dependencies = [
  "colored 1.8.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "dirs 2.0.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "evcxr 0.4.3",
+ "evcxr 0.4.4",
  "failure 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "lazy_static 1.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "regex 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -617,7 +617,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "print_performance_info"
 version = "0.1.0"
 dependencies = [
- "evcxr 0.4.3",
+ "evcxr 0.4.4",
 ]
 
 [[package]]
