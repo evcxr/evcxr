@@ -26,35 +26,52 @@ pub struct CommandContext {
 impl CommandContext {
     pub fn new() -> Result<(CommandContext, EvalContextOutputs), Error> {
         let (eval_context, eval_context_outputs) = EvalContext::new()?;
-        let command_context = CommandContext {
+        let command_context = CommandContext::with_eval_context(eval_context);
+        Ok((command_context, eval_context_outputs))
+    }
+
+    pub fn with_eval_context(eval_context: EvalContext) -> CommandContext {
+        CommandContext {
             print_timings: false,
             eval_context,
             last_errors: Vec::new(),
-        };
-        Ok((command_context, eval_context_outputs))
+        }
     }
 
     pub fn execute(&mut self, to_run: &str) -> Result<EvalOutputs, Error> {
         use regex::Regex;
         use std::time::Instant;
         lazy_static! {
-            static ref COMMAND_RE: Regex = Regex::new("(:[^ ]+)( +(.*))?").unwrap();
+            static ref COMMAND_RE: Regex = Regex::new("^ *(:[^ ]+)( +(.*))?$").unwrap();
         }
+        let mut eval_outputs = EvalOutputs::new();
         let start = Instant::now();
+        let mut to_eval = Vec::new();
+        for line in to_run.lines() {
+            // We only accept commands up until the first non-command.
+            if to_eval.is_empty() {
+                if let Some(captures) = COMMAND_RE.captures(line) {
+                    eval_outputs.merge(
+                        self.process_command(&captures[1], captures.get(3).map(|m| m.as_str()))?,
+                    );
+                    continue;
+                }
+            }
+            to_eval.push(line)
+        }
         let result = if to_run.is_empty() {
             Ok(EvalOutputs::new())
-        } else if let Some(captures) = COMMAND_RE.captures(to_run) {
-            self.process_command(&captures[1], captures.get(3).map(|m| m.as_str()))
         } else {
-            self.eval_context.eval(to_run)
+            self.eval_context.eval(&to_eval.join("\n"))
         };
         let duration = start.elapsed();
         match result {
-            Ok(mut m) => {
+            Ok(m) => {
+                eval_outputs.merge(m);
                 if self.print_timings {
-                    m.timing = Some(duration);
+                    eval_outputs.timing = Some(duration);
                 }
-                Ok(m)
+                Ok(eval_outputs)
             }
             Err(Error::CompilationErrors(errors)) => {
                 self.last_errors = errors.clone();
@@ -114,11 +131,11 @@ impl CommandContext {
                     bail!(":dep requires arguments")
                 };
                 lazy_static! {
-                    static ref DEP_RE: Regex = Regex::new("([^= ]+) *= *(.+)").unwrap();
+                    static ref DEP_RE: Regex = Regex::new("^([^= ]+) *= *(.+)$").unwrap();
                 }
                 if let Some(captures) = DEP_RE.captures(args) {
-                    self.eval_context
-                        .add_extern_crate(captures[1].to_owned(), captures[2].to_owned())
+                    self.eval_context.add_dep(&captures[1], &captures[2])?;
+                    Ok(EvalOutputs::new())
                 } else {
                     bail!("Invalid :dep command. Expected: name = ...");
                 }

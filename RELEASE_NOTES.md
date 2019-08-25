@@ -1,3 +1,9 @@
+# Version 0.4.4
+* Commands, in particular :dep, can now be included at the start of a block of
+  code to be executed. Where you're loading several large dependencies, this can
+  avoid the need to wait for several long compiles and instead just wait for one
+  long one.
+
 # Version 0.4.3
 * No longer preserves variables on panic by default.
   * Turns out this was significantly slowing down compilation.

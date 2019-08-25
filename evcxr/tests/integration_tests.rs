@@ -14,37 +14,31 @@
 
 use evcxr;
 
-use evcxr::{Error, EvalContext, EvalContextOutputs};
+use evcxr::{CommandContext, Error, EvalContext, EvalContextOutputs};
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc;
+use tempfile;
 
 macro_rules! eval {
     ($ctxt:expr, $($t:tt)*) => {$ctxt.eval(stringify!($($t)*)).unwrap().content_by_mime_type}
 }
 
 fn new_context_and_outputs() -> (EvalContext, EvalContextOutputs) {
-    if false {
-        evcxr::runtime_hook();
+    let testing_runtime_path = std::env::current_exe()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("testing_runtime");
+    EvalContext::with_subprocess_command(std::process::Command::new(&testing_runtime_path)).unwrap()
+}
 
-        let mut command = std::process::Command::new(&std::env::current_exe().unwrap());
-        command
-            .arg("--test-threads")
-            .arg("1")
-            .arg("--nocapture")
-            .arg("--quiet");
-        EvalContext::with_subprocess_command(command).unwrap()
-    } else {
-        let testing_runtime_path = std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("testing_runtime");
-        EvalContext::with_subprocess_command(std::process::Command::new(&testing_runtime_path))
-            .unwrap()
-    }
+fn new_command_context_and_outputs() -> (CommandContext, EvalContextOutputs) {
+    let (eval_context, outputs) = new_context_and_outputs();
+    let command_context = CommandContext::with_eval_context(eval_context);
+    (command_context, outputs)
 }
 
 fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, mut output: T) {
@@ -216,6 +210,63 @@ fn moved_value() {
     );
     assert_eq!(eval!(e, a.unwrap()), text_plain("\"foo\""));
     assert_eq!(variable_names_and_types(&e), vec![]);
+}
+
+struct TmpCrate {
+    name: String,
+    tempdir: tempfile::TempDir,
+}
+
+impl TmpCrate {
+    fn new(name: &str, src: &str) -> Result<TmpCrate, io::Error> {
+        let tempdir = tempfile::tempdir()?;
+        let src_dir = tempdir.path().join("src");
+        std::fs::create_dir_all(&src_dir)?;
+        std::fs::write(
+            tempdir.path().join("Cargo.toml"),
+            format!(
+                "\
+                 [package]\n\
+                 name = \"{}\"\n\
+                 version = \"0.0.1\"\n\
+                 edition = \"2018\"\n\
+                 ",
+                name
+            ),
+        )?;
+        std::fs::write(src_dir.join("lib.rs"), src)?;
+        Ok(TmpCrate {
+            name: name.to_owned(),
+            tempdir,
+        })
+    }
+
+    fn dep_command(&self) -> String {
+        format!(
+            ":dep {} = {{ path = \"{}\" }}",
+            self.name,
+            self.tempdir.path().to_string_lossy()
+        )
+    }
+}
+
+#[test]
+fn crate_deps() {
+    let (mut e, _) = new_command_context_and_outputs();
+    // Try loading a crate that doesn't exist. This it to make sure that we
+    // don't keep this bad crate around for subsequent execution attempts.
+    let r = e.execute(
+        r#"
+       :dep bad = { path = "this_path_does_not_exist"}
+       40"#,
+    );
+    assert!(r.is_err());
+    let crate1 = TmpCrate::new("crate1", "pub fn r20() -> i32 {20}").unwrap();
+    let crate2 = TmpCrate::new("crate2", "pub fn r22() -> i32 {22}").unwrap();
+    let to_run =
+        crate1.dep_command() + "\n" + &crate2.dep_command() + "\ncrate1::r20() + crate2::r22()";
+    let outputs = e.execute(&to_run).unwrap();
+    assert_eq!(outputs.content_by_mime_type, text_plain("42"));
 }
 
 #[test]

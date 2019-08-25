@@ -44,17 +44,16 @@ evcxr_jupyter --install
 
 ## Usage notes
 
-* Functions, structs etc need to all be declared pub, otherwise they can't be
-  referenced from later cells.
 * To see what variables you've got defined, type ":vars".
 * Don't ask Jupyter to "interrupt kernel", it won't work. Rust threads can't be
   interrupted.
-* If your code panics, any non-copy variables referenced by the code being run
-  will be lost. Variables with Copy types and variables not referenced by the
-  code are preserved.
+* If your code panics, all variables will be lost. You can optionally run
+  `:preserve_vars_on_panic 1` to turn on preservation of variables. However note
+  that this will slow down compilation. Also, only variables that either are not
+  referenced by the code being run, or are Copy will be preserved.
 * If your code segfaults (e.g. due to buggy unsafe code), aborts, exits etc, the
   process in which the code runs will be restarted. All variables will be lost.
-  
+
 ## Custom output
 
 The last expression in a cell gets printed. By default, we'll use the debug

@@ -39,6 +39,7 @@ pub struct EvalContext {
     opt_level: String,
     module: Module,
     state: ContextState,
+    committed_state: ContextState,
     child_process: ChildProcess,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
@@ -130,6 +131,7 @@ impl EvalContext {
             debug_mode: false,
             opt_level: "2".to_owned(),
             state: ContextState::default(),
+            committed_state: ContextState::default(),
             module,
             child_process,
             preserve_vars_on_panic: false,
@@ -173,9 +175,6 @@ impl EvalContext {
                 variable_state.move_state = VariableMoveState::MovedIntoCatchUnwind;
             }
         }
-
-        // Copy our state, so that changes we make to it can be rolled back if compilation fails.
-        let old_state = self.state.clone();
 
         let mut previous_item_name = None;
         let mut code_block = CodeBlock::new();
@@ -266,15 +265,17 @@ impl EvalContext {
                 if let Error::ChildProcessTerminated(_) = error {
                     self.restart_child_process()?;
                 } else {
-                    self.state = old_state;
+                    self.state = self.committed_state.clone();
                 }
                 return Err(error.without_non_reportable_errors());
             }
             Ok(x) => x,
         };
 
-        // Once, we reach here, our code has successfully executed, so we conclude that variable changes are now applied.
+        // Once, we reach here, our code has successfully executed, so we
+        // conclude that variable changes are now applied.
         self.stored_variable_states = self.state.variable_states.clone();
+        self.committed_state = self.state.clone();
 
         phases.phase_complete("Execution");
         outputs.phases = phases.phases;
@@ -302,16 +303,27 @@ impl EvalContext {
         Ok(())
     }
 
+    // TODO: Remove this function and just use add_dep().
     pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<EvalOutputs, Error> {
-        let key = name.clone();
-        self.state
-            .external_deps
-            .insert(key.clone(), ExternalCrate::new(name, config)?);
+        self.add_dep(&name, &config)?;
         let result = self.eval("");
         if result.is_err() {
-            self.state.external_deps.remove(&key);
+            self.state.external_deps.remove(&name);
         }
         result
+    }
+
+    /// Adds a crate dependency with the specified name and configuration.
+    /// Actual compilation is deferred until the next call to eval. If that call
+    /// fails, then this dependency will be reverted. If you want to compile
+    /// straight away and ensure that the change is committed, then follow this
+    /// call with a call to eval("");
+    pub fn add_dep(&mut self, name: &str, config: &str) -> Result<(), Error> {
+        self.state.external_deps.insert(
+            name.to_owned(),
+            ExternalCrate::new(name.to_owned(), config.to_owned())?,
+        );
+        Ok(())
     }
 
     pub fn debug_mode(&self) -> bool {
