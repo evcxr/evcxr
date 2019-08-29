@@ -427,6 +427,17 @@ fn variable_assignment_compile_fail_then_use_statement() {
     assert_eq!(eval!(e, 42), text_plain("42"));
 }
 
+// Make sure that a type name containing a reserved word (e.g. async) doesn't
+// cause a compilation error.
+#[test]
+fn reserved_words() {
+    let mut e = new_context();
+    eval!(e,
+        mod r#async { pub struct Foo {} }
+        let v = r#async::Foo {};
+    );
+}
+
 #[test]
 fn unnamable_type_closure() {
     let mut e = new_context();

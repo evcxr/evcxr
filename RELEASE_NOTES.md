@@ -1,3 +1,6 @@
+# Version 0.4.5
+* Escape reserved words "async" and "try" when encountered in types.
+
 # Version 0.4.4
 * Now support [sccache](https://github.com/mozilla/sccache).
 * These release notes previously said that this release added support for mixing

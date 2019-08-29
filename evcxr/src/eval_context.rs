@@ -708,6 +708,7 @@ impl EvalContext {
                                     actual_type
                                 );
                             }
+                            actual_type = replace_reserved_words_in_type(&actual_type);
                             self.state
                                 .variable_states
                                 .get_mut(variable_name)
@@ -969,4 +970,25 @@ struct ContextState {
     // formatted slightly differently.
     extern_crate_stmts: HashMap<String, String>,
     variable_states: HashMap<String, VariableState>,
+}
+
+fn replace_reserved_words_in_type(ty: &str) -> String {
+    lazy_static! {
+        static ref RESERVED_WORDS: Regex = Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap();
+    }
+    RESERVED_WORDS.replace_all(ty, "${1}r#${2}${3}").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_replace_reserved_words_in_type() {
+        use super::replace_reserved_words_in_type as repl;
+        assert_eq!(repl("asyncstart"), "asyncstart");
+        assert_eq!(repl("endasync"), "endasync");
+        assert_eq!(repl("async::foo"), "r#async::foo");
+        assert_eq!(repl("foo::async::bar"), "foo::r#async::bar");
+        assert_eq!(repl("foo::async::async::bar"), "foo::r#async::r#async::bar");
+        assert_eq!(repl("Bar<async::foo::Baz>"), "Bar<r#async::foo::Baz>");
+    }
 }
