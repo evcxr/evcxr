@@ -1,9 +1,8 @@
 # Version 0.4.4
-* Commands, in particular :dep, can now be included at the start of a block of
-  code to be executed. Where you're loading several large dependencies, this can
-  avoid the need to wait for several long compiles and instead just wait for one
-  long one.
 * Now support [sccache](https://github.com/mozilla/sccache).
+* These release notes previously said that this release added support for mixing
+  commands like :dep with code. That feature was actually added a long time ago
+  by David Bernard. Thanks David, and sorry for the confusion.
 
 # Version 0.4.3
 * No longer preserves variables on panic by default.
