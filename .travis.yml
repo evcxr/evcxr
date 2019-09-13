@@ -13,17 +13,12 @@ matrix:
       env: TARGET=x86_64-apple-darwin EXTRA_ARGS=""
     - os: windows
       rust: nightly
-      env: TARGET=x86_64-pc-windows-msvc EXTRA_ARGS="--exclude=evcxr_jupyter"
+      env: TARGET=x86_64-pc-windows-msvc EXTRA_ARGS=""
   fast_finish: true
-addons:
-  apt:
-    packages:
-    - libzmq3-dev
 
 install:
   # prevent target re-add error from rustup
   - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TARGET" != "x86_64-unknown-linux-gnu" ]]; then rustup target add $TARGET; fi
-  - if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then brew update && brew install zmq pkg-config; fi
 
 before_script:
     - rustup -V; rustc -V; cargo -V

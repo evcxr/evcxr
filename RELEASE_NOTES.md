@@ -1,5 +1,6 @@
 # Version 0.4.5
 * Escape reserved words "async" and "try" when encountered in types.
+* Use vendored ZMQ library by default.
 
 # Version 0.4.4
 * Now support [sccache](https://github.com/mozilla/sccache).

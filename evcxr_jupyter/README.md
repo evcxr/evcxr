@@ -9,8 +9,15 @@ A [Jupyter](https://jupyter.org/) Kernel for the Rust programming language.
 ### Linux (Debian/Ubuntu)
 
 ```sh
-sudo apt install libzmq3-dev jupyter-notebook
+sudo apt install jupyter-notebook
 cargo install evcxr_jupyter
+evcxr_jupyter --install
+```
+
+Alternative instructions if you want to use libzmq from your system:
+```sh
+sudo apt install libzmq3-dev jupyter-notebook
+cargo install evcxr_jupyter --no-default-features
 evcxr_jupyter --install
 ```
 
@@ -19,8 +26,14 @@ evcxr_jupyter --install
 install jupyter or jupyterlab (eg. via anaconda)
 
 ```sh
-brew install zeromq pkg-config
 cargo install evcxr_jupyter
+evcxr_jupyter --install
+```
+
+Alternative instructions if you want to use libzmq from your system:
+```sh
+brew install zeromq pkg-config
+cargo install evcxr_jupyter --no-default-features
 evcxr_jupyter --install
 ```
 
@@ -30,17 +43,16 @@ Note that Evcxr on Windows appears to be substantially slower than on other
 platforms. We're not yet sure why.
 
 * Install jupyter or jupyterlab (eg. via anaconda)
-* Install ZMQ
-  * Manually compiling zeromq 4.3.2 (using cmake + Visual Studio) has been
-    reported to work.
-  * [These
-    instructions](https://github.com/erickt/rust-zmq/issues/208#issuecomment-380353800)
-    might or might not help.
-
+* Install [CMake](https://cmake.org/download/)
 ```sh
 cargo install evcxr_jupyter
 evcxr_jupyter --install
 ```
+
+If you'd like to install ZMQ yourself, rather than having cargo install build it
+for you, then [These
+instructions](https://github.com/google/evcxr/issues/53#issuecomment-530050850)
+might help.
 
 ## Usage notes
 
