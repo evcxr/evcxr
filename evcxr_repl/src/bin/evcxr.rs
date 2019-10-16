@@ -131,7 +131,8 @@ fn main() {
         opt_history_file = Some(history_file);
     }
     loop {
-        let readline = editor.readline(&PROMPT.yellow());
+        let prompt = format!("{}", PROMPT.yellow());
+        let readline = editor.readline(&prompt);
         match readline {
             Ok(line) => {
                 editor.add_history_entry(line.clone());
