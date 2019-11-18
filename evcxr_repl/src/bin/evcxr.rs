@@ -110,6 +110,22 @@ impl Repl {
     }
 }
 
+fn readline_direct(prompt: &str) -> rustyline::Result<String> {
+    use std::io::Write;
+
+    // Write prompt and flush it to stdout
+    let mut stdout = io::stdout();
+    stdout.write_all(prompt.as_bytes())?;
+    stdout.flush()?;
+
+    let mut line = String::new();
+    if io::stdin().read_line(&mut line)? > 0 {
+        Ok(line)
+    } else {
+        Err(rustyline::error::ReadlineError::Eof)
+    }
+}
+
 fn main() {
     evcxr::runtime_hook();
     println!("Welcome to evcxr. For help, type :help");
@@ -120,6 +136,8 @@ fn main() {
             return;
         }
     };
+
+    let disable_readline = std::env::args().any(|x| x == "--disable-readline");
 
     let mut editor = Editor::<()>::new();
     let mut opt_history_file = None;
@@ -132,7 +150,11 @@ fn main() {
     }
     loop {
         let prompt = format!("{}", PROMPT.yellow());
-        let readline = editor.readline(&prompt);
+        let readline = if disable_readline {
+            readline_direct(&prompt)
+        } else {
+            editor.readline(&prompt)
+        };
         match readline {
             Ok(line) => {
                 editor.add_history_entry(line.clone());
