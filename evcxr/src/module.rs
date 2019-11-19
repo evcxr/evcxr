@@ -167,6 +167,7 @@ impl Module {
             .arg("--")
             .arg("-C")
             .arg("prefer-dynamic")
+            .env_remove("CARGO_TARGET_DIR")
             .current_dir(self.crate_dir());
         if let Some(sccache) = &self.sccache {
             command.env("RUSTC_WRAPPER", sccache);
