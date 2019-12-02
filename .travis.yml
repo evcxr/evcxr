@@ -27,3 +27,7 @@ script:
   - travis_wait 30 cargo build --verbose --all $EXTRA_ARGS --all-features
   - travis_wait 30 cargo test --verbose --all $EXTRA_ARGS
   - cargo run -p print_performance_info
+
+notifications:
+  email:
+    - dvdlttmr@gmail.com
