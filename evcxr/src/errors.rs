@@ -183,15 +183,42 @@ impl CompilationError {
 
     /// Returns the actual type indicated by the error message or None if this isn't a type error.
     pub(crate) fn get_actual_type(&self) -> Option<String> {
+        // Observed formats:
+        // Up to 1.40:
+        //   message.children[].message
+        //     "expected type `std::string::String`\n   found type `{integer}`"
+        // 1.41+:
+        //   message.children[].message
+        //     "expected struct `std::string::String`\n     found enum `std::option::Option<std::string::String>`"
+        //     "expected struct `std::string::String`\n    found tuple `({integer}, {float})`"
+        //     "  expected struct `std::string::String`\nfound opaque type `impl Bar`"
+        //   message.spans[].label
+        //     "expected struct `std::string::String`, found integer"
+        //     "expected struct `std::string::String`, found `i32`"
         lazy_static! {
             static ref TYPE_ERROR_RE: Regex =
-                Regex::new("expected type `(.*)`\n *found type `(.*)`").unwrap();
+                Regex::new(" *expected (?s:.)*found.* `(.*)`").unwrap();
         }
         if let JsonValue::Array(children) = &self.json["children"] {
             for child in children {
                 if let Some(message) = child["message"].as_str() {
                     if let Some(captures) = TYPE_ERROR_RE.captures(message) {
-                        return Some(captures[2].to_owned());
+                        return Some(captures[1].to_owned());
+                    }
+                }
+            }
+        }
+        lazy_static! {
+            static ref TYPE_ERROR_RE2: Regex =
+                Regex::new("expected .* found (integer|float)").unwrap();
+        }
+        if let JsonValue::Array(spans) = &self.json["spans"] {
+            for span in spans {
+                if let Some(label) = span["label"].as_str() {
+                    if let Some(captures) = TYPE_ERROR_RE.captures(label) {
+                        return Some(captures[1].to_owned());
+                    } else if let Some(captures) = TYPE_ERROR_RE2.captures(label) {
+                        return Some(captures[1].to_owned());
                     }
                 }
             }

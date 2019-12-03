@@ -439,6 +439,13 @@ fn variable_assignment_compile_fail_then_use_statement() {
     assert_eq!(eval!(e, 42), text_plain("42"));
 }
 
+#[test]
+fn int_array() {
+    let mut e = new_context();
+    eval!(e, let v = [42; 5];);
+    eval!(e, assert_eq!(v[4], 42));
+}
+
 // Make sure that a type name containing a reserved word (e.g. async) doesn't
 // cause a compilation error.
 #[test]

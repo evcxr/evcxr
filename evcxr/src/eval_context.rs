@@ -702,6 +702,11 @@ impl EvalContext {
                             actual_type = actual_type
                                 .replace("{integer}", "i32")
                                 .replace("{float}", "f32");
+                            if actual_type == "integer" {
+                                actual_type = "i32".to_string();
+                            } else if actual_type == "float" {
+                                actual_type = "f32".to_string();
+                            }
                             if DISALLOWED_TYPES.is_match(&actual_type) {
                                 bail!(
                                     "Sorry, the type {} cannot currently be persisted",
