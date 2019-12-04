@@ -1,3 +1,12 @@
+# Version 0.4.6
+* Fixes to work with rust 1.41
+* Improved handling of cargo workspaces.
+* Now works if the user has overridden Cargo's default target directory (thanks
+  Aloxaf).
+* Fixed prompt color (thanks Dmitry Murzin).
+* Added a flag to disable use of readline (thanks Dmitry Murzin).
+* Fix for binder (thanks Luiz Irber)
+
 # Version 0.4.5
 * Escape reserved words "async" and "try" when encountered in types.
 * Use vendored ZMQ library by default.
