@@ -154,6 +154,14 @@ impl CommandContext {
                 self.eval_context.set_opt_level(new_level)?;
                 text_output(format!("Optimization: {}", self.eval_context.opt_level()))
             }
+            ":fmt" => {
+                let new_format = if let Some(f) = args { f } else { "{:?}" };
+                self.eval_context.set_output_format(new_format.to_owned());
+                text_output(format!(
+                    "Output foramt: {}",
+                    self.eval_context.output_format()
+                ))
+            }
             ":timing" => {
                 self.print_timings = !self.print_timings;
                 text_output(format!("Timing: {}", self.print_timings))
@@ -194,6 +202,7 @@ impl CommandContext {
             ":help" => text_output(
                 ":vars             List bound variables and their types\n\
                  :opt [level]      Toggle/set optimization level\n\
+                 :fmt [format]     Set output formatter (default: {:?}). \n\
                  :explain          Print explanation of last error\n\
                  :clear            Clear all state, keeping compilation cache\n\
                  :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\
