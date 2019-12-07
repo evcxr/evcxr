@@ -83,8 +83,7 @@ impl CommandContext {
 
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
-        if let Some(config_dir) = dirs::config_dir() {
-            let config_dir = config_dir.join("evcxr");
+        if let Some(config_dir) = crate::config_dir() {
             let config_file = config_dir.join("init.evcxr");
             if config_file.exists() {
                 println!("Loading startup commands from {:?}", config_file);

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use dirs;
 use evcxr;
 
 use colored::*;
@@ -141,7 +140,7 @@ fn main() {
 
     let mut editor = Editor::<()>::new();
     let mut opt_history_file = None;
-    let config_dir = dirs::config_dir().map(|h| h.join("evcxr"));
+    let config_dir = evcxr::config_dir();
     if let Some(config_dir) = &config_dir {
         fs::create_dir_all(config_dir).ok();
         let history_file = config_dir.join("history.txt");
