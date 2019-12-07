@@ -84,13 +84,22 @@ impl CommandContext {
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
         if let Some(config_dir) = dirs::config_dir() {
-            let config_file = config_dir.join("evcxr").join("init.evcxr");
+            let config_dir = config_dir.join("evcxr");
+            let config_file = config_dir.join("init.evcxr");
             if config_file.exists() {
                 println!("Loading startup commands from {:?}", config_file);
                 let contents = std::fs::read_to_string(config_file)?;
                 for line in contents.lines() {
                     outputs.merge(self.execute(line)?);
                 }
+            }
+            // Note: Loaded *after* init.evcxr so that it can access `:dep`s (or
+            // any other state changed by :commands) specified in the init file.
+            let prelude_file = config_dir.join("prelude.rs");
+            if prelude_file.exists() {
+                println!("Executing prelude from {:?}", prelude_file);
+                let prelude = std::fs::read_to_string(prelude_file)?;
+                outputs.merge(self.execute(&prelude)?);
             }
         }
         Ok(outputs)
