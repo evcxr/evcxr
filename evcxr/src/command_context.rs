@@ -158,7 +158,7 @@ impl CommandContext {
                 let new_format = if let Some(f) = args { f } else { "{:?}" };
                 self.eval_context.set_output_format(new_format.to_owned());
                 text_output(format!(
-                    "Output foramt: {}",
+                    "Output format: {}",
                     self.eval_context.output_format()
                 ))
             }
