@@ -18,3 +18,4 @@ colored = "1.8.0"
 lazy_static = "1.3.0"
 failure = { version = "0.1.5", default-features = false, features = [ "std" ] }
 regex = { version = "1.3.1", default-features = false, features = [ "std" ] }
+structopt = "0.3"
