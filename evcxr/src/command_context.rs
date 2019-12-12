@@ -81,6 +81,10 @@ impl CommandContext {
         }
     }
 
+    pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
+        self.eval_context.set_opt_level(level)
+    }
+
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
         if let Some(config_dir) = crate::config_dir() {
