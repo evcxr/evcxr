@@ -44,7 +44,10 @@ impl Repl {
         let (command_context, outputs) = CommandContext::new()?;
         send_output(outputs.stdout, io::stdout());
         send_output(outputs.stderr, io::stderr());
-        let mut repl = Repl { command_context, ide_mode };
+        let mut repl = Repl {
+            command_context,
+            ide_mode,
+        };
         repl.execute(":load_config");
         Ok(repl)
     }
