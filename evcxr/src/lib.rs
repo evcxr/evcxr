@@ -29,7 +29,6 @@ mod crate_config;
 mod eval_context;
 #[allow(dead_code)]
 mod evcxr_internal_runtime;
-mod idents;
 mod item;
 mod module;
 mod runtime;

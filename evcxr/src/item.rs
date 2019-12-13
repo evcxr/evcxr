@@ -25,7 +25,7 @@ fn item_ident(item: &syn::Item) -> Option<&proc_macro2::Ident> {
     Some(match item {
         syn::Item::Static(i) => &i.ident,
         syn::Item::Const(i) => &i.ident,
-        syn::Item::Fn(i) => &i.ident,
+        syn::Item::Fn(i) => &i.sig.ident,
         syn::Item::Mod(i) => &i.ident,
         syn::Item::Type(i) => &i.ident,
         syn::Item::Struct(i) => &i.ident,

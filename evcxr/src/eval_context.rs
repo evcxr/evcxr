@@ -17,7 +17,6 @@ use crate::code_block::{CodeBlock, CodeOrigin};
 use crate::crate_config::ExternalCrate;
 use crate::errors::{CompilationError, Error};
 use crate::evcxr_internal_runtime;
-use crate::idents;
 use crate::item;
 use crate::module::{Module, SoFile};
 use crate::runtime;
@@ -187,9 +186,7 @@ impl EvalContext {
                 }
                 match &stmt {
                     syn::Stmt::Local(local) => {
-                        for pat in &local.pats {
-                            self.record_new_locals(pat, local.ty.as_ref().map(|ty| &*ty.1));
-                        }
+                        self.record_new_locals(&local.pat, None);
                         code_block = code_block.user_code(stmt_code);
                     }
                     syn::Stmt::Item(syn::Item::ExternCrate(syn::ItemExternCrate {
@@ -789,6 +786,31 @@ impl EvalContext {
     }
 
     fn record_new_locals(&mut self, pat: &syn::Pat, opt_ty: Option<&syn::Type>) {
+        match pat {
+            syn::Pat::Ident(ident) => self.record_local(ident, opt_ty),
+            syn::Pat::Type(pat_type) => self.record_new_locals(&*pat_type.pat, Some(&*pat_type.ty)),
+            syn::Pat::Struct(ref pat_struct) => {
+                for field in &pat_struct.fields {
+                    self.record_new_locals(&field.pat, None);
+                }
+            }
+            syn::Pat::Tuple(ref pat_tuple) => {
+                for member in &pat_tuple.elems {
+                    self.record_new_locals(member, None);
+                }
+            }
+            syn::Pat::TupleStruct(ref pat_tuple) => {
+                for member in &pat_tuple.pat.elems {
+                    self.record_new_locals(member, None);
+                }
+            }
+            x => {
+                println!("Unhandled pat kind: {:?}", x);
+            }
+        }
+    }
+
+    fn record_local(&mut self, pat_ident: &syn::PatIdent, opt_ty: Option<&syn::Type>) {
         use syn::export::ToTokens;
         // Default new variables to some type, say String. Assuming it isn't a
         // String, we'll get a compilation error when we try to move the
@@ -801,21 +823,19 @@ impl EvalContext {
             Some(ty) if type_is_fully_specified(ty) => format!("{}", ty.into_token_stream()),
             _ => "String".to_owned(),
         };
-        idents::idents_do(pat, &mut |pat_ident: &syn::PatIdent| {
-            self.state.variable_states.insert(
-                pat_ident.ident.to_string(),
-                VariableState {
-                    type_name: type_name.clone(),
-                    is_mut: pat_ident.mutability.is_some(),
-                    // All new locals will initially be defined only inside our catch_unwind
-                    // block.
-                    move_state: VariableMoveState::MovedIntoCatchUnwind,
-                    // If we're preserving copy types, then assume this variable
-                    // is copy until we find out it's not.
-                    is_copy_type: self.preserve_vars_on_panic,
-                },
-            );
-        });
+        self.state.variable_states.insert(
+            pat_ident.ident.to_string(),
+            VariableState {
+                type_name,
+                is_mut: pat_ident.mutability.is_some(),
+                // All new locals will initially be defined only inside our catch_unwind
+                // block.
+                move_state: VariableMoveState::MovedIntoCatchUnwind,
+                // If we're preserving copy types, then assume this variable
+                // is copy until we find out it's not.
+                is_copy_type: self.preserve_vars_on_panic,
+            },
+        );
     }
 
     fn store_variable_statements(&mut self, move_state: &VariableMoveState) -> CodeBlock {
