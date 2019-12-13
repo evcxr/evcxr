@@ -776,7 +776,7 @@ impl EvalContext {
         Ok(())
     }
 
-    fn record_new_locals(&mut self, pat: &syn::Pat, ty: Option<&syn::Type>) {
+    fn record_new_locals(&mut self, pat: &syn::Pat, opt_ty: Option<&syn::Type>) {
         use syn::export::ToTokens;
         // Default new variables to some type, say String. Assuming it isn't a
         // String, we'll get a compilation error when we try to move the
@@ -785,9 +785,10 @@ impl EvalContext {
         // type, we'll use that for all variables in that assignment (probably
         // only correct if it's a single variable). This gives the user a way to
         // force the type if rustc is giving us a bad suggestion.
-        let type_name = ty
-            .map(|ty| format!("{}", ty.into_token_stream()))
-            .unwrap_or_else(|| "String".to_owned());
+        let type_name = match opt_ty {
+            Some(ty) if type_is_fully_specified(ty) => format!("{}", ty.into_token_stream()),
+            _ => "String".to_owned(),
+        };
         idents::idents_do(pat, &mut |pat_ident: &syn::PatIdent| {
             self.state.variable_states.insert(
                 pat_ident.ident.to_string(),
@@ -864,6 +865,25 @@ impl EvalContext {
         }
         extern_stmts.add_all(use_stmts)
     }
+}
+
+/// Returns whether a type is fully specified. i.e. it doesn't contain any '_'.
+fn type_is_fully_specified(ty: &syn::Type) -> bool {
+    struct InferenceFinder {
+        has_inference: bool,
+    }
+
+    impl<'ast> syn::visit::Visit<'ast> for InferenceFinder {
+        fn visit_type_infer(&mut self, _i: &'ast syn::TypeInfer) {
+            self.has_inference = true;
+        }
+    }
+
+    let mut inference_finder = InferenceFinder {
+        has_inference: false,
+    };
+    syn::visit::visit_type(&mut inference_finder, ty);
+    !inference_finder.has_inference
 }
 
 #[derive(Debug)]

@@ -491,3 +491,10 @@ fn unnamable_type_impl_trait() {
         panic!("Unexpected result: {:?}", result);
     }
 }
+
+#[test]
+fn partially_inferred_variable_type() {
+    let mut e = new_context();
+    eval!(e, let v : Vec<_> = (1..10).collect(););
+    eval!(e, assert_eq!(v.len(), 9););
+}
