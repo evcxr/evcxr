@@ -320,6 +320,14 @@ impl EvalContext {
         self.module.sccache()
     }
 
+    pub fn set_linker(&mut self, linker: String) {
+        self.module.linker = linker;
+    }
+
+    pub fn linker(&self) -> &str {
+        &self.module.linker
+    }
+
     // TODO: Remove this function and just use add_dep().
     pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<EvalOutputs, Error> {
         self.add_dep(&name, &config)?;

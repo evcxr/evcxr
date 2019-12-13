@@ -84,6 +84,7 @@ pub(crate) struct Module {
     /// Whether to pass -Ztime-passes to the compiler and print the result.
     /// Causes the nightly compiler, which must be installed to be selected.
     pub(crate) time_passes: bool,
+    pub(crate) linker: String,
     sccache: Option<PathBuf>,
 }
 
@@ -91,10 +92,16 @@ const CRATE_NAME: &str = "ctx";
 
 impl Module {
     pub(crate) fn new(tmpdir: PathBuf) -> Result<Module, Error> {
+        let linker = if which::which("lld").is_ok() {
+            "lld".to_owned()
+        } else {
+            "system".to_owned()
+        };
         let module = Module {
             tmpdir,
             build_num: 0,
             time_passes: false,
+            linker,
             sccache: None,
         };
         Ok(module)
@@ -169,6 +176,11 @@ impl Module {
             .arg("prefer-dynamic")
             .env("CARGO_TARGET_DIR", "target")
             .current_dir(self.crate_dir());
+        if self.linker != "system" {
+            command
+                .arg("-C")
+                .arg(format!("link-arg=-fuse-ld={}", self.linker));
+        }
         if let Some(sccache) = &self.sccache {
             command.env("RUSTC_WRAPPER", sccache);
         }

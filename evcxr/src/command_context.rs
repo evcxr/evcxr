@@ -187,6 +187,12 @@ impl CommandContext {
                 self.eval_context.set_sccache(args != Some("0"))?;
                 text_output(format!("sccache: {}", self.eval_context.sccache()))
             }
+            ":linker" => {
+                if let Some(linker) = args {
+                    self.eval_context.set_linker(linker.to_owned());
+                }
+                text_output(format!("linker: {}", self.eval_context.linker()))
+            }
             ":explain" => {
                 if self.last_errors.is_empty() {
                     bail!("No last error to explain");
@@ -219,6 +225,7 @@ impl CommandContext {
                  :clear            Clear all state, keeping compilation cache\n\
                  :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\
                  :sccache [0|1]    Set whether to use sccache.\n\
+                 :linker [linker]  Set/print linker. Supported: system, lld\n\
                  :version          Print Evcxr version\n\
                  :preserve_vars_on_panic [0|1]  Try to keep vars on panic\n\n\
                  Mostly for development / debugging purposes:\n\
