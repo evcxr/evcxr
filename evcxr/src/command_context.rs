@@ -81,16 +81,28 @@ impl CommandContext {
         }
     }
 
+    pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
+        self.eval_context.set_opt_level(level)
+    }
+
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
-        if let Some(config_dir) = dirs::config_dir() {
-            let config_file = config_dir.join("evcxr").join("init.evcxr");
+        if let Some(config_dir) = crate::config_dir() {
+            let config_file = config_dir.join("init.evcxr");
             if config_file.exists() {
                 println!("Loading startup commands from {:?}", config_file);
                 let contents = std::fs::read_to_string(config_file)?;
                 for line in contents.lines() {
                     outputs.merge(self.execute(line)?);
                 }
+            }
+            // Note: Loaded *after* init.evcxr so that it can access `:dep`s (or
+            // any other state changed by :commands) specified in the init file.
+            let prelude_file = config_dir.join("prelude.rs");
+            if prelude_file.exists() {
+                println!("Executing prelude from {:?}", prelude_file);
+                let prelude = std::fs::read_to_string(prelude_file)?;
+                outputs.merge(self.execute(&prelude)?);
             }
         }
         Ok(outputs)
@@ -154,6 +166,14 @@ impl CommandContext {
                 self.eval_context.set_opt_level(new_level)?;
                 text_output(format!("Optimization: {}", self.eval_context.opt_level()))
             }
+            ":fmt" => {
+                let new_format = if let Some(f) = args { f } else { "{:?}" };
+                self.eval_context.set_output_format(new_format.to_owned());
+                text_output(format!(
+                    "Output format: {}",
+                    self.eval_context.output_format()
+                ))
+            }
             ":timing" => {
                 self.print_timings = !self.print_timings;
                 text_output(format!("Timing: {}", self.print_timings))
@@ -194,6 +214,7 @@ impl CommandContext {
             ":help" => text_output(
                 ":vars             List bound variables and their types\n\
                  :opt [level]      Toggle/set optimization level\n\
+                 :fmt [format]     Set output formatter (default: {:?}). \n\
                  :explain          Print explanation of last error\n\
                  :clear            Clear all state, keeping compilation cache\n\
                  :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\

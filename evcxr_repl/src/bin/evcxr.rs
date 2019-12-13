@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use dirs;
 use evcxr;
 
 use colored::*;
@@ -21,11 +20,13 @@ use rustyline::{error::ReadlineError, Editor};
 use std::fs;
 use std::io;
 use std::sync::mpsc;
+use structopt::StructOpt;
 
 const PROMPT: &str = ">> ";
 
 struct Repl {
     command_context: CommandContext,
+    ide_mode: bool,
 }
 
 fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, mut output: T) {
@@ -39,17 +40,17 @@ fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, m
 }
 
 impl Repl {
-    fn new() -> Result<Repl, Error> {
+    fn new(ide_mode: bool) -> Result<Repl, Error> {
         let (command_context, outputs) = CommandContext::new()?;
         send_output(outputs.stdout, io::stdout());
         send_output(outputs.stderr, io::stderr());
-        let mut repl = Repl { command_context };
+        let mut repl = Repl { command_context, ide_mode };
         repl.execute(":load_config");
         Ok(repl)
     }
 
     fn execute(&mut self, to_run: &str) {
-        match self.command_context.execute(to_run) {
+        let success = match self.command_context.execute(to_run) {
             Ok(output) => {
                 if let Some(text) = output.get("text/plain") {
                     println!("{}", text);
@@ -64,11 +65,21 @@ impl Repl {
                         );
                     }
                 }
+                true
             }
             Err(evcxr::Error::CompilationErrors(errors)) => {
                 self.display_errors(errors);
+                false
             }
-            Err(err) => eprintln!("{}", format!("{}", err).bright_red()),
+            Err(err) => {
+                eprintln!("{}", format!("{}", err).bright_red());
+                false
+            }
+        };
+
+        if self.ide_mode {
+            let success_marker = if success { "\x01" } else { "\x02" };
+            print!("{}", success_marker);
         }
     }
 
@@ -120,16 +131,32 @@ fn readline_direct(prompt: &str) -> rustyline::Result<String> {
 
     let mut line = String::new();
     if io::stdin().read_line(&mut line)? > 0 {
+        line = line.replace('\u{2028}', "\n");
         Ok(line)
     } else {
         Err(rustyline::error::ReadlineError::Eof)
     }
 }
 
+#[derive(StructOpt, Debug)]
+#[structopt(name = "evcxr")]
+struct Options {
+    #[structopt(long)]
+    disable_readline: bool,
+    #[structopt(long)]
+    ide_mode: bool,
+    /// Optimization level (0, 1 or 2)
+    #[structopt(long, default_value = "")]
+    opt: String,
+}
+
 fn main() {
     evcxr::runtime_hook();
+
+    let options = Options::from_args();
+
     println!("Welcome to evcxr. For help, type :help");
-    let mut repl = match Repl::new() {
+    let mut repl = match Repl::new(options.ide_mode) {
         Ok(c) => c,
         Err(error) => {
             eprintln!("{}", error);
@@ -137,11 +164,11 @@ fn main() {
         }
     };
 
-    let disable_readline = std::env::args().any(|x| x == "--disable-readline");
+    repl.command_context.set_opt_level(&options.opt).ok();
 
     let mut editor = Editor::<()>::new();
     let mut opt_history_file = None;
-    let config_dir = dirs::config_dir().map(|h| h.join("evcxr"));
+    let config_dir = evcxr::config_dir();
     if let Some(config_dir) = &config_dir {
         fs::create_dir_all(config_dir).ok();
         let history_file = config_dir.join("history.txt");
@@ -150,7 +177,7 @@ fn main() {
     }
     loop {
         let prompt = format!("{}", PROMPT.yellow());
-        let readline = if disable_readline {
+        let readline = if options.disable_readline {
             readline_direct(&prompt)
         } else {
             editor.readline(&prompt)

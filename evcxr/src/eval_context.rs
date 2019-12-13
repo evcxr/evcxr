@@ -37,6 +37,7 @@ pub struct EvalContext {
     build_num: i32,
     pub(crate) debug_mode: bool,
     opt_level: String,
+    output_format: String,
     module: Module,
     state: ContextState,
     committed_state: ContextState,
@@ -130,6 +131,7 @@ impl EvalContext {
             build_num: 0,
             debug_mode: false,
             opt_level: "2".to_owned(),
+            output_format: "{:?}".to_owned(),
             state: ContextState::default(),
             committed_state: ContextState::default(),
             module,
@@ -247,7 +249,10 @@ impl EvalContext {
                             // If that fails, we try debug format.
                             CodeBlock::new()
                                 .generated(SEND_TEXT_PLAIN_DEF)
-                                .generated("evcxr_send_text_plain(&format!(\"{:?}\",\n")
+                                .generated(&format!(
+                                    "evcxr_send_text_plain(&format!(\"{}\",\n",
+                                    self.output_format
+                                ))
                                 .user_code(stmt_code)
                                 .generated("));"),
                         );
@@ -301,6 +306,13 @@ impl EvalContext {
         }
         self.opt_level = level.to_owned();
         Ok(())
+    }
+    pub fn output_format(&self) -> &str {
+        &self.output_format
+    }
+
+    pub fn set_output_format(&mut self, output_format: String) {
+        self.output_format = output_format;
     }
 
     pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
