@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// We currently use the json crate. Could probably rewrite to use serde-json and custom derive, but
-// only once https://github.com/rust-lang/rust/issues/45601 is fixed. Custom derive is currently a
-// problem for us.
+// We currently use the json crate. Could probably rewrite to use serde-json. At
+// the time this was originally written we couldn't due to
+// https://github.com/rust-lang/rust/issues/45601 - but that's now long fixed
+// and we've dropped support for old version for rustc prior to the fix.
 
 use failure::Error;
 use json;

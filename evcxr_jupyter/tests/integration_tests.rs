@@ -14,11 +14,11 @@
 
 use std::process;
 
-// Checks that our binary can be executed. Due to
-// https://github.com/rust-lang/rust/issues/45601 it's way too easy for us to
-// end up with a binary that can't be executed (without LD_LIBRARY PATH or
-// similar). Currently any use of custom derive, even in dev dependencies gives
-// us a bad binary.
+// Checks that our binary can be executed. This used to be an important thing to
+// check due to https://github.com/rust-lang/rust/issues/45601 which meant that
+// we could easily end up with a binary that couldn't be executed (without
+// LD_LIBRARY PATH or similar). That bug is now long fixed, but this test
+// perhaps still has some value.
 #[test]
 fn test_binary_execution() {
     let output = process::Command::new(

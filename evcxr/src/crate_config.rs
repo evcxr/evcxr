@@ -28,10 +28,10 @@ pub(crate) struct ExternalCrate {
 
 fn make_paths_absolute(config: String) -> Result<String, Error> {
     // Perhaps not the nicest way to do this. Using a toml parser would possibly
-    // be nicer, but when I checked the toml parser used custom derive and if we
-    // use any crate that uses custom derive, we end up with a binary that can't
-    // be run... at least on older compilers. This was just recently fixed, but
-    // I'm not yet ready to drop support for older versions of rustc.
+    // be nicer. At the time this was written that wasn't an option due to a
+    // compiler bug that prevented us from using any crate that used custom
+    // derive. That bug is long fixed though, so switching this to use a toml
+    // parser would be an option.
     lazy_static! {
         static ref PATH_RE: Regex = Regex::new("^(.*)path *= *\"([^\"]+)\"(.*)$").unwrap();
     }
