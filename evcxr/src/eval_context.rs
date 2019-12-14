@@ -125,7 +125,7 @@ impl EvalContext {
         let (stdout_sender, stdout_receiver) = mpsc::channel();
         let (stderr_sender, stderr_receiver) = mpsc::channel();
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
-        let context = EvalContext {
+        let mut context = EvalContext {
             _tmpdir: opt_tmpdir,
             build_num: 0,
             debug_mode: false,
@@ -143,6 +143,9 @@ impl EvalContext {
             stdout: stdout_receiver,
             stderr: stderr_receiver,
         };
+        if context.linker() == "lld" && context.eval("42").is_err() {
+            context.set_linker("system".to_owned());
+        }
         Ok((context, outputs))
     }
 

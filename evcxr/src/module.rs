@@ -97,23 +97,13 @@ impl Module {
         } else {
             "system".to_owned()
         };
-        let mut module = Module {
+        let module = Module {
             tmpdir,
             build_num: 0,
             time_passes: false,
             linker,
             sccache: None,
         };
-        // If we found a binary called lld on the path, make sure we can
-        // actually compile code and use it to link. If not, fall back to the
-        // system linker.
-        if module.linker == "lld"
-            && module
-                .compile(&CodeBlock::new().generated("pub fn user_code_0() {}"))
-                .is_err()
-        {
-            module.linker = "system".to_owned();
-        }
         Ok(module)
     }
 
