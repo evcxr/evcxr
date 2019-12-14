@@ -498,3 +498,12 @@ fn partially_inferred_variable_type() {
     eval!(e, let v : Vec<_> = (1..10).collect(););
     eval!(e, assert_eq!(v.len(), 9););
 }
+
+// Makes sure that we properly handle switching from code that doesn't need a
+// variable store to code that does.
+#[test]
+fn print_then_assign_variable() {
+    let mut e = new_context();
+    eval!(e, println!("Hello, world!"););
+    eval!(e, let x = 42;);
+}

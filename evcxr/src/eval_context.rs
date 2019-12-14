@@ -552,7 +552,7 @@ impl EvalContext {
                 .add_all(self.check_variable_statements())
                 .add_all(self.load_variable_statements());
         } else {
-            code = code.generated(") {");
+            code = code.generated("evcxr_variable_store: *mut u8) -> *mut u8 {");
         }
         if compilation_mode == CompilationMode::RunAndCatchPanics {
             if needs_variable_store {
@@ -604,6 +604,8 @@ impl EvalContext {
                         self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind),
                     );
             }
+            code = code.generated("evcxr_variable_store");
+        } else {
             code = code.generated("evcxr_variable_store");
         }
         code.generated("}")
