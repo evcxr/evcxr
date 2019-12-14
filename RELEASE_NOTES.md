@@ -1,3 +1,12 @@
+# Version 0.4.7
+* Fixed segfault if executing code without variables followed by code with
+  variables.
+* Automatically use lld if it's installed. Use :linker command to override.
+* Handle variables that contain type inference placeholders `_`.
+* Added support for overriding the config dir with the environment variable
+  EVCXR_CONFIG_DIR (thanks Thom Chiovoloni).
+* Run prelude.rs after init.evcxr if one exists (thanks Thom Chiovoloni).
+
 # Version 0.4.6
 * Fixes to work with rust 1.41
 * Improved handling of cargo workspaces.
