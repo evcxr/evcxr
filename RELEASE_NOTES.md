@@ -6,6 +6,7 @@
 * Added support for overriding the config dir with the environment variable
   EVCXR_CONFIG_DIR (thanks Thom Chiovoloni).
 * Run prelude.rs after init.evcxr if one exists (thanks Thom Chiovoloni).
+* Allow output format to be specified. e.g. :fmt {:#?} (thanks κeen)
 
 # Version 0.4.6
 * Fixes to work with rust 1.41
