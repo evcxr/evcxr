@@ -23,14 +23,19 @@ evcxr_jupyter --install
 
 ### Mac OS X
 
-install jupyter or jupyterlab (eg. via anaconda)
+* Install jupyter or jupyterlab (eg. via anaconda)
+* Install cmake. [These
+  instructions](https://stackoverflow.com/questions/30668601/installing-cmake-command-line-tools-on-a-mac)
+  might help.
 
 ```sh
 cargo install evcxr_jupyter
 evcxr_jupyter --install
 ```
 
-Alternative instructions if you want to use libzmq from your system:
+Alternative instructions if you want to use libzmq from your system. Note, if
+following these instructions, then you shouldn't need to install cmake.
+
 ```sh
 brew install zeromq pkg-config
 cargo install evcxr_jupyter --no-default-features
