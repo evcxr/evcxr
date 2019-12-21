@@ -6,13 +6,13 @@ matrix:
       rust: 1.36.0
       env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: linux
-      rust: beta
+      rust: nightly
       env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: osx
       rust: stable
       env: TARGET=x86_64-apple-darwin EXTRA_ARGS=""
     - os: windows
-      rust: nightly
+      rust: beta
       env: TARGET=x86_64-pc-windows-msvc EXTRA_ARGS=""
   fast_finish: true
 
