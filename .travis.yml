@@ -13,7 +13,7 @@ matrix:
       env: TARGET=x86_64-apple-darwin EXTRA_ARGS=""
     - os: windows
       rust: beta
-      env: TARGET=x86_64-pc-windows-msvc EXTRA_ARGS=""
+      env: TARGET=x86_64-pc-windows-msvc EXTRA_ARGS="--exclude=evcxr_jupyter"
   fast_finish: true
 
 install:
@@ -23,7 +23,6 @@ install:
 before_script:
   - rustup -V; rustc -V; cargo -V
   - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; then rm "C:/Program Files/Git/usr/bin/sh.exe"; fi
-  - echo PATH="$PATH"
 
 script:
   - travis_wait 30 cargo build --verbose --all $EXTRA_ARGS --all-features
