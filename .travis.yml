@@ -21,7 +21,8 @@ install:
   - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TARGET" != "x86_64-unknown-linux-gnu" ]]; then rustup target add $TARGET; fi
 
 before_script:
-    - rustup -V; rustc -V; cargo -V
+  - rustup -V; rustc -V; cargo -V
+  - if [[ "$TRAVIS_OS_NAME" == "window" ]]; then rm "C:/Program Files/Git/usr/bin/sh.exe"; fi
 
 script:
   - travis_wait 30 cargo build --verbose --all $EXTRA_ARGS --all-features
