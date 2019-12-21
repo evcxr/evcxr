@@ -3,13 +3,13 @@ language: rust
 matrix:
   include:
     - os: linux
-      rust: stable
+      rust: 1.36.0
       env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: linux
       rust: beta
       env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: osx
-      rust: nightly
+      rust: stable
       env: TARGET=x86_64-apple-darwin EXTRA_ARGS=""
     - os: windows
       rust: nightly

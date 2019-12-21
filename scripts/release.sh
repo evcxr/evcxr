@@ -20,7 +20,9 @@ perl -pi -e 's/^version = "[\d\.]+"/version = "'$VERSION'"/;\
   evcxr_repl/Cargo.toml \
   evcxr_jupyter/Cargo.toml
 cargo build
-cargo test --all
+cargo +stable test --all
+cargo +nightly test --all
+cargo +1.36.0-x86_64-unknown-linux-gnu test --all
 git commit -a -m "Bump vesion to $VERSION"
 cd evcxr
 cargo publish
