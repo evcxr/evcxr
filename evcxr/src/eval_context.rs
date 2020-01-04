@@ -526,11 +526,17 @@ impl EvalContext {
 
     fn wrap_user_code(
         &mut self,
-        user_code: CodeBlock,
+        mut user_code: CodeBlock,
         compilation_mode: CompilationMode,
     ) -> CodeBlock {
         let needs_variable_store =
             !self.state.variable_states.is_empty() || !self.stored_variable_states.is_empty();
+        if self.state.async_mode {
+            user_code = CodeBlock::new()
+                .generated("tokio::runtime::Runtime::new().unwrap().block_on(async {")
+                .add_all(user_code)
+                .generated("});")
+        }
         let mut code = CodeBlock::new();
         if needs_variable_store {
             code = code
@@ -792,6 +798,15 @@ impl EvalContext {
                     user_code.apply_fallback(fallback);
                     fixed_errors.insert("Fallback");
                 }
+                CodeOrigin::UserSupplied => {
+                    if error_code == "E0728" && !self.state.async_mode {
+                        self.state.async_mode = true;
+                        if !self.state.external_deps.contains_key("tokio") {
+                            self.add_dep("tokio", "\"0.2\"")?;
+                        }
+                        fixed_errors.insert("Enabled async mode");
+                    }
+                }
                 _ => {}
             }
         }
@@ -1040,6 +1055,7 @@ struct ContextState {
     // formatted slightly differently.
     extern_crate_stmts: HashMap<String, String>,
     variable_states: HashMap<String, VariableState>,
+    async_mode: bool,
 }
 
 fn replace_reserved_words_in_type(ty: &str) -> String {
