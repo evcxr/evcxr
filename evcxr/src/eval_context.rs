@@ -269,6 +269,7 @@ impl EvalContext {
             Err(error) => {
                 if let Error::ChildProcessTerminated(_) = error {
                     self.restart_child_process()?;
+                    self.commit_state();
                 } else {
                     self.state = self.committed_state.clone();
                 }
@@ -279,8 +280,7 @@ impl EvalContext {
 
         // Once, we reach here, our code has successfully executed, so we
         // conclude that variable changes are now applied.
-        self.stored_variable_states = self.state.variable_states.clone();
-        self.committed_state = self.state.clone();
+        self.commit_state();
 
         phases.phase_complete("Execution");
         outputs.phases = phases.phases;
@@ -400,6 +400,11 @@ impl EvalContext {
 
     pub(crate) fn last_compile_dir(&self) -> &Path {
         self.module.crate_dir()
+    }
+
+    fn commit_state(&mut self) {
+        self.stored_variable_states = self.state.variable_states.clone();
+        self.committed_state = self.state.clone();
     }
 
     fn dependency_lib_names(&self) -> Result<Vec<String>, Error> {

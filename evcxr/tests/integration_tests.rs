@@ -57,6 +57,12 @@ fn new_context() -> EvalContext {
     context
 }
 
+fn defined_item_names(eval_context: &EvalContext) -> Vec<&str> {
+    let mut defined_names = eval_context.defined_item_names().collect::<Vec<_>>();
+    defined_names.sort();
+    defined_names
+}
+
 fn variable_names_and_types(ctx: &EvalContext) -> Vec<(&str, &str)> {
     let mut var_names = ctx.variables_and_types().collect::<Vec<_>>();
     var_names.sort();
@@ -136,9 +142,7 @@ fn define_then_call_function() {
         }
     );
     eval!(e, assert_eq!(foo(), 42););
-    let mut defined_names = e.defined_item_names().collect::<Vec<_>>();
-    defined_names.sort();
-    assert_eq!(defined_names, vec!["bar", "foo"]);
+    assert_eq!(defined_item_names(&e), vec!["bar", "foo"]);
 }
 
 #[test]
@@ -172,6 +176,10 @@ fn function_panics_without_variable_preserving() {
     } else {
         panic!("Unexpected result: {:?}", result);
     }
+    assert_eq!(variable_names_and_types(&e), vec![]);
+    // Make sure that a compilation error doesn't bring the variables back from
+    // the dead.
+    assert!(e.eval("This will not compile").is_err());
     assert_eq!(variable_names_and_types(&e), vec![]);
 }
 
