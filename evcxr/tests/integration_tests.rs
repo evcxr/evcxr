@@ -90,7 +90,9 @@ fn save_and_restore_variables() {
                 println!("{:#?}", errors);
             }
             assert_eq!(errors.len(), 1);
-            assert_eq!(errors[0].code(), Some("E0384"));
+            if errors[0].code() != Some("E0594") && errors[0].code() != Some("E0384") {
+                panic!("Unexpected error {:?}", errors[0].code());
+            }
         }
         _ => unreachable!(),
     }
@@ -514,4 +516,28 @@ fn print_then_assign_variable() {
     let mut e = new_context();
     eval!(e, println!("Hello, world!"););
     eval!(e, let x = 42;);
+}
+
+#[test]
+fn question_mark_operator() {
+    let mut e = new_context();
+    eval!(e,
+        let owned = "owned".to_string();
+        let copy = 40;
+        let mut owned_mut = "owned_mut".to_string();
+        let mut copy_mut = 41;
+    );
+    eval!(e,
+        owned_mut.push_str("42");
+        copy_mut += 1;
+        std::fs::read_to_string("/does/not/exist")?;
+        owned_mut.push_str("------");
+        copy_mut += 10;
+    );
+    eval!(e,
+        assert_eq!(owned, "owned");
+        assert_eq!(owned_mut, "owned_mut42");
+        assert_eq!(copy, 40);
+        assert_eq!(copy_mut, 42);
+    );
 }

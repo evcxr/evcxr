@@ -176,7 +176,7 @@ impl EvalContext {
             }
         } else {
             for variable_state in self.state.variable_states.values_mut() {
-                variable_state.move_state = VariableMoveState::MovedIntoCatchUnwind;
+                variable_state.move_state = VariableMoveState::Available;
             }
         }
 
@@ -536,13 +536,18 @@ impl EvalContext {
     ) -> CodeBlock {
         let needs_variable_store =
             !self.state.variable_states.is_empty() || !self.stored_variable_states.is_empty();
-        if self.state.async_mode {
-            user_code = CodeBlock::new()
-                .generated("tokio::runtime::Runtime::new().unwrap().block_on(async {")
-                .add_all(user_code)
-                .generated("});")
-        }
         let mut code = CodeBlock::new();
+        if self.state.allow_question_mark {
+            code = code.generated(stringify!(
+                struct EvcxrUserCodeError {}
+                impl<T: std::fmt::Display> From<T> for EvcxrUserCodeError {
+                    fn from(error: T) -> Self {
+                        eprintln!("{}", error);
+                        EvcxrUserCodeError {}
+                    }
+                }
+            ));
+        }
         if needs_variable_store {
             code = code
                 .generated("mod evcxr_internal_runtime {")
@@ -565,8 +570,28 @@ impl EvalContext {
                 .generated("let evcxr_variable_store = unsafe {&mut *evcxr_variable_store};")
                 .add_all(self.check_variable_statements())
                 .add_all(self.load_variable_statements());
+            user_code = user_code
+                .add_all(self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind))
+                .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind));
         } else {
             code = code.generated("evcxr_variable_store: *mut u8) -> *mut u8 {");
+        }
+        if self.state.async_mode {
+            user_code = CodeBlock::new()
+                .generated("tokio::runtime::Runtime::new().unwrap().block_on(async {")
+                .add_all(user_code);
+            if self.state.allow_question_mark {
+                user_code = CodeBlock::new()
+                    .generated("let _ =")
+                    .add_all(user_code)
+                    .generated("Ok::<(), EvcxrUserCodeError>(())");
+            }
+            user_code = user_code.generated("});")
+        } else if self.state.allow_question_mark {
+            user_code = CodeBlock::new()
+                .generated("let _ = (|| -> Result<(), EvcxrUserCodeError> {")
+                .add_all(user_code)
+                .generated("Ok(())})();");
         }
         if compilation_mode == CompilationMode::RunAndCatchPanics {
             if needs_variable_store {
@@ -579,12 +604,6 @@ impl EvalContext {
                         "let mut evcxr_variable_store = evcxr_internal_runtime::VariableStore::new();",
                     )
                     .add_all(user_code)
-                    .add_all(
-                        self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind),
-                    )
-                    .add_all(
-                        self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind),
-                    )
                     // Return our local variable store from the closure to be merged back into the
                     // main variable store.
                     .generated("evcxr_variable_store")
@@ -609,19 +628,8 @@ impl EvalContext {
         }
         if needs_variable_store {
             code = code.add_all(self.store_variable_statements(&VariableMoveState::Available));
-            if compilation_mode != CompilationMode::RunAndCatchPanics {
-                code = code
-                    .add_all(
-                        self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind),
-                    )
-                    .add_all(
-                        self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind),
-                    );
-            }
-            code = code.generated("evcxr_variable_store");
-        } else {
-            code = code.generated("evcxr_variable_store");
         }
+        code = code.generated("evcxr_variable_store");
         code.generated("}")
     }
 
@@ -810,6 +818,9 @@ impl EvalContext {
                             self.add_dep("tokio", "\"0.2\"")?;
                         }
                         fixed_errors.insert("Enabled async mode");
+                    } else if error_code == "E0277" && !self.state.allow_question_mark {
+                        self.state.allow_question_mark = true;
+                        fixed_errors.insert("Allow question mark");
                     }
                 }
                 _ => {}
@@ -1061,6 +1072,7 @@ struct ContextState {
     extern_crate_stmts: HashMap<String, String>,
     variable_states: HashMap<String, VariableState>,
     async_mode: bool,
+    allow_question_mark: bool,
 }
 
 fn replace_reserved_words_in_type(ty: &str) -> String {
