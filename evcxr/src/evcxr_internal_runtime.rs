@@ -17,6 +17,7 @@
 // a submodule only so that constants can be shared.
 
 pub const VARIABLE_CHANGED_TYPE: &str = "EVCXR_VARIABLE_CHANGED_TYPE:";
+pub const USER_ERROR_OCCURRED: &str = "EVCXR_ERROR_OCCURRED";
 
 pub struct VariableStore {
     variables: std::collections::HashMap<String, Box<dyn std::any::Any + 'static>>,

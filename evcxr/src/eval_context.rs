@@ -543,6 +543,7 @@ impl EvalContext {
                 impl<T: std::fmt::Display> From<T> for EvcxrUserCodeError {
                     fn from(error: T) -> Self {
                         eprintln!("{}", error);
+                        println!("{}", evcxr_internal_runtime::USER_ERROR_OCCURRED);
                         EvcxrUserCodeError {}
                     }
                 }
@@ -663,6 +664,16 @@ impl EvalContext {
             }
             if line == PANIC_NOTIFICATION {
                 got_panic = true;
+            } else if line == evcxr_internal_runtime::USER_ERROR_OCCURRED {
+                // A question mark operator in user code triggered an early
+                // return. Any variables moved into the block in which the code
+                // was running, including any newly defined variables will have
+                // been lost (or possibly never even defined).
+                self.state
+                    .variable_states
+                    .retain(|_variable_name, variable_state| {
+                        variable_state.move_state != VariableMoveState::MovedIntoCatchUnwind
+                    });
             } else if line.starts_with(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE) {
                 let variable_name = &line[evcxr_internal_runtime::VARIABLE_CHANGED_TYPE.len()..];
                 lost_variables.push(variable_name.to_owned());
