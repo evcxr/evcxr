@@ -138,6 +138,18 @@ can speed things up quite a bit.
 * See [sccache](https://github.com/mozilla/sccache) for more details about
   sccache.
 
+## Using lld for linking
+
+The linker "lld" will be used automatically if detected. Installing it is
+recommended, since it's generally a good bit faster than the system linker. On
+Debian-based systems you might be able to install it with:
+
+```sh
+sudo apt install lld
+```
+
+You can check if it's being used when within evcxr by running `:linker`.
+
 ## Uninstall
 
 ```sh
