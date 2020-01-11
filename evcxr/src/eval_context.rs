@@ -534,8 +534,9 @@ impl EvalContext {
         mut user_code: CodeBlock,
         compilation_mode: CompilationMode,
     ) -> CodeBlock {
-        let needs_variable_store =
-            !self.state.variable_states.is_empty() || !self.stored_variable_states.is_empty();
+        let needs_variable_store = !self.state.variable_states.is_empty()
+            || !self.stored_variable_states.is_empty()
+            || self.state.async_mode;
         let mut code = CodeBlock::new();
         if self.state.allow_question_mark {
             code = code.generated(stringify!(
@@ -579,7 +580,13 @@ impl EvalContext {
         }
         if self.state.async_mode {
             user_code = CodeBlock::new()
-                .generated("tokio::runtime::Runtime::new().unwrap().block_on(async {")
+                .generated(stringify!(evcxr_variable_store
+                    .lazy_arc("evcxr_tokio_runtime", || std::sync::Mutex::new(
+                        tokio::runtime::Runtime::new().unwrap()
+                    ))
+                    .lock()
+                    .unwrap()))
+                .generated(".block_on(async {")
                 .add_all(user_code);
             if self.state.allow_question_mark {
                 user_code = CodeBlock::new()
