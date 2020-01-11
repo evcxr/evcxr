@@ -118,7 +118,7 @@ impl EvalContext {
             opt_tmpdir = Some(tmpdir);
         }
 
-        let module = Module::new(tmpdir_path.clone())?;
+        let module = Module::new(tmpdir_path)?;
 
         Self::apply_platform_specific_vars(&module, &mut subprocess_command);
 
@@ -245,7 +245,7 @@ impl EvalContext {
                                 .generated("(")
                                 .user_code(stmt_code)
                                 .generated(").evcxr_display();")
-                                .to_string(),
+                                .code_string(),
                             // If that fails, we try debug format.
                             CodeBlock::new()
                                 .generated(SEND_TEXT_PLAIN_DEF)
@@ -463,7 +463,7 @@ impl EvalContext {
                         // user to see messages like "cannot borrow immutable captured outer variable in
                         // an `FnOnce` closure `a` as mutable".
                         self.try_run_statements(
-                            user_code.clone(),
+                            user_code,
                             CompilationMode::NoCatchExpectError,
                             phases,
                         )?;

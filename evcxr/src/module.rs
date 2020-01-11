@@ -155,7 +155,7 @@ impl Module {
     }
 
     pub(crate) fn compile(&mut self, code_block: &CodeBlock) -> Result<SoFile, Error> {
-        write_file(&self.src_dir(), "lib.rs", &code_block.to_string())?;
+        write_file(&self.src_dir(), "lib.rs", &code_block.code_string())?;
 
         // Our compiler errors should all be in JSON format, but for errors from Cargo errors, we
         // need to add explicit matching for those errors that we expect we might see.

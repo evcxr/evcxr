@@ -135,7 +135,7 @@ impl CodeBlock {
         self
     }
 
-    pub(crate) fn to_string(&self) -> String {
+    pub(crate) fn code_string(&self) -> String {
         let mut output = String::new();
         for segment in &self.segments {
             output.push_str(&segment.code);
@@ -191,7 +191,7 @@ mod test {
             .user_code("l3")
             .add_all(CodeBlock::new().generated("l4"));
         code.pack_variable("v".to_owned(), "l5".to_owned());
-        assert_eq!(code.to_string(), "l1\nl2\nl3\nl4\nl5\n");
+        assert_eq!(code.code_string(), "l1\nl2\nl3\nl4\nl5\n");
         assert_eq!(code.segments.len(), 4);
         assert_eq!(
             code.segments

@@ -453,7 +453,7 @@ fn split_code_and_command(src: &str) -> Vec<String> {
             acc.push(l.to_owned());
         } else if let Some(last) = acc.pop() {
             if !last.starts_with(':') {
-                acc.push((last + "\n" + l).to_owned());
+                acc.push(last + "\n" + l);
             } else {
                 acc.push(last);
                 acc.push(l.to_owned());
