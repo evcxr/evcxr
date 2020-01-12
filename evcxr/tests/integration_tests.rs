@@ -552,3 +552,10 @@ fn question_mark_operator() {
         assert_eq!(copy_mut, 42);
     );
 }
+
+#[test]
+fn format() {
+    let mut e = new_context();
+    assert_eq!(eval!(e, format!("{:x}", 2)), text_plain("\"2\""));
+    assert_eq!(eval!(e, format!("{:2x}", 2)), text_plain("\" 2\""));
+}
