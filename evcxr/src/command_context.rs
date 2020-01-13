@@ -143,13 +143,16 @@ impl CommandContext {
                     bail!(":dep requires arguments")
                 };
                 lazy_static! {
-                    static ref DEP_RE: Regex = Regex::new("^([^= ]+) *= *(.+)$").unwrap();
+                    static ref DEP_RE: Regex = Regex::new("^([^= ]+) *(= *(.+))?$").unwrap();
                 }
                 if let Some(captures) = DEP_RE.captures(args) {
-                    self.eval_context.add_dep(&captures[1], &captures[2])?;
+                    self.eval_context.add_dep(
+                        &captures[1],
+                        &captures.get(3).map_or("\"*\"", |m| m.as_str()),
+                    )?;
                     Ok(EvalOutputs::new())
                 } else {
-                    bail!("Invalid :dep command. Expected: name = ...");
+                    bail!("Invalid :dep command. Expected: name = ... or just name");
                 }
             }
             ":last_compile_dir" => {
