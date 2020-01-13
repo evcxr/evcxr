@@ -12,5 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file exists so that we can give our binary a different name than our crate. Actual code is
-// in bin/evcxr.rs
+mod repl;
+mod scan;
+
+pub use repl::EvcxrRustylineHelper;
