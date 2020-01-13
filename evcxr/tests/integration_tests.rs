@@ -558,4 +558,13 @@ fn format() {
     let mut e = new_context();
     assert_eq!(eval!(e, format!("{:x}", 2)), text_plain("\"2\""));
     assert_eq!(eval!(e, format!("{:2x}", 2)), text_plain("\" 2\""));
+    assert_eq!(
+        eval!(e,
+            [1, 2, 3, 4, 5].iter()
+                .map(|v| format!("{:x}", v))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        text_plain("\"1,2,3,4,5\""),
+    );
 }
