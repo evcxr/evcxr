@@ -22,6 +22,8 @@ use std::io;
 use std::sync::mpsc;
 use structopt::StructOpt;
 
+use evcxr_repl::EvcxrRustylineHelper;
+
 const PROMPT: &str = ">> ";
 
 struct Repl {
@@ -177,8 +179,8 @@ fn main() {
     };
 
     repl.command_context.set_opt_level(&options.opt).ok();
-
-    let mut editor = Editor::<()>::new();
+    let mut editor = Editor::<EvcxrRustylineHelper>::new();
+    editor.set_helper(Some(EvcxrRustylineHelper::default()));
     let mut opt_history_file = None;
     let config_dir = evcxr::config_dir();
     if let Some(config_dir) = &config_dir {
@@ -192,7 +194,7 @@ fn main() {
         let readline = if options.disable_readline {
             readline_direct(&prompt)
         } else {
-            editor.readline(&prompt)
+            editor.readline(PROMPT)
         };
         match readline {
             Ok(line) => {
