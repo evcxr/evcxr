@@ -92,7 +92,7 @@ const CRATE_NAME: &str = "ctx";
 
 impl Module {
     pub(crate) fn new(tmpdir: PathBuf) -> Result<Module, Error> {
-        let linker = if which::which("lld").is_ok() {
+        let linker = if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
             "lld".to_owned()
         } else {
             "system".to_owned()
