@@ -29,10 +29,19 @@ struct Repl {
     ide_mode: bool,
 }
 
-fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, mut output: T) {
+fn send_output<T: io::Write + Send + 'static>(
+    channel: mpsc::Receiver<String>,
+    mut output: T,
+    color: Option<Color>,
+) {
     std::thread::spawn(move || {
         while let Ok(line) = channel.recv() {
-            if writeln!(output, "{}", line).is_err() {
+            let status = if let Some(color) = color {
+                writeln!(output, "{}", line.color(color))
+            } else {
+                writeln!(output, "{}", line)
+            };
+            if status.is_err() {
                 break;
             }
         }
@@ -42,8 +51,8 @@ fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, m
 impl Repl {
     fn new(ide_mode: bool) -> Result<Repl, Error> {
         let (command_context, outputs) = CommandContext::new()?;
-        send_output(outputs.stdout, io::stdout());
-        send_output(outputs.stderr, io::stderr());
+        send_output(outputs.stdout, io::stdout(), None);
+        send_output(outputs.stderr, io::stderr(), Some(Color::BrightRed));
         let mut repl = Repl {
             command_context,
             ide_mode,
