@@ -530,6 +530,10 @@ fn print_then_assign_variable() {
 #[test]
 fn question_mark_operator() {
     let mut e = new_context();
+    // Make sure question mark works without variables.
+    eval!(e, std::fs::read_to_string("/does/not/exist")?;);
+    assert!(e.set_error_format("x").is_err());
+    e.set_error_format("{:?}").unwrap();
     eval!(e,
         let owned = "owned".to_string();
         let copy = 40;
@@ -559,8 +563,10 @@ fn format() {
     assert_eq!(eval!(e, format!("{:x}", 2)), text_plain("\"2\""));
     assert_eq!(eval!(e, format!("{:2x}", 2)), text_plain("\" 2\""));
     assert_eq!(
-        eval!(e,
-            [1, 2, 3, 4, 5].iter()
+        eval!(
+            e,
+            [1, 2, 3, 4, 5]
+                .iter()
                 .map(|v| format!("{:x}", v))
                 .collect::<Vec<_>>()
                 .join(",")

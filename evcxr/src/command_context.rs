@@ -177,6 +177,16 @@ impl CommandContext {
                     self.eval_context.output_format()
                 ))
             }
+            ":efmt" => {
+                if let Some(f) = args {
+                    self.eval_context.set_error_format(f)?;
+                }
+                text_output(format!(
+                    "Error format: {} (errors must implement {})",
+                    self.eval_context.error_format(),
+                    self.eval_context.error_format_trait()
+                ))
+            }
             ":timing" => {
                 self.print_timings = !self.print_timings;
                 text_output(format!("Timing: {}", self.print_timings))
@@ -224,6 +234,7 @@ impl CommandContext {
                 ":vars             List bound variables and their types\n\
                  :opt [level]      Toggle/set optimization level\n\
                  :fmt [format]     Set output formatter (default: {:?}). \n\
+                 :efmt [format]    Set the formatter for errors returned by ?\n\
                  :explain          Print explanation of last error\n\
                  :clear            Clear all state, keeping compilation cache\n\
                  :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\

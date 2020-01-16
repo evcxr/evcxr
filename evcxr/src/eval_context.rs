@@ -47,7 +47,28 @@ pub struct EvalContext {
     pub preserve_vars_on_panic: bool,
     stdout_sender: mpsc::Sender<String>,
     stored_variable_states: HashMap<String, VariableState>,
+    error_fmt: &'static ErrorFormat,
 }
+
+struct ErrorFormat {
+    format_str: &'static str,
+    format_trait: &'static str,
+}
+
+static ERROR_FORMATS: &[ErrorFormat] = &[
+    ErrorFormat {
+        format_str: "{}",
+        format_trait: "std::fmt::Display",
+    },
+    ErrorFormat {
+        format_str: "{:?}",
+        format_trait: "std::fmt::Debug",
+    },
+    ErrorFormat {
+        format_str: "{:#?}",
+        format_trait: "std::fmt::Debug",
+    },
+];
 
 const SEND_TEXT_PLAIN_DEF: &str = stringify!(
     fn evcxr_send_text_plain(text: &str) {
@@ -138,6 +159,7 @@ impl EvalContext {
             preserve_vars_on_panic: false,
             stdout_sender,
             stored_variable_states: HashMap::new(),
+            error_fmt: &ERROR_FORMATS[0],
         };
         let outputs = EvalContextOutputs {
             stdout: stdout_receiver,
@@ -321,6 +343,31 @@ impl EvalContext {
 
     pub fn sccache(&self) -> bool {
         self.module.sccache()
+    }
+
+    pub fn set_error_format(&mut self, format_str: &str) -> Result<(), Error> {
+        for format in ERROR_FORMATS {
+            if format.format_str == format_str {
+                self.error_fmt = format;
+                return Ok(());
+            }
+        }
+        bail!(
+            "Unsupported error format string. Available options: {}",
+            ERROR_FORMATS
+                .iter()
+                .map(|f| f.format_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    pub fn error_format(&self) -> &str {
+        self.error_fmt.format_str
+    }
+
+    pub fn error_format_trait(&self) -> &str {
+        self.error_fmt.format_trait
     }
 
     pub fn set_linker(&mut self, linker: String) {
@@ -536,18 +583,22 @@ impl EvalContext {
     ) -> CodeBlock {
         let needs_variable_store = !self.state.variable_states.is_empty()
             || !self.stored_variable_states.is_empty()
-            || self.state.async_mode;
+            || self.state.async_mode
+            || self.state.allow_question_mark;
         let mut code = CodeBlock::new();
         if self.state.allow_question_mark {
-            code = code.generated(stringify!(
-                struct EvcxrUserCodeError {}
-                impl<T: std::fmt::Display> From<T> for EvcxrUserCodeError {
-                    fn from(error: T) -> Self {
+            code = code.generated(format!(
+                r#"
+                struct EvcxrUserCodeError {{}}
+                impl<T: {}> From<T> for EvcxrUserCodeError {{
+                    fn from(error: T) -> Self {{
                         eprintln!("{}", error);
-                        println!("{}", evcxr_internal_runtime::USER_ERROR_OCCURRED);
-                        EvcxrUserCodeError {}
-                    }
-                }
+                        println!("{{}}", evcxr_internal_runtime::USER_ERROR_OCCURRED);
+                        EvcxrUserCodeError {{}}
+                    }}
+                }}
+            "#,
+                self.error_fmt.format_trait, self.error_fmt.format_str
             ));
         }
         if needs_variable_store {
@@ -1079,7 +1130,7 @@ enum CompilationMode {
 
 /// State that is cloned then modified every time we try to compile some code. If compilation
 /// succeeds, we keep the modified state, if it fails, we revert to the old state.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 struct ContextState {
     items_by_name: HashMap<String, CodeBlock>,
     unnamed_items: Vec<CodeBlock>,
@@ -1091,6 +1142,21 @@ struct ContextState {
     variable_states: HashMap<String, VariableState>,
     async_mode: bool,
     allow_question_mark: bool,
+}
+
+impl ContextState {
+    fn default() -> ContextState {
+        ContextState {
+            items_by_name: HashMap::new(),
+            unnamed_items: vec![],
+            external_deps: HashMap::new(),
+            use_stmts: HashSet::new(),
+            extern_crate_stmts: HashMap::new(),
+            variable_states: HashMap::new(),
+            async_mode: false,
+            allow_question_mark: false,
+        }
+    }
 }
 
 fn replace_reserved_words_in_type(ty: &str) -> String {
