@@ -175,19 +175,15 @@ enum StrKind {
     /// quote.
     Normal,
     /// Raw string. Closed after we see a " followed by the right num of
-    /// backslashes,
+    /// hashes,
     RawStr { hashes: usize },
 }
 
 /// `quote_idx` should point at the byte index of the starting double-quote of a
 /// string.
 ///
-/// Returns Some(depth) where depth is how many #### the string has (e.g. how
-/// after seeing a closing \", do we need to think we're done), or None if
-/// something looks dodgy.
-///
-/// information that we should hopefully know whether or not the string closed,
-/// or None if it seems like an invalid string, in which case
+/// Returns the kind of string that starts at `quote_idx`, or None if we don't
+/// seem to have a valid string.
 fn check_raw_str(s: &str, quote_idx: usize) -> Option<StrKind> {
     use StrKind::*;
     debug_assert_eq!(s.as_bytes()[quote_idx], b'"');
@@ -250,8 +246,7 @@ fn eat_string(iter: &mut Peekable<CharIndices<'_>>, kind: StrKind) -> bool {
 
 /// Expects to be called after `iter` has *fully consumed* the initial `//`.
 ///
-/// Consumes the entire comment, including the `\n` and returns true, or returns
-/// false if we exhausted `iter` before finding a `\n`.
+/// Consumes the entire comment, including the `\n`.
 fn eat_comment_line<I: Iterator<Item = (usize, char)>>(iter: &mut I) {
     while let Some((_, c)) = iter.next() {
         if c == '\n' {
@@ -374,7 +369,7 @@ fn do_eat_char(input: &mut Peekable<CharIndices<'_>>) -> Option<EatCharRes> {
     }
 }
 
-/// This should be right called after `input` reads a `'`. See `do_eat_char` for
+/// This should be called right after `input` reads a `'`. See `do_eat_char` for
 /// the explanation of what it does, this wrapper just exists to ensure that
 /// function leaves `input` in a consistent place in cases other than "ate the
 /// character" and "hit end of string", by making sure it doesn't modify the
