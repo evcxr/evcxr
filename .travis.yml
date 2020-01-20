@@ -3,7 +3,7 @@ language: rust
 matrix:
   include:
     - os: linux
-      rust: 1.36.0
+      rust: 1.40.0
       env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: linux
       rust: nightly

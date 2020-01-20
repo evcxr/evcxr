@@ -1,6 +1,7 @@
 # Version 0.5.0
 * Supports async await using Tokio.
 * Question mark operator can now be used (errors are printed to stderr).
+* Now requires rustc >= 1.40.0
 
 # Version 0.4.7
 * Fixed segfault if executing code without variables followed by code with
