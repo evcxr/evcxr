@@ -1,9 +1,10 @@
 # Version 0.5.0
-* Supports async await using Tokio.
+* Supports async / await using Tokio as the executor.
 * Question mark operator can now be used (errors are printed to stderr).
 * Now requires rustc >= 1.40.0
 * REPL now support multiline input (thanks Thom Chiovoloni!)
-* Don't use lld on MacOS, it's broken (thanks Thom Chiovoloni)
+* Don't use lld on MacOS, it's broken (thanks Thom Chiovoloni for figuring this
+  out)
 
 # Version 0.4.7
 * Fixed segfault if executing code without variables followed by code with
