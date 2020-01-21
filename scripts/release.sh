@@ -22,7 +22,7 @@ perl -pi -e 's/^version = "[\d\.]+"/version = "'$VERSION'"/;\
 cargo build
 cargo +stable test --all
 cargo +nightly test --all
-cargo +1.36.0-x86_64-unknown-linux-gnu test --all
+cargo +1.40.0-x86_64-unknown-linux-gnu test --all
 git commit -a -m "Bump vesion to $VERSION"
 cd evcxr
 cargo publish
