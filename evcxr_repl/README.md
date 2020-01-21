@@ -30,8 +30,13 @@ evcxr
 
 * Storing references into variables that persist between compilations is not permitted.
 * Not yet any way to import macros from external crates.
-* Since each line is compiled as a separate crate, impls generally need to go on
-  the same line as the type they're for.
+
+## More documentation
+
+Some of the documentation for [Evcxr
+Jupyter](https://github.com/google/evcxr/tree/master/evcxr_jupyter) applies to
+the REPL as well. In particular, the later sections such as startup options,
+sccache integration and lld.
 
 ## Similar projects
 

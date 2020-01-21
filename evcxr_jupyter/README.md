@@ -140,9 +140,10 @@ can speed things up quite a bit.
 
 ## Using lld for linking
 
-The linker "lld" will be used automatically if detected. Installing it is
-recommended, since it's generally a good bit faster than the system linker. On
-Debian-based systems you might be able to install it with:
+The linker "lld" will be used automatically if detected, except on Mac OS, where
+it doesn't work. Installing it is recommended, since it's generally a good bit
+faster than the system linker. On Debian-based systems you might be able to
+install it with:
 
 ```sh
 sudo apt install lld
