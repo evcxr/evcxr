@@ -541,6 +541,7 @@ fn question_mark_operator() {
         let mut copy_mut = 41;
     );
     eval!(e,
+        use std::io::Result;
         owned_mut.push_str("42");
         copy_mut += 1;
         let copy = 42;

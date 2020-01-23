@@ -648,7 +648,7 @@ impl EvalContext {
             user_code = user_code.generated("});")
         } else if self.state.allow_question_mark {
             user_code = CodeBlock::new()
-                .generated("let _ = (|| -> Result<(), EvcxrUserCodeError> {")
+                .generated("let _ = (|| -> std::result::Result<(), EvcxrUserCodeError> {")
                 .add_all(user_code)
                 .generated("Ok(())})();");
         }
