@@ -151,6 +151,15 @@ sudo apt install lld
 
 You can check if it's being used when within evcxr by running `:linker`.
 
+## Installing from git head
+
+If there's a bugfix in git that you'd like to try out, you can install directly
+from git with the command:
+
+```sh
+cargo install --force --git https://github.com/google/evcxr.git evcxr_jupyter
+```
+
 ## Uninstall
 
 ```sh

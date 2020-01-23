@@ -38,6 +38,15 @@ Jupyter](https://github.com/google/evcxr/tree/master/evcxr_jupyter) applies to
 the REPL as well. In particular, the later sections such as startup options,
 sccache integration and lld.
 
+## Installing from git head
+
+If there's a bugfix in git that you'd like to try out, you can install directly
+from git with the command:
+
+```sh
+cargo install --force --git https://github.com/google/evcxr.git evcxr_repl
+```
+
 ## Similar projects
 
 * [cargo-eval](https://github.com/reitermarkus/cargo-eval) Not interactive, but
