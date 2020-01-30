@@ -21,6 +21,15 @@ cargo install evcxr_jupyter --no-default-features
 evcxr_jupyter --install
 ```
 
+Once installed, you should be able to start Juypter notebook with:
+
+```sh
+jupyter-notebook
+```
+
+Once it starts, it should open a new tab in your browser, or at least print a
+link for you to open. From this tab you can select File -> New Notebook -> Rust.
+
 ### Mac OS X
 
 * Install jupyter or jupyterlab (eg. via anaconda)
