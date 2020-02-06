@@ -575,3 +575,19 @@ fn format() {
         text_plain("\"1,2,3,4,5\""),
     );
 }
+
+// The final statement, if it doesn't end in a semicolon will be printed. Make
+// sure we don't try to print earlier statements just because they don't end in
+// semicolons.
+#[test]
+fn non_semi_statements() {
+    let mut e = new_context();
+    assert_eq!(
+        eval!(e,
+            for a in 1..5 {}
+            for b in 1..5 {}
+            42
+        ),
+        text_plain("42")
+    );
+}

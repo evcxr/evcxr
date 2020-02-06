@@ -204,7 +204,9 @@ impl EvalContext {
 
         let mut previous_item_name = None;
         let mut code_block = CodeBlock::new();
-        for stmt_code in statement_splitter::split_into_statements(code) {
+        let statements = statement_splitter::split_into_statements(code);
+        let num_statements = statements.len();
+        for (statement_index, stmt_code) in statements.into_iter().enumerate() {
             if let Ok(stmt) = parse_stmt_or_expr(stmt_code) {
                 if self.debug_mode {
                     println!("STMT: {:#?}", stmt);
@@ -261,23 +263,29 @@ impl EvalContext {
                         }
                     }
                     syn::Stmt::Expr(_) => {
-                        code_block = code_block.code_with_fallback(
-                            // First we try calling .evcxr_display().
-                            CodeBlock::new()
-                                .generated("(")
-                                .user_code(stmt_code)
-                                .generated(").evcxr_display();")
-                                .code_string(),
-                            // If that fails, we try debug format.
-                            CodeBlock::new()
-                                .generated(SEND_TEXT_PLAIN_DEF)
-                                .generated(&format!(
-                                    "evcxr_send_text_plain(&format!(\"{}\",\n",
-                                    self.output_format
-                                ))
-                                .user_code(stmt_code)
-                                .generated("));"),
-                        );
+                        if statement_index == num_statements - 1 {
+                            code_block = code_block.code_with_fallback(
+                                // First we try calling .evcxr_display().
+                                CodeBlock::new()
+                                    .generated("(")
+                                    .user_code(stmt_code)
+                                    .generated(").evcxr_display();")
+                                    .code_string(),
+                                // If that fails, we try debug format.
+                                CodeBlock::new()
+                                    .generated(SEND_TEXT_PLAIN_DEF)
+                                    .generated(&format!(
+                                        "evcxr_send_text_plain(&format!(\"{}\",\n",
+                                        self.output_format
+                                    ))
+                                    .user_code(stmt_code)
+                                    .generated("));"),
+                            );
+                        } else {
+                            // We got an expression, but it wasn't the last
+                            // statement, so don't try to print it.
+                            code_block = code_block.user_code(stmt_code);
+                        }
                     }
                 }
             } else {
@@ -858,13 +866,13 @@ impl EvalContext {
                             self.state.variable_states.remove(variable_name)
                         {
                             bail!(
-                            "Failed to determine type of variable `{}`. rustc suggested type \
+                                "Failed to determine type of variable `{}`. rustc suggested type \
                              {}, but that's private. Sometimes adding an extern crate will help \
                              rustc suggest the correct public type name, or you can give an \
                              explicit type.",
-                            variable_name,
-                            variable_state.type_name
-                        );
+                                variable_name,
+                                variable_state.type_name
+                            );
                         }
                     }
                 }
