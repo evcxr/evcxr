@@ -17,7 +17,7 @@ This project consists of several related crates.
 * [evcxr\_runtime](evcxr_runtime/README.md) - Functions and traits for
   interacting with Evcxr from libraries that users may use from Evcxr.
   
-If you think you'd like a REPL, I'd definitely recommend checking our the
+If you think you'd like a REPL, I'd definitely recommend checking out the
 Jupyter kernel. It's pretty much a REPL experience, but in a web browser.
 
 To see what it can do, it's probably best to start with a [tour of the Jupyter
