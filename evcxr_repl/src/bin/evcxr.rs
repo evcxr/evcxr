@@ -92,7 +92,7 @@ impl Repl {
         };
 
         if self.ide_mode {
-            let success_marker = if success { "\x01" } else { "\x02" };
+            let success_marker = if success { "\u{0091}" } else { "\u{0092}" };
             print!("{}", success_marker);
         }
     }
@@ -168,6 +168,11 @@ fn main() {
     evcxr::runtime_hook();
 
     let options = Options::from_args();
+
+    if options.disable_readline {
+        #[cfg(windows)]
+        colored::control::set_virtual_terminal(true).ok();
+    }
 
     println!("Welcome to evcxr. For help, type :help");
     let mut repl = match Repl::new(options.ide_mode) {
