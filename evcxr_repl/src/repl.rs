@@ -17,7 +17,7 @@ use colored::*;
 use rustyline::{
     completion::Completer,
     error::ReadlineError,
-    highlight::Highlighter,
+    highlight::{Highlighter, MatchingBracketHighlighter, PromptInfo},
     hint::Hinter,
     validate::{ValidationContext, ValidationResult, Validator},
     Helper,
@@ -26,11 +26,19 @@ use std::borrow::Cow;
 
 pub struct EvcxrRustylineHelper {
     _priv: (),
+    highlighter: MatchingBracketHighlighter,
+    colored_prompt: String,
+    continuation_prompt: String,
 }
 
 impl Default for EvcxrRustylineHelper {
     fn default() -> Self {
-        Self { _priv: () }
+        Self {
+            _priv: (),
+            highlighter: MatchingBracketHighlighter::new(),
+            colored_prompt: String::from(">> "),
+            continuation_prompt: String::from(".. "),
+        }
     }
 }
 
@@ -46,9 +54,33 @@ impl Highlighter for EvcxrRustylineHelper {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        _default: bool,
+        info: PromptInfo<'_>,
     ) -> Cow<'b, str> {
-        prompt.yellow().to_string().into()
+        if info.default() {
+            if info.line_no() > 0 {
+                self.continuation_prompt.yellow().to_string().into()
+            } else {
+                self.colored_prompt.yellow().to_string().into()
+            }
+        } else {
+            prompt.into()
+        }
+    }
+
+    fn has_continuation_prompt(&self) -> bool {
+        true
+    }
+
+    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+        hint.blue().to_string().into()
+    }
+
+    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
+        self.highlighter.highlight(line, pos)
+    }
+
+    fn highlight_char(&self, line: &str, pos: usize) -> bool {
+        self.highlighter.highlight_char(line, pos)
     }
 }
 
