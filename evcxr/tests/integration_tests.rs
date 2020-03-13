@@ -592,3 +592,13 @@ fn non_semi_statements() {
         text_plain("42")
     );
 }
+
+#[test]
+fn partial_destructuring() {
+    let mut e = new_context();
+    eval!(e,
+        let _ = 1;
+        let (x, ..) = (42, 43, 44);
+    );
+    assert_eq!(eval!(e, x), text_plain("42"));
+}

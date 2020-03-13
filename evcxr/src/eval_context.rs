@@ -925,9 +925,7 @@ impl EvalContext {
                     self.record_new_locals(member, None);
                 }
             }
-            x => {
-                println!("Unhandled pat kind: {:?}", x);
-            }
+            _ => {}
         }
     }
 
