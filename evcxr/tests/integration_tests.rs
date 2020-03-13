@@ -196,6 +196,7 @@ fn function_panics_without_variable_preserving() {
 
 // Also tests multiple item definitions in the one compilation unit.
 #[test]
+#[ignore] // TODO: Restore this test once Rust issue #69798 is resolved.
 fn tls_implementing_drop() {
     let mut e = new_context();
     eval!(e, pub struct Foo {}
