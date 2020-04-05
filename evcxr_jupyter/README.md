@@ -6,7 +6,7 @@ A [Jupyter](https://jupyter.org/) Kernel for the Rust programming language.
 
 ## Installation
 
-### Linux (Debian/Ubuntu)
+### Linux (Debian/Ubuntu/ArchLinux)
 
 ```sh
 sudo apt install jupyter-notebook
@@ -20,6 +20,9 @@ sudo apt install libzmq3-dev jupyter-notebook
 cargo install evcxr_jupyter --no-default-features
 evcxr_jupyter --install
 ```
+
+For ArchLinux, a package is available in
+[AUR](https://aur.archlinux.org/packages/evcxr_jupyter/).
 
 Once installed, you should be able to start Juypter notebook with:
 
