@@ -52,6 +52,7 @@ fn send_output<T: io::Write + Send + 'static>(
 
 impl Repl {
     fn new(ide_mode: bool) -> Result<Repl, Error> {
+        let _ret = control::set_virtual_terminal(true);
         let (command_context, outputs) = CommandContext::new()?;
         send_output(outputs.stdout, io::stdout(), None);
         send_output(outputs.stderr, io::stderr(), Some(Color::BrightRed));
