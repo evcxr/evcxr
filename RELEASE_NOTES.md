@@ -1,3 +1,6 @@
+# Version 0.5.1
+* Fixed colored text outputs on Windows. Thanks Mirko and Dmitry!
+
 # Version 0.5.0
 * Supports async / await using Tokio as the executor.
 * Question mark operator can now be used (errors are printed to stderr).
