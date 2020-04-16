@@ -52,9 +52,6 @@ fn send_output<T: io::Write + Send + 'static>(
 
 impl Repl {
     fn new(ide_mode: bool) -> Result<Repl, Error> {
-        #[cfg(windows)]
-        let _ret = control::set_virtual_terminal(true);
-
         let (command_context, outputs) = CommandContext::new()?;
         send_output(outputs.stdout, io::stdout(), None);
         send_output(outputs.stderr, io::stderr(), Some(Color::BrightRed));
@@ -172,10 +169,8 @@ fn main() {
 
     let options = Options::from_args();
 
-    if options.disable_readline {
-        #[cfg(windows)]
-        colored::control::set_virtual_terminal(true).ok();
-    }
+    #[cfg(windows)]
+    colored::control::set_virtual_terminal(true).ok();
 
     println!("Welcome to evcxr. For help, type :help");
     let mut repl = match Repl::new(options.ide_mode) {
