@@ -169,10 +169,8 @@ fn main() {
 
     let options = Options::from_args();
 
-    if options.disable_readline {
-        #[cfg(windows)]
-        colored::control::set_virtual_terminal(true).ok();
-    }
+    #[cfg(windows)]
+    colored::control::set_virtual_terminal(true).ok();
 
     println!("Welcome to evcxr. For help, type :help");
     let mut repl = match Repl::new(options.ide_mode) {
