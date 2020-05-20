@@ -233,7 +233,21 @@ impl EvalContext {
                             .extern_crate_stmts
                             .insert(crate_name, stmt_code.to_owned());
                     }
-                    syn::Stmt::Item(syn::Item::Macro(_)) | syn::Stmt::Semi(..) => {
+                    syn::Stmt::Item(syn::Item::Macro(item_macro)) => {
+                        // AFAICT this is always an invocation of macro_rules,
+                        // which means an item is being defined. Invocations of
+                        // macros seem to show up as syn::Expr::Macro.
+                        if let Some(ident) = &item_macro.ident {
+                            let item_block = CodeBlock::new().user_code(stmt_code);
+                            self
+                                .state
+                                .items_by_name
+                                .insert(ident.to_string(), item_block);
+                        } else {
+                            code_block = code_block.user_code(stmt_code);
+                        }
+                    }
+                    syn::Stmt::Semi(..) => {
                         code_block = code_block.user_code(stmt_code);
                     }
                     syn::Stmt::Item(syn::Item::Use(..)) => {

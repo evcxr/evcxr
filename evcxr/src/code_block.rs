@@ -87,7 +87,7 @@ impl CodeBlock {
     pub(crate) fn modify<F: FnOnce(CodeBlock) -> CodeBlock>(&mut self, f: F) {
         let mut block = std::mem::replace(self, CodeBlock::new());
         block = f(block);
-        std::mem::replace(self, block);
+        *self = block;
     }
 
     pub(crate) fn is_empty(&self) -> bool {
