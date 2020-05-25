@@ -21,6 +21,7 @@ use crate::item;
 use crate::module::{Module, SoFile};
 use crate::runtime;
 use crate::statement_splitter;
+use crates_io_api::SyncClient;
 use regex::Regex;
 use std;
 use std::collections::{HashMap, HashSet};
@@ -219,12 +220,22 @@ impl EvalContext {
                     syn::Stmt::Item(syn::Item::ExternCrate(syn::ItemExternCrate {
                         ident, ..
                     })) => {
-                        let crate_name = ident.to_string();
+                        let mut crate_name = ident.to_string();
                         if !self.dependency_lib_names()?.contains(&crate_name) {
                             self.state
                                 .external_deps
                                 .entry(crate_name.clone())
                                 .or_insert_with(|| {
+                                    // For RFC0940
+                                    if crate_name.contains("_") {
+                                        let crates_client = SyncClient
+                                            ::new("evcxr", std::time::Duration::from_millis(500)).unwrap();
+                                        let with_hyphen = crate_name.replace("_", "-");
+                                        if let Ok(krate) = crates_client.get_crate(&with_hyphen) {
+                                            crate_name = krate.versions[0].crate_name.clone();
+                                        }
+                                    }
+
                                     ExternalCrate::new(crate_name.clone(), "\"*\"".to_owned())
                                         .unwrap()
                                 });

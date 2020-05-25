@@ -26,6 +26,7 @@ libloading = "0.5.2"
 backtrace = "0.3.35"
 dirs = "2.0.2"
 which = "2.0.1"
+crates_io_api = "0.6"
 
 [target.'cfg(unix)'.dependencies]
 sig = "1.0.0"
