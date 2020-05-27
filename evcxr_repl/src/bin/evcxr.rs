@@ -16,7 +16,7 @@ use evcxr;
 
 use colored::*;
 use evcxr::{CommandContext, CompilationError, Error};
-use rustyline::{error::ReadlineError, Editor};
+use rustyline::{error::ReadlineError, Editor, KeyPress, Cmd, Movement, Word, At};
 use std::fs;
 use std::io;
 use std::sync::mpsc;
@@ -183,6 +183,8 @@ fn main() {
 
     repl.command_context.set_opt_level(&options.opt).ok();
     let mut editor = Editor::<EvcxrRustylineHelper>::new();
+    editor.bind_sequence(KeyPress::ControlLeft, Cmd::Move(Movement::BackwardWord(1, Word::Big)));
+    editor.bind_sequence(KeyPress::ControlRight, Cmd::Move(Movement::ForwardWord(1, At::AfterEnd, Word::Big)));
     editor.set_helper(Some(EvcxrRustylineHelper::default()));
     let mut opt_history_file = None;
     let config_dir = evcxr::config_dir();
