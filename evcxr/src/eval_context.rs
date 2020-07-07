@@ -239,8 +239,7 @@ impl EvalContext {
                         // macros seem to show up as syn::Expr::Macro.
                         if let Some(ident) = &item_macro.ident {
                             let item_block = CodeBlock::new().user_code(stmt_code);
-                            self
-                                .state
+                            self.state
                                 .items_by_name
                                 .insert(ident.to_string(), item_block);
                         } else {
@@ -815,17 +814,13 @@ impl EvalContext {
         user_code: &mut CodeBlock,
         fixed_errors: &mut HashSet<&'static str>,
     ) -> Result<(), Error> {
-        let error_code = match error.code() {
-            Some(c) => c,
-            _ => return Ok(()),
-        };
         lazy_static! {
             static ref DISALLOWED_TYPES: Regex = Regex::new("(impl .*|[.*@])").unwrap();
         }
         for code_origin in &error.code_origins {
             match code_origin {
                 CodeOrigin::PackVariable { variable_name } => {
-                    if error_code == "E0308" {
+                    if error.code() == Some("E0308") {
                         // mismatched types
                         if let Some(mut actual_type) = error.get_actual_type() {
                             // If the user hasn't given enough information for the compiler to
@@ -853,9 +848,9 @@ impl EvalContext {
                                 .type_name = actual_type;
                             fixed_errors.insert("Variable types");
                         } else {
-                            bail!("Got error {} but failed to parse actual type", error_code);
+                            bail!("Got error E0308 but failed to parse actual type");
                         }
-                    } else if error_code == "E0382" {
+                    } else if error.code() == Some("E0382") {
                         // Use of moved value.
                         let old_move_state = std::mem::replace(
                             &mut self
@@ -871,11 +866,11 @@ impl EvalContext {
                             self.state.variable_states.remove(variable_name);
                         }
                         fixed_errors.insert("Captured value");
-                    } else if error_code == "E0425" {
+                    } else if error.code() == Some("E0425") {
                         // cannot find value in scope.
                         self.state.variable_states.remove(variable_name);
                         fixed_errors.insert("Variable moved");
-                    } else if error_code == "E0603" {
+                    } else if error.code() == Some("E0603") {
                         if let Some(variable_state) =
                             self.state.variable_states.remove(variable_name)
                         {
@@ -888,10 +883,17 @@ impl EvalContext {
                                 variable_state.type_name
                             );
                         }
+                    } else if error.code().is_none() {
+                        bail!(
+                            "The variable `{}` has a type that can't be persisted. You can try \
+                            wrapping your code in braces so that the variable goes out of scope \
+                            before the end of the code to be executed.",
+                            variable_name
+                        );
                     }
                 }
                 CodeOrigin::AssertCopyType { variable_name } => {
-                    if error_code == "E0277" {
+                    if error.code() == Some("E0277") {
                         if let Some(state) = self.state.variable_states.get_mut(variable_name) {
                             state.is_copy_type = false;
                             fixed_errors.insert("Non-copy type");
@@ -903,13 +905,13 @@ impl EvalContext {
                     fixed_errors.insert("Fallback");
                 }
                 CodeOrigin::UserSupplied => {
-                    if error_code == "E0728" && !self.state.async_mode {
+                    if error.code() == Some("E0728") && !self.state.async_mode {
                         self.state.async_mode = true;
                         if !self.state.external_deps.contains_key("tokio") {
                             self.add_dep("tokio", "\"0.2\"")?;
                         }
                         fixed_errors.insert("Enabled async mode");
-                    } else if error_code == "E0277" && !self.state.allow_question_mark {
+                    } else if error.code() == Some("E0277") && !self.state.allow_question_mark {
                         self.state.allow_question_mark = true;
                         fixed_errors.insert("Allow question mark");
                     }

@@ -16,7 +16,7 @@ use evcxr;
 
 use colored::*;
 use evcxr::{CommandContext, CompilationError, Error};
-use rustyline::{error::ReadlineError, Editor, KeyPress, Cmd, Movement, Word, At};
+use rustyline::{error::ReadlineError, At, Cmd, Editor, KeyPress, Movement, Word};
 use std::fs;
 use std::io;
 use std::sync::mpsc;
@@ -127,7 +127,7 @@ impl Repl {
             } else {
                 println!(
                     "A compilation error was found in code we generated.\n\
-                     Ideally this should't happen. Type :last_error_json to see details.\n{}",
+                     Ideally this shouldn't happen. Type :last_error_json to see details.\n{}",
                     error.rendered()
                 );
             }
@@ -183,8 +183,14 @@ fn main() {
 
     repl.command_context.set_opt_level(&options.opt).ok();
     let mut editor = Editor::<EvcxrRustylineHelper>::new();
-    editor.bind_sequence(KeyPress::ControlLeft, Cmd::Move(Movement::BackwardWord(1, Word::Big)));
-    editor.bind_sequence(KeyPress::ControlRight, Cmd::Move(Movement::ForwardWord(1, At::AfterEnd, Word::Big)));
+    editor.bind_sequence(
+        KeyPress::ControlLeft,
+        Cmd::Move(Movement::BackwardWord(1, Word::Big)),
+    );
+    editor.bind_sequence(
+        KeyPress::ControlRight,
+        Cmd::Move(Movement::ForwardWord(1, At::AfterEnd, Word::Big)),
+    );
     editor.set_helper(Some(EvcxrRustylineHelper::default()));
     let mut opt_history_file = None;
     let config_dir = evcxr::config_dir();

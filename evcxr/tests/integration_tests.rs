@@ -606,6 +606,13 @@ fn partial_destructuring() {
 #[test]
 fn define_then_call_macro() {
     let mut e = new_context();
-    eval!(e, macro_rules! foo { ($a:expr) => { 40 + $a }; });
+    eval!(
+        e,
+        macro_rules! foo {
+            ($a:expr) => {
+                40 + $a
+            };
+        }
+    );
     assert_eq!(eval!(e, foo!(2)), text_plain("42"));
 }
