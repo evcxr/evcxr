@@ -16,6 +16,8 @@ context.eval("s.push_str(\" World\");")?;
 context.eval("println!(\"{}\", s);")?;
 ```
 
+You must call ```evcxr::runtime_hook()``` at the top of main, otherwise the library becomes a fork-bomb.
+
 I'll not go into too much detail here, since the purpose of this library is
 really to provide functionality to evcxr\_jupyter and evcxr\_repl. If you'd like
 to try using this crate for something else, drop me an email, or file an issue
