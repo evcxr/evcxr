@@ -27,5 +27,5 @@ backtrace = "0.3.35"
 dirs = "2.0.2"
 which = "2.0.1"
 
-[target.'cfg(unix)'.dependencies]
+[target.'cfg(all(unix,not(freebsd)))'.dependencies]
 sig = "1.0.0"
