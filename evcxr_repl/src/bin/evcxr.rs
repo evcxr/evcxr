@@ -105,13 +105,12 @@ impl Repl {
                 for spanned_message in error.spanned_messages() {
                     if let Some(span) = &spanned_message.span {
                         if source_lines.len() > 1 {
-                            // print the lines - for multi line source code
+                            // for multi line source code, print the lines
                             if last_span_lines != &spanned_message.lines {
                                 for line in &spanned_message.lines {
                                     println!("{}", line);
                                 }
                             }
-                            // last_span_lines = spanned_message.lines.clone();
                             last_span_lines = &spanned_message.lines;
                         } else {
                             let prompt_spaces : String = (0..PROMPT.len()).map(|_| " ").collect();
