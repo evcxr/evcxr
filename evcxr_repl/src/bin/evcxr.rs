@@ -82,7 +82,7 @@ impl Repl {
                 true
             }
             Err(evcxr::Error::CompilationErrors(errors)) => {
-                self.display_errors(errors);
+                self.display_errors(to_run, errors);
                 false
             }
             Err(err) => {
@@ -97,18 +97,27 @@ impl Repl {
         }
     }
 
-    fn display_errors(&mut self, errors: Vec<CompilationError>) {
-        for error in errors {
+    fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
+        let source_lines : Vec<&str> = source.lines().collect();
+        let mut last_span_lines : &Vec<String> = &vec![];
+        for error in &errors {
             if error.is_from_user_code() {
                 for spanned_message in error.spanned_messages() {
                     if let Some(span) = &spanned_message.span {
-                        for _ in 1..span.start_column + PROMPT.len() {
-                            print!(" ");
+                        if source_lines.len() > 1 {
+                            // for multi line source code, print the lines
+                            if last_span_lines != &spanned_message.lines {
+                                for line in &spanned_message.lines {
+                                    println!("{}", line);
+                                }
+                            }
+                            last_span_lines = &spanned_message.lines;
+                        } else {
+                            print!("{}", " ".repeat(PROMPT.len()));
                         }
-                        let mut carrots = String::new();
-                        for _ in span.start_column..span.end_column {
-                            carrots.push('^');
-                        }
+                        print!("{}", " ".repeat(span.start_column - 1));
+
+                        let carrots = "^".repeat(span.end_column - span.start_column);
                         print!("{}", carrots.bright_red());
                         println!(" {}", spanned_message.label.bright_blue());
                     } else {
