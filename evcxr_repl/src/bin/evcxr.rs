@@ -113,16 +113,11 @@ impl Repl {
                             }
                             last_span_lines = &spanned_message.lines;
                         } else {
-                            let prompt_spaces : String = (0..PROMPT.len()).map(|_| " ").collect();
-                            print!("{}", prompt_spaces);
+                            print!("{}", " ".repeat(PROMPT.len()));
                         }
-                        let spaces : String = (1..span.start_column).map(|_| " ").collect();
-                        print!("{}", spaces);
+                        print!("{}", " ".repeat(span.start_column - 1));
 
-                        let mut carrots = String::new();
-                        for _ in span.start_column..span.end_column {
-                            carrots.push('^');
-                        }
+                        let carrots = "^".repeat(span.end_column - span.start_column);
                         print!("{}", carrots.bright_red());
                         println!(" {}", spanned_message.label.bright_blue());
                     } else {
