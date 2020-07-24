@@ -53,16 +53,15 @@ impl Completer for EvcxrRustylineHelper {
         let (left, _) = line.split_at(pos);
         // remove the longest alphanumeric text before the cursor
         let new_pos = left.trim_end_matches(|c: char| c.is_alphanumeric()).len();
-        // search for the longest alphanumeric text before the cursor
         let (_, search_prefix) = left.split_at(new_pos);
 
-        // go through history and find all the matching 'words'
+        // search history and find all the matching 'words'
         let res: HashSet<_> = ctx.history()
             .iter()
             .flat_map(|h| h.split(|c:char| !c.is_alphanumeric()))
             .filter(|s| !s.is_empty() && s.starts_with(search_prefix))
             .collect();
-        // HashSet here is used to make them unique
+        // make them unique using HashSet
         let res : Vec<String> = res.iter()
             .map(|s| (*s).into())
             .collect();
