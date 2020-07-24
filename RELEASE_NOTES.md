@@ -1,3 +1,8 @@
+# Version 0.5.2
+* Works on FreeBSD. Thanks dmilith!
+* Multiline errors look much better in the REPL thanks to aminroosta!
+* Improved cursor navigation in REPL thanks to Ma27!
+
 # Version 0.5.1
 * Fixed colored text outputs on Windows. Thanks Mirko and Dmitry!
 
