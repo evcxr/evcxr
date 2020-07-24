@@ -365,7 +365,7 @@ checksum = "d9435d864e017c3c6afeac1654189b06cdb491cf2ff73dbf0d73b0f292f42ff8"
 
 [[package]]
 name = "evcxr"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "backtrace",
  "dirs",
@@ -392,7 +392,7 @@ dependencies = [
 
 [[package]]
 name = "evcxr_jupyter"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "chrono",
  "colored",
@@ -409,7 +409,7 @@ dependencies = [
 
 [[package]]
 name = "evcxr_repl"
-version = "0.5.1"
+version = "0.5.2"
 dependencies = [
  "colored",
  "evcxr",
