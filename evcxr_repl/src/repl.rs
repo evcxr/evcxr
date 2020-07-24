@@ -20,9 +20,11 @@ use rustyline::{
     highlight::Highlighter,
     hint::Hinter,
     validate::{ValidationContext, ValidationResult, Validator},
+    Context,
     Helper,
 };
 use std::borrow::Cow;
+use std::collections::HashSet;
 
 pub struct EvcxrRustylineHelper {
     _priv: (),
@@ -40,6 +42,33 @@ impl Hinter for EvcxrRustylineHelper {}
 
 impl Completer for EvcxrRustylineHelper {
     type Candidate = String;
+
+    fn complete(
+        &self,
+        line: &str,
+        pos: usize,
+        ctx: &Context<'_>,
+    ) -> rustyline::Result<(usize, Vec<String>)> {
+        // find the left side of cursor
+        let (left, _) = line.split_at(pos);
+        // remove the longest alphanumeric text before the cursor
+        let new_pos = left.trim_end_matches(|c: char| c.is_alphanumeric()).len();
+        // search for the longest alphanumeric text before the cursor
+        let (_, search_prefix) = left.split_at(new_pos);
+
+        // go through history and find all the matching 'words'
+        let res: HashSet<_> = ctx.history()
+            .iter()
+            .flat_map(|h| h.split(|c:char| !c.is_alphanumeric()))
+            .filter(|s| !s.is_empty() && s.starts_with(search_prefix))
+            .collect();
+        // HashSet here is used to make them unique
+        let res : Vec<String> = res.iter()
+            .map(|s| (*s).into())
+            .collect();
+
+        Ok((new_pos, res))
+    }
 }
 
 impl Highlighter for EvcxrRustylineHelper {
