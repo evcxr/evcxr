@@ -15,7 +15,7 @@
 #[macro_use]
 extern crate lazy_static;
 
-#[cfg(unix)]
+#[cfg(all(unix, not(target_os = "freebsd")))]
 #[macro_use]
 extern crate sig;
 
