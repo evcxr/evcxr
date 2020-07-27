@@ -16,7 +16,7 @@ use evcxr;
 
 use colored::*;
 use evcxr::{CommandContext, CompilationError, Error};
-use rustyline::{error::ReadlineError, At, Cmd, Editor, KeyPress, Movement, Word};
+use rustyline::{error::ReadlineError, At, Cmd, EditMode, Editor, KeyPress, Movement, Word};
 use std::fs;
 use std::io;
 use std::sync::mpsc;
@@ -171,6 +171,13 @@ struct Options {
     /// Optimization level (0, 1 or 2)
     #[structopt(long, default_value = "")]
     opt: String,
+    #[structopt(
+        long,
+        parse(try_from_str = parse_edit_mode),
+        possible_values = &["vi", "emacs"],
+        default_value = "emacs"
+     )]
+    edit_mode: rustyline::EditMode,
 }
 
 fn main() {
@@ -191,7 +198,14 @@ fn main() {
     };
 
     repl.command_context.set_opt_level(&options.opt).ok();
-    let mut editor = Editor::<EvcxrRustylineHelper>::new();
+    let config = match options.edit_mode {
+        EditMode::Vi => rustyline::Config::builder()
+            .edit_mode(EditMode::Vi)
+            .keyseq_timeout(0) // https://github.com/kkawakam/rustyline/issues/371
+            .build(),
+        _ => rustyline::Config::default(), // default edit_mode is emacs
+    };
+    let mut editor = Editor::<EvcxrRustylineHelper>::with_config(config);
     editor.bind_sequence(
         KeyPress::ControlLeft,
         Cmd::Move(Movement::BackwardWord(1, Word::Big)),
@@ -231,4 +245,13 @@ fn main() {
     if let Some(history_file) = &opt_history_file {
         editor.save_history(&history_file).ok();
     }
+}
+
+fn parse_edit_mode(src: &str) -> Result<EditMode, &str> {
+    let mode = match src {
+        "vi" => EditMode::Vi,
+        "emacs" => EditMode::Emacs,
+        _ => return Err("only 'vi' and 'emacs' are supported"),
+    };
+    Ok(mode)
 }
