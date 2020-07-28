@@ -1,3 +1,8 @@
+# Version 0.5.3
+* Fix for a crash in the REPL when certain multiline error were encountered.
+* REPL now supports `--edit-mode vi` thanks to aminroosta
+* REPL now has history-based tab completion thanks to aminroosta
+
 # Version 0.5.2
 * Works on FreeBSD. Thanks dmilith!
 * Multiline errors look much better in the REPL thanks to aminroosta!
