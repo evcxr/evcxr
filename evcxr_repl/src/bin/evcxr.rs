@@ -98,8 +98,8 @@ impl Repl {
     }
 
     fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
-        let source_lines : Vec<&str> = source.lines().collect();
-        let mut last_span_lines : &Vec<String> = &vec![];
+        let source_lines: Vec<&str> = source.lines().collect();
+        let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
             if error.is_from_user_code() {
                 for spanned_message in error.spanned_messages() {
@@ -117,7 +117,14 @@ impl Repl {
                         }
                         print!("{}", " ".repeat(span.start_column - 1));
 
-                        let carrots = "^".repeat(span.end_column - span.start_column);
+                        // considering spans can cover multile lines,
+                        // it could be that end_column is less than start_column.
+                        let span_diff = if span.start_column < span.end_column {
+                            span.end_column - span.start_column
+                        } else {
+                            span.start_column - span.end_column
+                        };
+                        let carrots = "^".repeat(span_diff);
                         print!("{}", carrots.bright_red());
                         println!(" {}", spanned_message.label.bright_blue());
                     } else {
