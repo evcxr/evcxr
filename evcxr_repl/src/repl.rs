@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use super::scan::{validate_source_fragment, FragmentValidity};
-use colored::*;
 use rustyline::{
     completion::Completer,
     error::ReadlineError,
@@ -23,7 +22,6 @@ use rustyline::{
     Context,
     Helper,
 };
-use std::borrow::Cow;
 use std::collections::HashSet;
 
 pub struct EvcxrRustylineHelper {
@@ -70,15 +68,7 @@ impl Completer for EvcxrRustylineHelper {
     }
 }
 
-impl Highlighter for EvcxrRustylineHelper {
-    fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
-        &'s self,
-        prompt: &'p str,
-        _default: bool,
-    ) -> Cow<'b, str> {
-        prompt.yellow().to_string().into()
-    }
-}
+impl Highlighter for EvcxrRustylineHelper {}
 
 impl Validator for EvcxrRustylineHelper {
     fn validate(&self, ctx: &mut ValidationContext<'_>) -> Result<ValidationResult, ReadlineError> {
