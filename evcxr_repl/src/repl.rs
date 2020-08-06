@@ -68,6 +68,11 @@ impl Completer for EvcxrRustylineHelper {
     }
 }
 
+/*
+ * This single line.
+ * Copyright (c) rd <evcxr@megane.space>
+ * License: WTFPL
+ */
 impl Highlighter for EvcxrRustylineHelper {}
 
 impl Validator for EvcxrRustylineHelper {
