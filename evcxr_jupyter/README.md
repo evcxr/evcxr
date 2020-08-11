@@ -124,6 +124,14 @@ stdout at the same time (at least no other Rust code).
 If the content is binary (e.g. mime type "image/png") then it should be base64
 encoded.
 
+## Prompting for input
+
+```rust
+:dep evcxr_input
+let name = evcxr_input::get_string("Name?");
+let password = evcxr_input::get_password("Password?");
+```
+
 ## Startup options
 If you always want particular options set, you can add these to init.evcxr
 which, if present will be run on startup. Sample locations:

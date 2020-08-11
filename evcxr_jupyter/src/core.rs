@@ -32,7 +32,7 @@ use zmq;
 #[derive(Clone)]
 pub(crate) struct Server {
     iopub: Arc<Mutex<Connection>>,
-    _stdin: Arc<Mutex<Connection>>,
+    stdin: Arc<Mutex<Connection>>,
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
     shutdown_requested_receiver: Arc<Mutex<mpsc::Receiver<()>>>,
     shutdown_requested_sender: Arc<Mutex<mpsc::Sender<()>>>,
@@ -70,7 +70,7 @@ impl Server {
         let server = Server {
             iopub,
             latest_execution_request: Arc::new(Mutex::new(None)),
-            _stdin: Arc::new(Mutex::new(stdin_socket)),
+            stdin: Arc::new(Mutex::new(stdin_socket)),
             shutdown_requested_receiver: Arc::new(Mutex::new(shutdown_requested_receiver)),
             shutdown_requested_sender: Arc::new(Mutex::new(shutdown_requested_sender)),
         };
@@ -165,10 +165,17 @@ impl Server {
                 })
                 .send(&mut *self.iopub.lock().unwrap())?;
             let mut has_error = false;
+            let mut callbacks = evcxr::EvalCallbacks {
+                input_reader: &|prompt, is_password| {
+                    self.request_input(&message, prompt, is_password)
+                        .unwrap_or_default()
+                },
+                ..evcxr::EvalCallbacks::default()
+            };
             for code in split_code_and_command(src) {
                 // stop execution after the first error
                 has_error = has_error
-                    || match context.execute(&code) {
+                    || match context.execute_with_callbacks(&code, &mut callbacks) {
                         Ok(output) => {
                             if !output.is_empty() {
                                 // Increase the odds that stdout will have been finished being sent. A
@@ -242,6 +249,31 @@ impl Server {
             };
             execution_reply_sender.send(reply)?;
         }
+    }
+
+    fn request_input(
+        &self,
+        current_request: &JupyterMessage,
+        prompt: &str,
+        password: bool,
+    ) -> Option<String> {
+        if current_request.get_content()["allow_stdin"].as_bool() != Some(true) {
+            return None;
+        }
+        let mut stdin = self.stdin.lock().unwrap();
+        let stdin_request = current_request
+            .new_reply()
+            .with_message_type("input_request")
+            .with_content(object! {
+                "prompt" => prompt,
+                "password" => password,
+            });
+        stdin_request.send(&mut *stdin).ok()?;
+
+        let input_response = JupyterMessage::read(&mut *stdin).ok()?;
+        input_response.get_content()["value"]
+            .as_str()
+            .map(|value| value.to_owned())
     }
 
     fn handle_shell(

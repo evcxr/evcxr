@@ -369,6 +369,7 @@ version = "0.5.3"
 dependencies = [
  "backtrace",
  "dirs",
+ "evcxr_input",
  "failure",
  "json",
  "lazy_static",
@@ -389,6 +390,12 @@ dependencies = [
  "evcxr_runtime",
  "image",
 ]
+
+[[package]]
+name = "evcxr_input"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "15ed7e9b5d7d7506798f5154e9e6390a08a0d4fff03835247a4f423041059a78"
 
 [[package]]
 name = "evcxr_jupyter"

@@ -97,6 +97,23 @@ pub struct EvalContextOutputs {
     pub stderr: mpsc::Receiver<String>,
 }
 
+//#[non_exhaustive]
+pub struct EvalCallbacks<'a> {
+    pub input_reader: &'a dyn Fn(&str, bool) -> String,
+}
+
+fn default_input_reader(_: &str, _: bool) -> String {
+    String::new()
+}
+
+impl<'a> Default for EvalCallbacks<'a> {
+    fn default() -> Self {
+        EvalCallbacks {
+            input_reader: &default_input_reader,
+        }
+    }
+}
+
 impl EvalContext {
     pub fn new() -> Result<(EvalContext, EvalContextOutputs), Error> {
         let current_exe = std::env::current_exe()?;
@@ -173,6 +190,15 @@ impl EvalContext {
 
     /// Evaluates the supplied Rust code.
     pub fn eval(&mut self, code: &str) -> Result<EvalOutputs, Error> {
+        self.eval_with_callbacks(code, &mut EvalCallbacks::default())
+    }
+
+    /// Evaluates the supplied Rust code.
+    pub fn eval_with_callbacks(
+        &mut self,
+        code: &str,
+        callbacks: &mut EvalCallbacks,
+    ) -> Result<EvalOutputs, Error> {
         fn parse_stmt_or_expr(code: &str) -> Result<syn::Stmt, ()> {
             match syn::parse_str::<syn::Stmt>(code) {
                 Ok(stmt) => Ok(stmt),
@@ -308,7 +334,7 @@ impl EvalContext {
             }
         }
 
-        let mut outputs = match self.run_statements(code_block, &mut phases) {
+        let mut outputs = match self.run_statements(code_block, &mut phases, callbacks) {
             Err(error) => {
                 if let Error::ChildProcessTerminated(_) = error {
                     self.restart_child_process()?;
@@ -492,6 +518,7 @@ impl EvalContext {
         &mut self,
         mut user_code: CodeBlock,
         phases: &mut PhaseDetailsBuilder,
+        callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
@@ -501,8 +528,12 @@ impl EvalContext {
         let mut remaining_retries = 5;
         loop {
             // Try to compile and run the code.
-            let result =
-                self.try_run_statements(user_code.clone(), self.compilation_mode(), phases);
+            let result = self.try_run_statements(
+                user_code.clone(),
+                self.compilation_mode(),
+                phases,
+                callbacks,
+            );
             match result {
                 Ok(execution_artifacts) => {
                     return Ok(execution_artifacts.output);
@@ -534,6 +565,7 @@ impl EvalContext {
                             user_code,
                             CompilationMode::NoCatchExpectError,
                             phases,
+                            callbacks,
                         )?;
                     }
                     return Err(Error::CompilationErrors(errors));
@@ -556,6 +588,7 @@ impl EvalContext {
         user_code: CodeBlock,
         compilation_mode: CompilationMode,
         phases: &mut PhaseDetailsBuilder,
+        callbacks: &mut EvalCallbacks,
     ) -> Result<ExecutionArtifacts, Error> {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
@@ -593,7 +626,7 @@ impl EvalContext {
         }
         phases.phase_complete("Final compile");
 
-        let output = self.run_and_capture_output(&so_file)?;
+        let output = self.run_and_capture_output(&so_file, callbacks)?;
         Ok(ExecutionArtifacts { output })
     }
 
@@ -717,7 +750,11 @@ impl EvalContext {
         format!("run_user_code_{}", self.build_num)
     }
 
-    fn run_and_capture_output(&mut self, so_file: &SoFile) -> Result<EvalOutputs, Error> {
+    fn run_and_capture_output(
+        &mut self,
+        so_file: &SoFile,
+        callbacks: &mut EvalCallbacks,
+    ) -> Result<EvalOutputs, Error> {
         let mut output = EvalOutputs::new();
         // TODO: We should probably send an OsString not a String. Otherwise
         // things won't work if the path isn't UTF-8 - apparently that's a thing
@@ -743,6 +780,11 @@ impl EvalContext {
             }
             if line == PANIC_NOTIFICATION {
                 got_panic = true;
+            } else if line.starts_with(evcxr_input::GET_CMD) {
+                let is_password = line.starts_with(evcxr_input::GET_CMD_PASSWORD);
+                let prompt = line.split(':').skip(1).next().unwrap_or_default();
+                self.child_process
+                    .send(&(callbacks.input_reader)(prompt, is_password))?;
             } else if line == evcxr_internal_runtime::USER_ERROR_OCCURRED {
                 // A question mark operator in user code triggered an early
                 // return. Any variables moved into the block in which the code

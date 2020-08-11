@@ -90,7 +90,7 @@ impl Runtime {
         Ok(())
     }
 
-    #[cfg(all(unix,not(target_os = "freebsd")))]
+    #[cfg(all(unix, not(target_os = "freebsd")))]
     pub fn install_crash_handlers(&self) {
         use backtrace::Backtrace;
         use sig::ffi::Sig;
@@ -113,7 +113,7 @@ impl Runtime {
         signal!(Sig::BUS, segfault_handler);
     }
 
-    #[cfg(not(all(unix,not(target_os = "freebsd"))))]
+    #[cfg(not(all(unix, not(target_os = "freebsd"))))]
     pub fn install_crash_handlers(&self) {}
 }
 

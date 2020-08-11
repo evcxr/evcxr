@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::errors::{CompilationError, Error};
-use crate::{EvalContext, EvalContextOutputs, EvalOutputs};
+use crate::{eval_context::EvalCallbacks, EvalContext, EvalContextOutputs, EvalOutputs};
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
@@ -39,6 +39,14 @@ impl CommandContext {
     }
 
     pub fn execute(&mut self, to_run: &str) -> Result<EvalOutputs, Error> {
+        self.execute_with_callbacks(to_run, &mut EvalCallbacks::default())
+    }
+
+    pub fn execute_with_callbacks(
+        &mut self,
+        to_run: &str,
+        callbacks: &mut EvalCallbacks,
+    ) -> Result<EvalOutputs, Error> {
         use regex::Regex;
         use std::time::Instant;
         lazy_static! {
@@ -62,7 +70,8 @@ impl CommandContext {
         let result = if to_run.is_empty() {
             Ok(EvalOutputs::new())
         } else {
-            self.eval_context.eval(&to_eval.join("\n"))
+            self.eval_context
+                .eval_with_callbacks(&to_eval.join("\n"), callbacks)
         };
         let duration = start.elapsed();
         match result {

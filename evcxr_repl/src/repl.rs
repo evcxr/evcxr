@@ -20,8 +20,7 @@ use rustyline::{
     highlight::Highlighter,
     hint::Hinter,
     validate::{ValidationContext, ValidationResult, Validator},
-    Context,
-    Helper,
+    Context, Helper,
 };
 use std::borrow::Cow;
 use std::collections::HashSet;
@@ -56,15 +55,14 @@ impl Completer for EvcxrRustylineHelper {
         let (_, search_prefix) = left.split_at(new_pos);
 
         // search history and find all the matching 'words'
-        let res: HashSet<_> = ctx.history()
+        let res: HashSet<_> = ctx
+            .history()
             .iter()
-            .flat_map(|h| h.split(|c:char| !c.is_alphanumeric()))
+            .flat_map(|h| h.split(|c: char| !c.is_alphanumeric()))
             .filter(|s| !s.is_empty() && s.starts_with(search_prefix))
             .collect();
         // make them unique using HashSet
-        let res : Vec<String> = res.iter()
-            .map(|s| (*s).into())
-            .collect();
+        let res: Vec<String> = res.iter().map(|s| (*s).into()).collect();
 
         Ok((new_pos, res))
     }

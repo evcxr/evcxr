@@ -9,5 +9,6 @@ members = [
 ]
 
 exclude = [
+  "evcxr_input",
   "runtimes"
 ]

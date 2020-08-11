@@ -143,7 +143,7 @@ impl JupyterMessage {
     }
 
     // Creates a reply to this message. This is a child with the message type determined
-    // automatically by replacing "request" with "reply". ZMQ identities are trasferred.
+    // automatically by replacing "request" with "reply". ZMQ identities are transferred.
     pub(crate) fn new_reply(&self) -> JupyterMessage {
         let mut reply = self.new_message(&self.message_type().replace("_request", "_reply"));
         reply.zmq_identities = self.zmq_identities.clone();
@@ -156,6 +156,11 @@ impl JupyterMessage {
 
     pub(crate) fn with_content(mut self, content: JsonValue) -> JupyterMessage {
         self.content = content;
+        self
+    }
+
+    pub(crate) fn with_message_type(mut self, msg_type: &str) -> JupyterMessage {
+        self.header["msg_type"] = JsonValue::String(msg_type.to_owned());
         self
     }
 
