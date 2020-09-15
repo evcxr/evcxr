@@ -196,6 +196,7 @@ impl CommandContext {
                     self.eval_context.error_format_trait()
                 ))
             }
+            ":quit" => std::process::exit(0),
             ":timing" => {
                 self.print_timings = !self.print_timings;
                 text_output(format!("Timing: {}", self.print_timings))
@@ -250,6 +251,7 @@ impl CommandContext {
                  :sccache [0|1]    Set whether to use sccache.\n\
                  :linker [linker]  Set/print linker. Supported: system, lld\n\
                  :version          Print Evcxr version\n\
+                 :quit             Quit evaluation and exit\n\
                  :preserve_vars_on_panic [0|1]  Try to keep vars on panic\n\n\
                  Mostly for development / debugging purposes:\n\
                  :last_compile_dir Print the directory in which we last compiled\n\
