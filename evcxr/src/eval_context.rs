@@ -15,11 +15,12 @@
 use crate::child_process::ChildProcess;
 use crate::code_block::{CodeBlock, CodeOrigin};
 use crate::crate_config::ExternalCrate;
-use crate::errors::{CompilationError, Error};
+use crate::errors::{bail, CompilationError, Error};
 use crate::evcxr_internal_runtime;
 use crate::item;
 use crate::module::{Module, SoFile};
 use crate::runtime;
+use crate::rust_analyzer::{RustAnalyzer, VariableInfo};
 use crate::statement_splitter;
 use regex::Regex;
 use std;
@@ -48,6 +49,7 @@ pub struct EvalContext {
     stdout_sender: mpsc::Sender<String>,
     stored_variable_states: HashMap<String, VariableState>,
     error_fmt: &'static ErrorFormat,
+    analyzer: RustAnalyzer,
 }
 
 struct ErrorFormat {
@@ -156,6 +158,7 @@ impl EvalContext {
             opt_tmpdir = Some(tmpdir);
         }
 
+        let analyzer = RustAnalyzer::new(&tmpdir_path)?;
         let module = Module::new(tmpdir_path)?;
 
         Self::apply_platform_specific_vars(&module, &mut subprocess_command);
@@ -177,6 +180,7 @@ impl EvalContext {
             stdout_sender,
             stored_variable_states: HashMap::new(),
             error_fmt: &ERROR_FORMATS[0],
+            analyzer,
         };
         let outputs = EvalContextOutputs {
             stdout: stdout_receiver,
@@ -520,12 +524,16 @@ impl EvalContext {
         phases: &mut PhaseDetailsBuilder,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
+        self.module.write_cargo_toml(self)?;
+        self.fix_variable_types(self.code_to_compile(user_code.clone(), self.compilation_mode()))?;
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
         // fix. The limit is really to prevent retrying indefinitely in case our "fixing" of things
         // somehow ends up flip-flopping back and forth. Not sure how that could happen, but best to
         // avoid any infinite loops.
         let mut remaining_retries = 5;
+        // TODO: Now that we have rust analyzer, we can probably with a bit of work obtain all the
+        // information we need without relying on compilation errors. See if we can get rid of this.
         loop {
             // Try to compile and run the code.
             let result = self.try_run_statements(
@@ -590,6 +598,71 @@ impl EvalContext {
         phases: &mut PhaseDetailsBuilder,
         callbacks: &mut EvalCallbacks,
     ) -> Result<ExecutionArtifacts, Error> {
+        let code = self.code_to_compile(user_code, compilation_mode);
+        let so_file = self.module.compile(&code)?;
+
+        if compilation_mode == CompilationMode::NoCatchExpectError {
+            // Uh-oh, caller was expecting an error, return OK and the caller can return the
+            // original error.
+            return Ok(ExecutionArtifacts {
+                output: EvalOutputs::new(),
+            });
+        }
+        phases.phase_complete("Final compile");
+
+        let output = self.run_and_capture_output(&so_file, callbacks)?;
+        Ok(ExecutionArtifacts { output })
+    }
+
+    fn fix_variable_types(&mut self, code: CodeBlock) -> Result<(), Error> {
+        self.analyzer.set_source(code.code_string())?;
+        for (
+            variable_name,
+            VariableInfo {
+                type_name,
+                is_mutable,
+            },
+        ) in self
+            .analyzer
+            .top_level_variables(&self.current_user_fn_name())
+        {
+            // For now, we need to look for and escape any reserved words. This should probably in
+            // theory be done in rust analyzer in a less hacky way.
+            let type_name = replace_reserved_words_in_type(&type_name);
+            // We don't want to try to store record evcxr_variable_store into itself, so we ignore
+            // it. We also ignore any variables for which we were given an invalid type. Variables
+            // with invalid types will then have their types determined by looking at compilation
+            // errors (although we may eventually drop the code that does that). At the time of
+            // writing, the test `int_array` fails if we don't reject invalid types here.
+            if variable_name == "evcxr_variable_store"
+                || !crate::rust_analyzer::is_type_valid(&type_name)
+            {
+                continue;
+            }
+            let preserve_vars_on_panic = self.preserve_vars_on_panic;
+            self.state
+                .variable_states
+                .entry(variable_name)
+                .or_insert_with(|| VariableState {
+                    type_name: String::new(),
+                    is_mut: is_mutable,
+                    // All new locals will initially be defined only inside our catch_unwind
+                    // block.
+                    move_state: VariableMoveState::MovedIntoCatchUnwind,
+                    // If we're preserving copy types, then assume this variable
+                    // is copy until we find out it's not.
+                    is_copy_type: preserve_vars_on_panic,
+                })
+                .type_name = type_name;
+        }
+        Ok(())
+    }
+
+    fn code_to_compile(
+        &self,
+        user_code: CodeBlock,
+        compilation_mode: CompilationMode,
+    ) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
             .add_all(self.get_imports());
@@ -614,24 +687,11 @@ impl EvalContext {
                 ))
                 .generated("mut x: *mut std::os::raw::c_void) -> *mut std::os::raw::c_void {x}");
         }
-        self.module.write_cargo_toml(self)?;
-        let so_file = self.module.compile(&code)?;
-
-        if compilation_mode == CompilationMode::NoCatchExpectError {
-            // Uh-oh, caller was expecting an error, return OK and the caller can return the
-            // original error.
-            return Ok(ExecutionArtifacts {
-                output: EvalOutputs::new(),
-            });
-        }
-        phases.phase_complete("Final compile");
-
-        let output = self.run_and_capture_output(&so_file, callbacks)?;
-        Ok(ExecutionArtifacts { output })
+        code
     }
 
     fn wrap_user_code(
-        &mut self,
+        &self,
         mut user_code: CodeBlock,
         compilation_mode: CompilationMode,
     ) -> CodeBlock {
@@ -863,18 +923,20 @@ impl EvalContext {
             match code_origin {
                 CodeOrigin::PackVariable { variable_name } => {
                     if error.code() == Some("E0308") {
-                        // mismatched types
+                        // Handle mismatched types. We might eventually remove this code entirely
+                        // now that we use Rust analyzer for type inference. Keeping it for now as
+                        // there's still a handful of tests that fail without this code..
                         if let Some(mut actual_type) = error.get_actual_type() {
                             // If the user hasn't given enough information for the compiler to
-                            // determine what type of integer or float, we default to i32 and f32
+                            // determine what type of integer or float, we default to i32 and f64
                             // respectively.
                             actual_type = actual_type
                                 .replace("{integer}", "i32")
-                                .replace("{float}", "f32");
+                                .replace("{float}", "f64");
                             if actual_type == "integer" {
                                 actual_type = "i32".to_string();
                             } else if actual_type == "float" {
-                                actual_type = "f32".to_string();
+                                actual_type = "f64".to_string();
                             }
                             if DISALLOWED_TYPES.is_match(&actual_type) {
                                 bail!(
@@ -925,12 +987,13 @@ impl EvalContext {
                                 variable_state.type_name
                             );
                         }
-                    } else if error.code().is_none() {
+                    } else if error.code() == Some("E0562") || error.code().is_none() {
                         bail!(
-                            "The variable `{}` has a type that can't be persisted. You can try \
-                            wrapping your code in braces so that the variable goes out of scope \
-                            before the end of the code to be executed.",
-                            variable_name
+                            "The variable `{}` has a type ({}) that can't be persisted. You can \
+                            try wrapping your code in braces so that the variable goes out of \
+                            scope before the end of the code to be executed.",
+                            variable_name,
+                            self.state.variable_states[variable_name].type_name
                         );
                     }
                 }
@@ -1015,7 +1078,7 @@ impl EvalContext {
         );
     }
 
-    fn store_variable_statements(&mut self, move_state: &VariableMoveState) -> CodeBlock {
+    fn store_variable_statements(&self, move_state: &VariableMoveState) -> CodeBlock {
         let mut statements = CodeBlock::new();
         for (var_name, var_state) in &self.state.variable_states {
             if var_state.move_state == *move_state {
@@ -1039,7 +1102,7 @@ impl EvalContext {
         statements
     }
 
-    fn check_variable_statements(&mut self) -> CodeBlock {
+    fn check_variable_statements(&self) -> CodeBlock {
         let mut statements = CodeBlock::new().generated("{let mut vars_ok = true;");
         for (var_name, var_state) in &self.stored_variable_states {
             statements = statements.generated(format!(
@@ -1051,7 +1114,7 @@ impl EvalContext {
     }
 
     // Returns code to load values from the variable store back into their variables.
-    fn load_variable_statements(&mut self) -> CodeBlock {
+    fn load_variable_statements(&self) -> CodeBlock {
         let mut statements = CodeBlock::new();
         for (var_name, var_state) in &self.stored_variable_states {
             let mutability = if var_state.is_mut { "mut " } else { "" };

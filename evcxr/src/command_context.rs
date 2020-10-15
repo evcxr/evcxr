@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{CompilationError, Error};
+use crate::errors::{bail, CompilationError, Error};
 use crate::{eval_context::EvalCallbacks, EvalContext, EvalContextOutputs, EvalOutputs};
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with

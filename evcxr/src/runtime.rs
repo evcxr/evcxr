@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Error;
+use crate::errors::{bail, Error};
 use libloading;
 use regex::Regex;
 use std::marker::PhantomData;

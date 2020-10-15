@@ -412,7 +412,19 @@ impl<'a> From<&'a str> for Error {
     }
 }
 
-macro_rules! bail {
-    ($e:expr) => {return Err($crate::Error::from($e))};
-    ($fmt:expr, $($arg:tt)+) => {return Err($crate::Error::from(format!($fmt, $($arg)+)))}
+impl<'a> From<anyhow::Error> for Error {
+    fn from(error: anyhow::Error) -> Self {
+        Error::Message(error.to_string())
+    }
 }
+
+macro_rules! _err {
+    ($e:expr) => {$crate::Error::from($e)};
+    ($fmt:expr, $($arg:tt)+) => {$crate::errors::Error::from(format!($fmt, $($arg)+))}
+}
+pub(crate) use _err as err;
+
+macro_rules! _bail {
+    ($($arg:tt)+) => {return Err($crate::errors::err!($($arg)+))}
+}
+pub(crate) use _bail as bail;

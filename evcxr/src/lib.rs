@@ -32,6 +32,7 @@ mod evcxr_internal_runtime;
 mod item;
 mod module;
 mod runtime;
+mod rust_analyzer;
 mod statement_splitter;
 
 pub use crate::command_context::CommandContext;

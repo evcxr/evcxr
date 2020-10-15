@@ -229,10 +229,7 @@ fn text_plain(content: &str) -> HashMap<String, String> {
 fn moved_value() {
     let mut e = new_context();
     eval!(e, let a = Some("foo".to_owned()););
-    assert_eq!(
-        variable_names_and_types(&e),
-        vec![("a", "std::option::Option<std::string::String>")]
-    );
+    assert_eq!(variable_names_and_types(&e), vec![("a", "Option<String>")]);
     assert_eq!(eval!(e, a.unwrap()), text_plain("\"foo\""));
     assert_eq!(variable_names_and_types(&e), vec![]);
 }
@@ -336,7 +333,7 @@ fn non_concrete_types() {
     eval!(e, let a = (42, 3.14););
     assert_eq!(
         e.variables_and_types().collect::<Vec<_>>(),
-        vec![("a", "(i32, f32)")]
+        vec![("a", "(i32, f64)")]
     );
 }
 
@@ -507,8 +504,8 @@ fn unnamable_type_impl_trait() {
         let v = foo();
     ));
     if let Err(Error::Message(message)) = result {
-        if !(message.starts_with("Sorry, the type")
-            && message.contains("cannot currently be persisted"))
+        if !(message.starts_with("The variable `v` has a type")
+            && message.contains("can't be persisted"))
         {
             panic!("Unexpected error: {:?}", message);
         }

@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use crate::code_block::CodeBlock;
-use crate::errors::{CompilationError, Error};
+use crate::errors::{bail, CompilationError, Error};
 use crate::EvalContext;
 use json;
 use regex::Regex;
