@@ -12,3 +12,7 @@ exclude = [
   "evcxr_input",
   "runtimes"
 ]
+
+[profile.dev]
+# The speedup from optimization significantly exceeds any slowdown in compilation.
+opt-level = 2
