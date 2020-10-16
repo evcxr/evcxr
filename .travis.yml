@@ -26,9 +26,8 @@ before_script:
   - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; then rm "C:/Program Files/Git/usr/bin/sh.exe"; fi
 
 script:
-  - travis_wait 40 cargo build --verbose --all $EXTRA_ARGS --all-features
-  - travis_wait 40 cargo test --verbose --all $EXTRA_ARGS
-  - cargo run -p print_performance_info
+  - travis_wait 40 cargo test --release --verbose --all $EXTRA_ARGS
+  - cargo run --release -p print_performance_info
 
 notifications:
   email:
