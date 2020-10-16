@@ -1,5 +1,6 @@
 # Version 0.6.0
 * Support for rustc 1.48.
+* Minimum rust version is now 1.46
 * Now requires rust-src component
   * rustup component add rust-src
 * Jupyter kernel now supports prompting for input.
