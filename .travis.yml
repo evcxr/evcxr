@@ -19,14 +19,15 @@ matrix:
 install:
   # prevent target re-add error from rustup
   - if [[ "$TRAVIS_OS_NAME" == "linux" && "$TARGET" != "x86_64-unknown-linux-gnu" ]]; then rustup target add $TARGET; fi
+  - rustup component add rust-src
 
 before_script:
   - rustup -V; rustc -V; cargo -V
   - if [[ "$TRAVIS_OS_NAME" == "windows" ]]; then rm "C:/Program Files/Git/usr/bin/sh.exe"; fi
 
 script:
-  - travis_wait 30 cargo build --verbose --all $EXTRA_ARGS --all-features
-  - travis_wait 30 cargo test --verbose --all $EXTRA_ARGS
+  - travis_wait 40 cargo build --verbose --all $EXTRA_ARGS --all-features
+  - travis_wait 40 cargo test --verbose --all $EXTRA_ARGS
   - cargo run -p print_performance_info
 
 notifications:
