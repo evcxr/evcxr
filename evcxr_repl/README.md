@@ -7,6 +7,7 @@ A REPL (Read-Eval-Print loop) for Rust.
 ## Installation and usage
 
 ```sh
+rustup component add rust-src
 cargo install evcxr_repl
 ```
 

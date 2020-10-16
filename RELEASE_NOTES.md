@@ -1,3 +1,10 @@
+# Version 0.6.0
+* Support for rustc 1.48.
+* Now requires rust-src component
+  * rustup component add rust-src
+* Jupyter kernel now supports prompting for input.
+* REPL now supports the quit command. Thanks komi
+
 # Version 0.5.3
 * Fix for a crash in the REPL when certain multiline error were encountered.
 * REPL now supports `--edit-mode vi` thanks to aminroosta

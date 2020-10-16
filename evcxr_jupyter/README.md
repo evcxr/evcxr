@@ -9,6 +9,7 @@ A [Jupyter](https://jupyter.org/) Kernel for the Rust programming language.
 ### Linux (Debian/Ubuntu)
 
 ```sh
+rustup component add rust-src
 sudo apt install jupyter-notebook
 cargo install evcxr_jupyter
 evcxr_jupyter --install
