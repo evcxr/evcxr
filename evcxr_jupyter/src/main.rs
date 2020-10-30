@@ -15,8 +15,8 @@
 use evcxr;
 #[macro_use]
 extern crate json;
-#[macro_use]
-extern crate failure;
+
+use anyhow::{anyhow, bail, Result};
 
 mod connection;
 mod control_file;
@@ -24,25 +24,21 @@ mod core;
 mod install;
 mod jupyter_message;
 
-use failure::Error;
-
-fn run(control_file_name: &str) -> Result<(), Error> {
+fn run(control_file_name: &str) -> Result<()> {
     let config = control_file::Control::parse_file(&control_file_name)?;
     let server = core::Server::start(&config)?;
     server.wait_for_shutdown();
     Ok(())
 }
 
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     evcxr::runtime_hook();
     let mut args = std::env::args();
     let bin = args.next().unwrap();
     if let Some(arg) = args.next() {
         match arg.as_str() {
             "--control_file" => {
-                return run(&args
-                    .next()
-                    .ok_or_else(|| format_err!("Missing control file"))?);
+                return run(&args.next().ok_or_else(|| anyhow!("Missing control file"))?);
             }
             "--install" => return install::install(),
             "--uninstall" => return install::uninstall(),

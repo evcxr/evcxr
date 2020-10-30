@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::code_block::{CodeBlock, CodeOrigin};
+use crate::code_block::{CodeBlock, CodeKind};
 use json::{self, JsonValue};
 use regex::Regex;
 use std;
@@ -23,7 +23,7 @@ use std::io;
 pub struct CompilationError {
     message: String,
     pub json: JsonValue,
-    pub(crate) code_origins: Vec<CodeOrigin>,
+    pub(crate) code_origins: Vec<CodeKind>,
     spanned_messages: Vec<SpannedMessage>,
 }
 
@@ -40,7 +40,7 @@ fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
     None
 }
 
-fn get_code_origins_for_span(span: &JsonValue, code_block: &CodeBlock) -> Vec<CodeOrigin> {
+fn get_code_origins_for_span<'a>(span: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a CodeKind> {
     let mut code_origins = Vec::new();
     if let Some(span) = spans_in_local_source(span) {
         if let (Some(line_start), Some(line_end)) =
@@ -54,7 +54,7 @@ fn get_code_origins_for_span(span: &JsonValue, code_block: &CodeBlock) -> Vec<Co
     code_origins
 }
 
-fn get_code_origins(json: &JsonValue, code_block: &CodeBlock) -> Vec<CodeOrigin> {
+fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a CodeKind> {
     let mut code_origins = Vec::new();
     if let JsonValue::Array(spans) = &json["spans"] {
         for span in spans {
@@ -76,8 +76,8 @@ impl CompilationError {
         if let JsonValue::Array(children) = &json["children"] {
             for child in children {
                 let child_origins = get_code_origins(child, code_block);
-                if !code_origins.contains(&CodeOrigin::UserSupplied)
-                    && child_origins.contains(&CodeOrigin::UserSupplied)
+                if !code_origins.iter().any(|k| k.is_user_supplied())
+                    && child_origins.iter().any(|k| k.is_user_supplied())
                 {
                     // Use the child instead of the top-level error.
                     user_error_json = Some(child.clone());
@@ -108,18 +108,18 @@ impl CompilationError {
             spanned_messages: build_spanned_messages(&json, code_block),
             message,
             json,
-            code_origins,
+            code_origins: code_origins.into_iter().cloned().collect(),
         })
     }
 
     /// Returns whether this error originated in code supplied by the user.
     pub fn is_from_user_code(&self) -> bool {
-        self.code_origins.contains(&CodeOrigin::UserSupplied)
+        self.code_origins.iter().any(CodeKind::is_user_supplied)
     }
 
     /// Returns whether this error originated in code that we generated.
     pub fn is_from_generated_code(&self) -> bool {
-        self.code_origins.contains(&CodeOrigin::OtherGeneratedCode)
+        self.code_origins.contains(&CodeKind::OtherGeneratedCode)
     }
 
     pub fn message(&self) -> String {
@@ -282,8 +282,8 @@ impl SpannedMessage {
                     lines.extend(all_lines[start_line - 1..end_line].iter().cloned());
                 }
                 if get_code_origins_for_span(span_json, code_block)
-                    .iter()
-                    .all(|o| *o == CodeOrigin::UserSupplied)
+                    .into_iter()
+                    .all(CodeKind::is_user_supplied)
                 {
                     Some(Span {
                         start_column,

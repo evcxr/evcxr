@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use failure::Error;
+use anyhow::Result;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use zmq;
@@ -26,7 +26,7 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    pub(crate) fn new(socket: zmq::Socket, key: &str) -> Result<Connection, Error> {
+    pub(crate) fn new(socket: zmq::Socket, key: &str) -> Result<Connection> {
         let mac = if key.is_empty() {
             None
         } else {

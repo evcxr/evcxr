@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use anyhow::{anyhow, bail, Result};
 use dirs;
-use failure::Error;
 use std::io::Write;
 use std::path::PathBuf;
 use std::{env, fs};
@@ -22,13 +22,13 @@ const LOGO_32X32: &[u8] = include_bytes!("../third_party/rust/rust-logo-32x32.pn
 const LOGO_64X64: &[u8] = include_bytes!("../third_party/rust/rust-logo-64x64.png");
 const LOGO_LICENSE: &[u8] = include_bytes!("../third_party/rust/LICENSE.md");
 
-pub(crate) fn install() -> Result<(), Error> {
+pub(crate) fn install() -> Result<()> {
     let kernel_dir = get_kernel_dir()?;
     fs::create_dir_all(&kernel_dir)?;
     let current_exe_path = env::current_exe()?;
     let current_exe = current_exe_path
         .to_str()
-        .ok_or_else(|| format_err!("current exe path isn't valid UTF-8"))?;
+        .ok_or_else(|| anyhow!("current exe path isn't valid UTF-8"))?;
     let kernel_json = object! {
         "argv" => array![current_exe, "--control_file", "{connection_file}"],
         "display_name" => "Rust",
@@ -45,11 +45,7 @@ pub(crate) fn install() -> Result<(), Error> {
     Ok(())
 }
 
-pub(crate) fn install_resource(
-    dir: &PathBuf,
-    filename: &str,
-    bytes: &'static [u8],
-) -> Result<(), Error> {
+pub(crate) fn install_resource(dir: &PathBuf, filename: &str, bytes: &'static [u8]) -> Result<()> {
     let res_path = dir.join(filename);
     println!("Writing {}", res_path.to_string_lossy());
     let mut file = fs::File::create(res_path)?;
@@ -57,7 +53,7 @@ pub(crate) fn install_resource(
     Ok(())
 }
 
-pub(crate) fn uninstall() -> Result<(), Error> {
+pub(crate) fn uninstall() -> Result<()> {
     let kernel_dir = get_kernel_dir()?;
     println!("Deleting {}", kernel_dir.to_string_lossy());
     fs::remove_dir_all(kernel_dir)?;
@@ -66,7 +62,7 @@ pub(crate) fn uninstall() -> Result<(), Error> {
 }
 
 // https://jupyter-client.readthedocs.io/en/latest/kernels.html
-fn get_kernel_dir() -> Result<PathBuf, Error> {
+fn get_kernel_dir() -> Result<PathBuf> {
     let jupyter_dir = if let Ok(dir) = env::var("JUPYTER_CONFIG_DIR") {
         PathBuf::from(dir)
     } else if let Ok(dir) = env::var("JUPYTER_PATH") {

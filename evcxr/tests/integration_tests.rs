@@ -24,19 +24,8 @@ macro_rules! eval {
     ($ctxt:expr, $($t:tt)*) => {$ctxt.eval(stringify!($($t)*)).unwrap().content_by_mime_type}
 }
 
-fn new_context_and_outputs() -> (EvalContext, EvalContextOutputs) {
-    let testing_runtime_path = std::env::current_exe()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .parent()
-        .unwrap()
-        .join("testing_runtime");
-    EvalContext::with_subprocess_command(std::process::Command::new(&testing_runtime_path)).unwrap()
-}
-
 fn new_command_context_and_outputs() -> (CommandContext, EvalContextOutputs) {
-    let (eval_context, outputs) = new_context_and_outputs();
+    let (eval_context, outputs) = EvalContext::new_for_testing();
     let command_context = CommandContext::with_eval_context(eval_context);
     (command_context, outputs)
 }
@@ -52,7 +41,7 @@ fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, m
 }
 
 fn new_context() -> EvalContext {
-    let (context, outputs) = new_context_and_outputs();
+    let (context, outputs) = EvalContext::new_for_testing();
     send_output(outputs.stderr, io::stderr());
     context
 }
@@ -109,7 +98,7 @@ fn save_and_restore_variables() {
 
 #[test]
 fn printing() {
-    let (mut e, outputs) = new_context_and_outputs();
+    let (mut e, outputs) = EvalContext::new_for_testing();
 
     eval!(e,
         println!("This is stdout");
@@ -165,7 +154,7 @@ fn define_then_call_function() {
 fn function_panics_with_variable_preserving() {
     // Don't allow stderr to be printed here. We don't really want to see the
     // panic stack trace when running tests.
-    let (mut e, _) = new_context_and_outputs();
+    let (mut e, _) = EvalContext::new_for_testing();
     e.preserve_vars_on_panic = true;
     eval!(e, let a = vec![1, 2, 3];);
     eval!(e, let b = 42;);
@@ -182,7 +171,7 @@ fn function_panics_with_variable_preserving() {
 fn function_panics_without_variable_preserving() {
     // Don't allow stderr to be printed here. We don't really want to see the
     // panic stack trace when running tests.
-    let (mut e, _) = new_context_and_outputs();
+    let (mut e, _) = EvalContext::new_for_testing();
     e.preserve_vars_on_panic = false;
     eval!(e, let a = vec![1, 2, 3];);
     eval!(e, let b = 42;);

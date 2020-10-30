@@ -17,7 +17,7 @@
 // https://github.com/rust-lang/rust/issues/45601 - but that's now long fixed
 // and we've dropped support for old version for rustc prior to the fix.
 
-use failure::Error;
+use anyhow::{anyhow, Result};
 use json;
 use std::fs;
 
@@ -38,12 +38,12 @@ macro_rules! parse_to_var {
     ($control_json:expr, $name:ident, $convert:ident) => {
         let $name = $control_json[stringify!($name)]
             .$convert()
-            .ok_or_else(|| format_err!("Missing JSON field {}", stringify!($name)))?;
+            .ok_or_else(|| anyhow!("Missing JSON field {}", stringify!($name)))?;
     };
 }
 
 impl Control {
-    pub(crate) fn parse_file(file_name: &str) -> Result<Control, Error> {
+    pub(crate) fn parse_file(file_name: &str) -> Result<Control> {
         let control_file_contents = fs::read_to_string(file_name)?;
         let control_json = json::parse(&control_file_contents)?;
         parse_to_var!(control_json, control_port, as_u16);

@@ -34,6 +34,12 @@ impl ChildProcess {
         mut command: std::process::Command,
         stderr_sender: mpsc::Sender<String>,
     ) -> Result<ChildProcess, Error> {
+        // Avoid a fork bomb. We could call runtime_hook here but then all the work that we did up
+        // to this point would be wasted. Also, it's possible that we could already have started
+        // threads, which could get messy.
+        if std::env::var(runtime::EVCXR_IS_RUNTIME_VAR).is_ok() {
+            bail!("Our current binary doesn't call runtime_hook()");
+        }
         command
             .env(runtime::EVCXR_IS_RUNTIME_VAR, "1")
             .env("RUST_BACKTRACE", "1")

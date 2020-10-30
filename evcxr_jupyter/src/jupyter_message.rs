@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::connection::{Connection, HmacSha256};
+use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
-use failure::Error;
 use hex;
 use json::{self, JsonValue};
 use std::{self, fmt};
@@ -26,12 +26,12 @@ struct RawMessage {
 }
 
 impl RawMessage {
-    pub(crate) fn read(connection: &mut Connection) -> Result<RawMessage, Error> {
+    pub(crate) fn read(connection: &mut Connection) -> Result<RawMessage> {
         let mut multipart = connection.socket.recv_multipart(0)?;
         let delimiter_index = multipart
             .iter()
             .position(|part| &part[..] == DELIMITER)
-            .ok_or_else(|| format_err!("Missing delimeter"))?;
+            .ok_or_else(|| anyhow!("Missing delimeter"))?;
         let jparts: Vec<_> = multipart.drain(delimiter_index + 2..).collect();
         let hmac = multipart.pop().unwrap();
         // Remove delimiter, so that what's left is just the identities.
@@ -55,7 +55,7 @@ impl RawMessage {
         Ok(raw_message)
     }
 
-    fn send(self, connection: &mut Connection) -> Result<(), Error> {
+    fn send(self, connection: &mut Connection) -> Result<()> {
         use hmac::Mac;
         let hmac = if let Some(mac_template) = &connection.mac {
             let mut mac = mac_template.clone();
@@ -97,10 +97,10 @@ pub(crate) struct JupyterMessage {
 const DELIMITER: &[u8] = b"<IDS|MSG>";
 
 impl JupyterMessage {
-    pub(crate) fn read(connection: &mut Connection) -> Result<JupyterMessage, Error> {
+    pub(crate) fn read(connection: &mut Connection) -> Result<JupyterMessage> {
         let raw_message = RawMessage::read(connection)?;
 
-        fn message_to_json(message: &[u8]) -> Result<JsonValue, Error> {
+        fn message_to_json(message: &[u8]) -> Result<JsonValue> {
             Ok(json::parse(std::str::from_utf8(message)?)?)
         }
 
@@ -123,6 +123,10 @@ impl JupyterMessage {
 
     pub(crate) fn code(&self) -> &str {
         self.content["code"].as_str().unwrap_or("")
+    }
+
+    pub(crate) fn cursor_pos(&self) -> usize {
+        self.content["cursor_pos"].as_usize().unwrap_or_default()
     }
 
     // Creates a new child message of this message. ZMQ identities are not transferred.
@@ -164,7 +168,7 @@ impl JupyterMessage {
         self
     }
 
-    pub(crate) fn send(&self, connection: &mut Connection) -> Result<(), Error> {
+    pub(crate) fn send(&self, connection: &mut Connection) -> Result<()> {
         // If performance is a concern, we can probably avoid the clone and to_vec calls with a bit
         // of refactoring.
         let raw_message = RawMessage {

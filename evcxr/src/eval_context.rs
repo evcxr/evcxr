@@ -13,15 +13,15 @@
 // limitations under the License.
 
 use crate::child_process::ChildProcess;
-use crate::code_block::{CodeBlock, CodeOrigin};
+use crate::code_block::{CodeBlock, CodeKind};
 use crate::crate_config::ExternalCrate;
 use crate::errors::{bail, CompilationError, Error};
 use crate::evcxr_internal_runtime;
 use crate::item;
 use crate::module::{Module, SoFile};
 use crate::runtime;
-use crate::rust_analyzer::{RustAnalyzer, VariableInfo};
-use crate::statement_splitter;
+use crate::rust_analyzer::{Completions, RustAnalyzer, VariableInfo};
+use anyhow::Result;
 use regex::Regex;
 use std;
 use std::collections::{HashMap, HashSet};
@@ -145,6 +145,19 @@ impl EvalContext {
     #[cfg(not(windows))]
     fn apply_platform_specific_vars(_module: &Module, _command: &mut std::process::Command) {}
 
+    #[doc(hidden)]
+    pub fn new_for_testing() -> (EvalContext, EvalContextOutputs) {
+        let testing_runtime_path = std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join("testing_runtime");
+        EvalContext::with_subprocess_command(std::process::Command::new(&testing_runtime_path))
+            .unwrap()
+    }
+
     pub fn with_subprocess_command(
         mut subprocess_command: std::process::Command,
     ) -> Result<(EvalContext, EvalContextOutputs), Error> {
@@ -194,13 +207,16 @@ impl EvalContext {
 
     /// Evaluates the supplied Rust code.
     pub fn eval(&mut self, code: &str) -> Result<EvalOutputs, Error> {
-        self.eval_with_callbacks(code, &mut EvalCallbacks::default())
+        self.eval_with_callbacks(
+            CodeBlock::new().original_user_code(code),
+            &mut EvalCallbacks::default(),
+        )
     }
 
     /// Evaluates the supplied Rust code.
-    pub fn eval_with_callbacks(
+    pub(crate) fn eval_with_callbacks(
         &mut self,
-        code: &str,
+        user_code: CodeBlock,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
         fn parse_stmt_or_expr(code: &str) -> Result<syn::Stmt, ()> {
@@ -232,19 +248,18 @@ impl EvalContext {
             }
         }
 
+        let mut code_out = CodeBlock::new();
         let mut previous_item_name = None;
-        let mut code_block = CodeBlock::new();
-        let statements = statement_splitter::split_into_statements(code);
-        let num_statements = statements.len();
-        for (statement_index, stmt_code) in statements.into_iter().enumerate() {
-            if let Ok(stmt) = parse_stmt_or_expr(stmt_code) {
+        let num_statements = user_code.segments.len();
+        for (statement_index, segment) in user_code.segments.into_iter().enumerate() {
+            if let Ok(stmt) = parse_stmt_or_expr(&segment.code) {
                 if self.debug_mode {
                     println!("STMT: {:#?}", stmt);
                 }
                 match &stmt {
                     syn::Stmt::Local(local) => {
                         self.record_new_locals(&local.pat, None);
-                        code_block = code_block.user_code(stmt_code);
+                        code_out = code_out.with_segment(segment);
                     }
                     syn::Stmt::Item(syn::Item::ExternCrate(syn::ItemExternCrate {
                         ident, ..
@@ -261,29 +276,29 @@ impl EvalContext {
                         }
                         self.state
                             .extern_crate_stmts
-                            .insert(crate_name, stmt_code.to_owned());
+                            .insert(crate_name, segment.code.clone());
                     }
                     syn::Stmt::Item(syn::Item::Macro(item_macro)) => {
                         // AFAICT this is always an invocation of macro_rules,
                         // which means an item is being defined. Invocations of
                         // macros seem to show up as syn::Expr::Macro.
                         if let Some(ident) = &item_macro.ident {
-                            let item_block = CodeBlock::new().user_code(stmt_code);
+                            let item_block = CodeBlock::new().with_segment(segment);
                             self.state
                                 .items_by_name
                                 .insert(ident.to_string(), item_block);
                         } else {
-                            code_block = code_block.user_code(stmt_code);
+                            code_out = code_out.with_segment(segment);
                         }
                     }
                     syn::Stmt::Semi(..) => {
-                        code_block = code_block.user_code(stmt_code);
+                        code_out = code_out.with_segment(segment);
                     }
                     syn::Stmt::Item(syn::Item::Use(..)) => {
-                        self.state.use_stmts.insert(stmt_code.to_owned());
+                        self.state.use_stmts.insert(segment.code.clone());
                     }
                     syn::Stmt::Item(item) => {
-                        let item_block = CodeBlock::new().user_code(stmt_code);
+                        let item_block = CodeBlock::new().with_segment(segment);
                         if let Some(item_name) = item::item_name(item) {
                             *self
                                 .state
@@ -307,11 +322,11 @@ impl EvalContext {
                     }
                     syn::Stmt::Expr(_) => {
                         if statement_index == num_statements - 1 {
-                            code_block = code_block.code_with_fallback(
+                            code_out = code_out.code_with_fallback(
                                 // First we try calling .evcxr_display().
                                 CodeBlock::new()
                                     .generated("(")
-                                    .user_code(stmt_code)
+                                    .with_segment(segment.clone())
                                     .generated(").evcxr_display();")
                                     .code_string(),
                                 // If that fails, we try debug format.
@@ -321,24 +336,24 @@ impl EvalContext {
                                         "evcxr_send_text_plain(&format!(\"{}\",\n",
                                         self.output_format
                                     ))
-                                    .user_code(stmt_code)
+                                    .with_segment(segment)
                                     .generated("));"),
                             );
                         } else {
                             // We got an expression, but it wasn't the last
                             // statement, so don't try to print it.
-                            code_block = code_block.user_code(stmt_code);
+                            code_out = code_out.with_segment(segment);
                         }
                     }
                 }
             } else {
                 // Syn couldn't parse the code, put it inside a function body and hopefully we'll
                 // get a reasonable error message from rustc.
-                code_block = code_block.user_code(stmt_code);
+                code_out = code_out.with_segment(segment);
             }
         }
 
-        let mut outputs = match self.run_statements(code_block, &mut phases, callbacks) {
+        let mut outputs = match self.run_statements(code_out, &mut phases, callbacks) {
             Err(error) => {
                 if let Error::ChildProcessTerminated(_) = error {
                     self.restart_child_process()?;
@@ -359,6 +374,20 @@ impl EvalContext {
         outputs.phases = phases.phases;
 
         Ok(outputs)
+    }
+
+    pub(crate) fn completions(
+        &mut self,
+        user_code: CodeBlock,
+        offset: usize,
+    ) -> Result<Completions> {
+        let code = self.code_to_compile(user_code, CompilationMode::NoCatch);
+        let wrapped_offset = code.user_offset_to_output_offset(offset)?;
+        self.analyzer.set_source(code.code_string())?;
+        let mut completions = self.analyzer.completions(wrapped_offset)?;
+        completions.start_offset = code.output_offset_to_user_offset(completions.start_offset)?;
+        completions.end_offset = code.output_offset_to_user_offset(completions.end_offset)?;
+        Ok(completions)
     }
 
     pub fn time_passes(&self) -> bool {
@@ -921,7 +950,7 @@ impl EvalContext {
         }
         for code_origin in &error.code_origins {
             match code_origin {
-                CodeOrigin::PackVariable { variable_name } => {
+                CodeKind::PackVariable { variable_name } => {
                     if error.code() == Some("E0308") {
                         // Handle mismatched types. We might eventually remove this code entirely
                         // now that we use Rust analyzer for type inference. Keeping it for now as
@@ -997,7 +1026,7 @@ impl EvalContext {
                         );
                     }
                 }
-                CodeOrigin::AssertCopyType { variable_name } => {
+                CodeKind::AssertCopyType { variable_name } => {
                     if error.code() == Some("E0277") {
                         if let Some(state) = self.state.variable_states.get_mut(variable_name) {
                             state.is_copy_type = false;
@@ -1005,11 +1034,11 @@ impl EvalContext {
                         }
                     }
                 }
-                CodeOrigin::WithFallback(fallback) => {
+                CodeKind::WithFallback(fallback) => {
                     user_code.apply_fallback(fallback);
                     fixed_errors.insert("Fallback");
                 }
-                CodeOrigin::UserSupplied => {
+                CodeKind::OriginalUserCode(_) | CodeKind::OtherUserCode => {
                     if error.code() == Some("E0728") && !self.state.async_mode {
                         self.state.async_mode = true;
                         if !self.state.external_deps.contains_key("tokio") {
@@ -1130,10 +1159,10 @@ impl EvalContext {
         let mut extern_stmts = CodeBlock::new();
         let mut use_stmts = CodeBlock::new();
         for stmt in self.state.extern_crate_stmts.values() {
-            extern_stmts = extern_stmts.user_code(stmt.clone());
+            extern_stmts = extern_stmts.other_user_code(stmt.clone());
         }
         for user_use_stmt in &self.state.use_stmts {
-            use_stmts = use_stmts.user_code(user_use_stmt.clone());
+            use_stmts = use_stmts.other_user_code(user_use_stmt.clone());
         }
         extern_stmts.add_all(use_stmts)
     }

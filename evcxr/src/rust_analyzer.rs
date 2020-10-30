@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{anyhow, Context, Result};
-use ra_ap_base_db::SourceRoot;
+use anyhow::{anyhow, bail, Context, Result};
+use ra_ap_base_db::{FileId, SourceRoot};
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
 use ra_ap_paths::AbsPathBuf;
@@ -32,6 +32,9 @@ pub(crate) struct RustAnalyzer {
     loader: vfs_notify::NotifyHandle,
     message_receiver: mpsc::Receiver<ra_vfs::loader::Message>,
     last_cargo_toml: Option<Vec<u8>>,
+    source_file: AbsPathBuf,
+    source_file_id: FileId,
+    current_source: Arc<String>,
 }
 
 pub(crate) struct VariableInfo {
@@ -45,24 +48,32 @@ impl RustAnalyzer {
     pub(crate) fn new(root_directory: &Path) -> Result<RustAnalyzer> {
         use ra_vfs::loader::Handle;
         let (message_sender, message_receiver) = std::sync::mpsc::channel();
-        let mut ra = RustAnalyzer {
+        let mut vfs = ra_vfs::Vfs::default();
+        let root_directory = AbsPathBuf::try_from(root_directory.to_owned())
+            .map_err(|path| anyhow!("Evcxr tmpdir is not absolute: '{:?}'", path))?;
+        let source_file = root_directory.join("src/lib.rs");
+        // Pre-allocate an ID for our main source file.
+        let vfs_source_file: ra_vfs::VfsPath = source_file.clone().into();
+        vfs.set_file_contents(vfs_source_file.clone(), Some(vec![]));
+        let source_file_id = vfs.file_id(&vfs_source_file.clone()).unwrap();
+        Ok(RustAnalyzer {
             with_sysroot: true,
-            root_directory: AbsPathBuf::try_from(root_directory.to_owned())
-                .map_err(|path| anyhow!("Evcxr tmpdir is not absolute: '{:?}'", path))?,
+            root_directory,
             analysis_host: Default::default(),
-            vfs: Default::default(),
+            vfs,
             loader: vfs_notify::NotifyHandle::spawn(Box::new(move |message| {
                 let _ = message_sender.send(message);
             })),
             message_receiver,
             last_cargo_toml: None,
-        };
-        // Pre-allocate an ID for our main source file so that set_source can assume that it exists.
-        ra.vfs.set_file_contents(ra.source_file().into(), None);
-        Ok(ra)
+            source_file,
+            source_file_id,
+            current_source: Arc::new(String::new()),
+        })
     }
 
     pub(crate) fn set_source(&mut self, source: String) -> Result<()> {
+        self.current_source = Arc::new(source.to_owned());
         let mut change = ra_ide::Change::new();
 
         // We need to write the file to the filesystem even though we subsequently set the file
@@ -71,14 +82,15 @@ impl RustAnalyzer {
         let src_dir = self.root_directory.join("src");
         std::fs::create_dir_all(&src_dir)
             .with_context(|| format!("Failed to create directory {:?}", src_dir))?;
-        std::fs::write(self.source_file().as_path(), &source)
-            .with_context(|| format!("Failed to write {:?}", self.source_file()))?;
-        self.vfs
-            .set_file_contents(self.source_file().into(), Some(source.bytes().collect()));
-        change.change_file(
-            self.vfs.file_id(&self.source_file().into()).unwrap(),
-            Some(Arc::new(source.to_owned())),
+        // TODO: Can we delete this? What about if we write an empty file when we construct the
+        // instance?
+        std::fs::write(self.source_file.as_path(), &source)
+            .with_context(|| format!("Failed to write {:?}", self.source_file))?;
+        self.vfs.set_file_contents(
+            self.source_file.clone().into(),
+            Some(source.bytes().collect()),
         );
+        change.change_file(self.source_file_id, Some(Arc::clone(&self.current_source)));
 
         // Check to see if we haven't yet loaded Cargo.toml, or if it's changed since we read it.
         let cargo_toml = Some(std::fs::read(self.cargo_toml_filename())?);
@@ -96,8 +108,7 @@ impl RustAnalyzer {
         use ra_ap_syntax::ast::{ModuleItemOwner, NameOwner};
         let mut result = HashMap::new();
         let sema = ra_ide::Semantics::new(self.analysis_host.raw_database());
-        let main_rs = self.source_file();
-        let source_file = sema.parse(self.vfs.file_id(&main_rs.into()).unwrap());
+        let source_file = sema.parse(self.source_file_id);
         for item in source_file.items() {
             if let ast::Item::Fn(function) = item {
                 if function
@@ -205,13 +216,80 @@ impl RustAnalyzer {
         Ok(())
     }
 
-    fn source_file(&self) -> AbsPathBuf {
-        self.root_directory.join("src/lib.rs")
-    }
-
     fn cargo_toml_filename(&self) -> AbsPathBuf {
         self.root_directory.join("Cargo.toml")
     }
+
+    pub(crate) fn completions(&self, position: usize) -> Result<Completions> {
+        let mut completions = Vec::new();
+        let mut range = None;
+        let mut config = ra_ide::CompletionConfig {
+            enable_postfix_completions: true,
+            add_call_parenthesis: true,
+            add_call_argument_snippets: true,
+            snippet_cap: None,
+        };
+        config.allow_snippets(true);
+        if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
+            &config,
+            ra_ide::FilePosition {
+                file_id: self.source_file_id,
+                offset: (position as u32).into(),
+            },
+        ) {
+            for item in completion_items {
+                use regex::Regex;
+                lazy_static! {
+                    static ref ARG_PLACEHOLDER: Regex = Regex::new("\\$\\{[0-9]+:([^}]+)\\}").unwrap();
+                }
+                let mut indels = item.text_edit().iter();
+                if let Some(indel) = indels.next() {
+                    let text_to_delete = &self.current_source[indel.delete];
+                    // Rust analyzer returns all available methods/fields etc. It's up to us to
+                    // decide how what we filter and what we keep.
+                    if !item.lookup().starts_with(text_to_delete) {
+                        continue;
+                    }
+                    completions.push(Completion {
+                        code: ARG_PLACEHOLDER
+                            .replace_all(&indel.insert, "$1")
+                            .replace("$0", ""),
+                    });
+                    if let Some(previous_range) = range.as_ref() {
+                        if *previous_range != indel.delete {
+                            bail!("Different completions wanted to replace different parts of the text");
+                        }
+                    } else {
+                        range = Some(indel.delete)
+                    }
+                }
+                if indels.next().is_some() {
+                    bail!("Completion unexpectedly provided more than one insertion/deletion");
+                }
+            }
+        }
+        Ok(Completions {
+            completions,
+            start_offset: range.map(|range| range.start().into()).unwrap_or(position),
+            end_offset: range.map(|range| range.end().into()).unwrap_or(position),
+        })
+    }
+}
+
+/// Completions found in a particular context.
+#[derive(Default)]
+pub struct Completions {
+    pub completions: Vec<Completion>,
+    pub start_offset: usize,
+    pub end_offset: usize,
+}
+
+/// A code completion. We use our own type rather than exposing rust-analyzer's CompletionItem,
+/// since rust-analyzer is an internal implementation detail, so we don't want to expose it in a
+/// public API.
+#[derive(Debug, Eq, PartialEq)]
+pub struct Completion {
+    pub code: String,
 }
 
 /// Returns whether this appears to be a valid type. Rust analyzer, when asked to emit code for some

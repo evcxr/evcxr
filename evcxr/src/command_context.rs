@@ -13,7 +13,13 @@
 // limitations under the License.
 
 use crate::errors::{bail, CompilationError, Error};
-use crate::{eval_context::EvalCallbacks, EvalContext, EvalContextOutputs, EvalOutputs};
+use crate::{
+    code_block::{CodeBlock, CodeKind},
+    eval_context::EvalCallbacks,
+    rust_analyzer::Completions,
+    EvalContext, EvalContextOutputs, EvalOutputs,
+};
+use anyhow::Result;
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
@@ -38,6 +44,12 @@ impl CommandContext {
         }
     }
 
+    #[doc(hidden)]
+    pub fn new_for_testing() -> (CommandContext, EvalContextOutputs) {
+        let (eval_context, outputs) = EvalContext::new_for_testing();
+        (Self::with_eval_context(eval_context), outputs)
+    }
+
     pub fn execute(&mut self, to_run: &str) -> Result<EvalOutputs, Error> {
         self.execute_with_callbacks(to_run, &mut EvalCallbacks::default())
     }
@@ -47,31 +59,22 @@ impl CommandContext {
         to_run: &str,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
-        use regex::Regex;
         use std::time::Instant;
-        lazy_static! {
-            static ref COMMAND_RE: Regex = Regex::new("^ *(:[^ ]+)( +(.*))?$").unwrap();
-        }
         let mut eval_outputs = EvalOutputs::new();
         let start = Instant::now();
-        let mut to_eval = Vec::new();
-        for line in to_run.lines() {
-            // We only accept commands up until the first non-command.
-            if to_eval.is_empty() {
-                if let Some(captures) = COMMAND_RE.captures(line) {
-                    eval_outputs.merge(
-                        self.process_command(&captures[1], captures.get(3).map(|m| m.as_str()))?,
-                    );
-                    continue;
-                }
+        let mut non_command_code = CodeBlock::new();
+        for segment in CodeBlock::new().original_user_code(to_run).segments {
+            if let CodeKind::Command(command) = &segment.kind {
+                eval_outputs.merge(self.process_command(&command.command, &command.args)?);
+            } else {
+                non_command_code = non_command_code.with_segment(segment);
             }
-            to_eval.push(line)
         }
-        let result = if to_run.is_empty() {
+        let result = if non_command_code.is_empty() {
             Ok(EvalOutputs::new())
         } else {
             self.eval_context
-                .eval_with_callbacks(&to_eval.join("\n"), callbacks)
+                .eval_with_callbacks(non_command_code, callbacks)
         };
         let duration = start.elapsed();
         match result {
@@ -92,6 +95,23 @@ impl CommandContext {
 
     pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
         self.eval_context.set_opt_level(level)
+    }
+
+    /// Returns completions within `src` at `position`, which should be a byte offset. Note, this
+    /// function requires &mut self because it mutates internal state in order to determine
+    /// completions. It also assumes exclusive access to those resources. However there should be
+    /// any visible side effects.
+    pub fn completions(&mut self, src: &str, position: usize) -> Result<Completions> {
+        let mut non_command_code = CodeBlock::new();
+        for segment in CodeBlock::new().original_user_code(src).segments {
+            if let CodeKind::Command(_) = &segment.kind {
+                // TODO: Take :dep commands into account so that we can provide completions for
+                // newly added dependencies.
+            } else {
+                non_command_code = non_command_code.with_segment(segment);
+            }
+        }
+        self.eval_context.completions(non_command_code, position)
     }
 
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {
@@ -117,7 +137,11 @@ impl CommandContext {
         Ok(outputs)
     }
 
-    fn process_command(&mut self, command: &str, args: Option<&str>) -> Result<EvalOutputs, Error> {
+    fn process_command(
+        &mut self,
+        command: &str,
+        args: &Option<String>,
+    ) -> Result<EvalOutputs, Error> {
         match command {
             ":internal_debug" => {
                 let debug_mode = !self.eval_context.debug_mode();
@@ -137,7 +161,8 @@ impl CommandContext {
                 Ok(outputs)
             }
             ":preserve_vars_on_panic" => {
-                self.eval_context.preserve_vars_on_panic = args == Some("1");
+                self.eval_context.preserve_vars_on_panic =
+                    args.as_ref().map(String::as_str) == Some("1");
                 text_output(format!(
                     "Preserve vars on panic: {}",
                     self.eval_context.preserve_vars_on_panic
@@ -207,7 +232,8 @@ impl CommandContext {
                 text_output(format!("Time passes: {}", self.eval_context.time_passes()))
             }
             ":sccache" => {
-                self.eval_context.set_sccache(args != Some("0"))?;
+                self.eval_context
+                    .set_sccache(args.as_ref().map(String::as_str) != Some("0"))?;
                 text_output(format!("sccache: {}", self.eval_context.sccache()))
             }
             ":linker" => {
@@ -308,4 +334,40 @@ fn text_output<T: Into<String>>(text: T) -> Result<EvalOutputs, Error> {
         .content_by_mime_type
         .insert("text/plain".to_owned(), content);
     Ok(outputs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn code_completion() -> Result<()> {
+        let code = r#"
+            :dep unused_at_the_moment
+            fn foo() -> Vec<String> {
+                vec![]
+            }
+            foo().res"#;
+        let (mut ctx, _) = CommandContext::new_for_testing();
+        let completions = ctx.completions(code, code.len())?;
+        assert!(!completions.completions.is_empty());
+        assert!(completions
+            .completions
+            .iter()
+            .any(|c| c.code == "reserve(additional)"));
+        for c in completions.completions {
+            if !c.code.starts_with("res") {
+                panic!("Unexpected completion: '{}'", c.code);
+            }
+        }
+        assert_eq!(completions.start_offset, code.len() - "res".len());
+        assert_eq!(completions.end_offset, code.len());
+
+        let code = code.replace("res", "asdfasdf");
+        assert_eq!(
+            ctx.completions(&code, code.len()).unwrap().completions,
+            vec![]
+        );
+        Ok(())
+    }
 }

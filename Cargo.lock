@@ -501,7 +501,6 @@ dependencies = [
  "backtrace",
  "dirs",
  "evcxr_input",
- "failure",
  "json",
  "lazy_static",
  "libc",
@@ -540,15 +539,16 @@ checksum = "15ed7e9b5d7d7506798f5154e9e6390a08a0d4fff03835247a4f423041059a78"
 name = "evcxr_jupyter"
 version = "0.5.3"
 dependencies = [
+ "anyhow",
  "chrono",
  "colored",
  "dirs",
  "evcxr",
- "failure",
  "hex",
  "hmac",
  "json",
  "sha2",
+ "unicode-segmentation",
  "uuid",
  "zmq",
 ]
@@ -559,7 +559,6 @@ version = "0.5.3"
 dependencies = [
  "colored",
  "evcxr",
- "failure",
  "lazy_static",
  "regex",
  "rustyline",
