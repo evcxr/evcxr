@@ -534,7 +534,7 @@ impl EvalContext {
         self.committed_state = self.state.clone();
     }
 
-    fn dependency_lib_names(&self) -> Result<Vec<String>, Error> {
+    fn dependency_lib_names(&self) -> Result<Vec<String>> {
         use crate::cargo_metadata;
         cargo_metadata::get_library_names(self.module.crate_dir())
     }

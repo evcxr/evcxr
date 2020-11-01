@@ -187,7 +187,10 @@ impl Module {
         if self.time_passes {
             command.arg("-Ztime-passes");
         }
-        let cargo_output = command.output()?;
+        let cargo_output = match command.output() {
+            Ok(out) => out,
+            Err(err) => bail!("Error running cargo rustc: {}", err),
+        };
         if cargo_output.status.success() {
             if self.time_passes {
                 let stdout = String::from_utf8_lossy(&cargo_output.stdout);

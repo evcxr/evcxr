@@ -51,6 +51,7 @@ impl ChildProcess {
             Arc::new(Mutex::new(stderr_sender)),
         )
     }
+
     fn new_internal(
         command: Arc<Mutex<std::process::Command>>,
         stderr_sender: Arc<Mutex<mpsc::Sender<String>>>,

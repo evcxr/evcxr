@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::Error;
+use anyhow::{Context, Result};
 use json::{self, JsonValue};
 use std;
 use std::collections::HashMap;
@@ -20,15 +20,16 @@ use std::path::Path;
 
 /// Returns the library names for the direct dependencies of the crate rooted at
 /// the specified path.
-pub(crate) fn get_library_names(crate_dir: &Path) -> Result<Vec<String>, Error> {
+pub(crate) fn get_library_names(crate_dir: &Path) -> Result<Vec<String>> {
     let output = std::process::Command::new("cargo")
         .arg("metadata")
         .current_dir(crate_dir)
-        .output()?;
+        .output()
+        .with_context(|| format!("Error running cargo metadata '{:?}'", crate_dir))?;
     library_names_from_metadata(crate_dir, std::str::from_utf8(&output.stdout)?)
 }
 
-fn library_names_from_metadata(crate_dir: &Path, metadata: &str) -> Result<Vec<String>, Error> {
+fn library_names_from_metadata(crate_dir: &Path, metadata: &str) -> Result<Vec<String>> {
     let metadata = json::parse(metadata)?;
     let mut direct_dependencies = Vec::new();
     let mut crate_to_library_names = HashMap::new();
