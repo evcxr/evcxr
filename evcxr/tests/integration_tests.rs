@@ -607,3 +607,33 @@ fn define_then_call_macro() {
     );
     assert_eq!(eval!(e, foo!(2)), text_plain("42"));
 }
+
+#[test]
+fn code_completion() {
+    let code = r#"
+        :dep unused_at_the_moment
+        fn foo() -> Vec<String> {
+            vec![]
+        }
+        foo().res"#;
+    let (mut ctx, _) = CommandContext::new_for_testing();
+    let completions = ctx.completions(code, code.len()).unwrap();
+    assert!(!completions.completions.is_empty());
+    assert!(completions
+        .completions
+        .iter()
+        .any(|c| c.code == "reserve(additional)"));
+    for c in completions.completions {
+        if !c.code.starts_with("res") {
+            panic!("Unexpected completion: '{}'", c.code);
+        }
+    }
+    assert_eq!(completions.start_offset, code.len() - "res".len());
+    assert_eq!(completions.end_offset, code.len());
+
+    let code = code.replace("res", "asdfasdf");
+    assert_eq!(
+        ctx.completions(&code, code.len()).unwrap().completions,
+        vec![]
+    );
+}
