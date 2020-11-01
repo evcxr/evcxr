@@ -14,8 +14,8 @@ edition = "2018"
 [dependencies]
 evcxr = { version = "=0.5.3", path = "../evcxr" }
 rustyline = "6.0.0"
-colored = "1.9.3"
-lazy_static = "1.3.0"
-regex = { version = "1.3.1", default-features = false, features = [ "std" ] }
+colored = "2.0.0"
+lazy_static = "1.4.0"
+regex = { version = "1.4.1", default-features = false, features = [ "std" ] }
 structopt = "0.3"
 unicode-xid = "0.2"

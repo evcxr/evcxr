@@ -205,14 +205,14 @@ impl Server {
                             .with_content(object! {
                                 "execution_count" => execution_count,
                                 "data" => data,
-                                "metadata" => HashMap::new(),
+                                "metadata" => object!(),
                             })
                             .send(&mut *self.iopub.lock().unwrap())?;
                     }
                     if let Some(duration) = output.timing {
                         // TODO replace by duration.as_millis() when stable
                         let ms = duration.as_secs() * 1000 + u64::from(duration.subsec_millis());
-                        let mut data = HashMap::new();
+                        let mut data: HashMap<String, JsonValue> = HashMap::new();
                         data.insert(
                             "text/html".into(),
                             json::from(format!(
@@ -225,7 +225,7 @@ impl Server {
                             .with_content(object! {
                                 "execution_count" => execution_count,
                                 "data" => data,
-                                "metadata" => HashMap::new(),
+                                "metadata" => object!(),
                             })
                             .send(&mut *self.iopub.lock().unwrap())?;
                     }
