@@ -1,5 +1,6 @@
 dist: xenial
 language: rust
+env: RUST_BACKTRACE=1
 matrix:
   include:
     - os: linux
