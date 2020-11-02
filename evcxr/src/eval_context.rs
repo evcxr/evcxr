@@ -201,6 +201,10 @@ impl EvalContext {
         };
         if context.linker() == "lld" && context.eval("42").is_err() {
             context.set_linker("system".to_owned());
+        } else {
+            // We need to eval something anyway, otherwise rust-analyzer crashes when trying to get
+            // completions. Not 100% sure. Just writing Cargo.toml isn't sufficient.
+            context.eval("42")?;
         }
         Ok((context, outputs))
     }
