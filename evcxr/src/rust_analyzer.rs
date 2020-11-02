@@ -52,6 +52,14 @@ impl RustAnalyzer {
         let root_directory = AbsPathBuf::try_from(root_directory.to_owned())
             .map_err(|path| anyhow!("Evcxr tmpdir is not absolute: '{:?}'", path))?;
         let source_file = root_directory.join("src/lib.rs");
+        // We need to write the file to the filesystem even though we subsequently set the file
+        // contents via the vfs and change.change_file. This is because the loader checks for the
+        // files existence when determining the crate structure.
+        let src_dir = root_directory.join("src");
+        std::fs::create_dir_all(&src_dir)
+            .with_context(|| format!("Failed to create directory `{:?}`", src_dir))?;
+        std::fs::write(source_file.as_path(), "")
+            .with_context(|| format!("Failed to write {:?}", source_file))?;
         // Pre-allocate an ID for our main source file.
         let vfs_source_file: ra_vfs::VfsPath = source_file.clone().into();
         vfs.set_file_contents(vfs_source_file.clone(), Some(vec![]));
@@ -76,16 +84,6 @@ impl RustAnalyzer {
         self.current_source = Arc::new(source.to_owned());
         let mut change = ra_ide::Change::new();
 
-        // We need to write the file to the filesystem even though we subsequently set the file
-        // contents via the vfs and change.change_file. This is because the loader checks for the
-        // files existence when determining the crate structure.
-        let src_dir = self.root_directory.join("src");
-        std::fs::create_dir_all(&src_dir)
-            .with_context(|| format!("Failed to create directory {:?}", src_dir))?;
-        // TODO: Can we delete this? What about if we write an empty file when we construct the
-        // instance?
-        std::fs::write(self.source_file.as_path(), &source)
-            .with_context(|| format!("Failed to write {:?}", self.source_file))?;
         self.vfs.set_file_contents(
             self.source_file.clone().into(),
             Some(source.bytes().collect()),
@@ -93,7 +91,12 @@ impl RustAnalyzer {
         change.change_file(self.source_file_id, Some(Arc::clone(&self.current_source)));
 
         // Check to see if we haven't yet loaded Cargo.toml, or if it's changed since we read it.
-        let cargo_toml = Some(std::fs::read(self.cargo_toml_filename())?);
+        let cargo_toml = Some(std::fs::read(self.cargo_toml_filename()).with_context(|| {
+            format!(
+                "Failed to read Cargo.toml from `{:?}`",
+                self.cargo_toml_filename()
+            )
+        })?);
         if cargo_toml != self.last_cargo_toml {
             self.load_cargo_toml(&mut change)?;
             self.last_cargo_toml = cargo_toml;

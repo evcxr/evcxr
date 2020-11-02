@@ -616,7 +616,7 @@ fn code_completion() {
             vec![]
         }
         foo().res"#;
-    let (mut ctx, _) = CommandContext::new_for_testing();
+    let mut ctx = CommandContext::with_eval_context(new_context());
     let completions = ctx.completions(code, code.len()).unwrap();
     assert!(!completions.completions.is_empty());
     assert!(completions
