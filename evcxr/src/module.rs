@@ -189,7 +189,7 @@ impl Module {
         }
         let cargo_output = match command.output() {
             Ok(out) => out,
-            Err(err) => bail!("Error running cargo rustc: {}", err),
+            Err(err) => bail!("Error running 'cargo rustc': {}", err),
         };
         if cargo_output.status.success() {
             if self.time_passes {
