@@ -58,8 +58,6 @@ impl RustAnalyzer {
         let src_dir = root_directory.join("src");
         std::fs::create_dir_all(&src_dir)
             .with_context(|| format!("Failed to create directory `{:?}`", src_dir))?;
-        std::fs::write(source_file.as_path(), "")
-            .with_context(|| format!("Failed to write {:?}", source_file))?;
         // Pre-allocate an ID for our main source file.
         let vfs_source_file: ra_vfs::VfsPath = source_file.clone().into();
         vfs.set_file_contents(vfs_source_file.clone(), Some(vec![]));
@@ -84,6 +82,8 @@ impl RustAnalyzer {
         self.current_source = Arc::new(source.to_owned());
         let mut change = ra_ide::Change::new();
 
+        std::fs::write(self.source_file.as_path(), &source)
+            .with_context(|| format!("Failed to write {:?}", self.source_file))?;
         self.vfs.set_file_contents(
             self.source_file.clone().into(),
             Some(source.bytes().collect()),
