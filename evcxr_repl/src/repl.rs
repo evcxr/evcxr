@@ -14,6 +14,7 @@
 
 use super::scan::{validate_source_fragment, FragmentValidity};
 use colored::*;
+use evcxr::{CommandContext, Completions};
 use rustyline::{
     completion::Completer,
     error::ReadlineError,
@@ -23,15 +24,15 @@ use rustyline::{
     Context, Helper,
 };
 use std::borrow::Cow;
-use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 pub struct EvcxrRustylineHelper {
-    _priv: (),
+    command_context: Arc<Mutex<CommandContext>>,
 }
 
-impl Default for EvcxrRustylineHelper {
-    fn default() -> Self {
-        Self { _priv: () }
+impl EvcxrRustylineHelper {
+    pub fn new(command_context: Arc<Mutex<CommandContext>>) -> Self {
+        Self { command_context }
     }
 }
 
@@ -46,25 +47,20 @@ impl Completer for EvcxrRustylineHelper {
         &self,
         line: &str,
         pos: usize,
-        ctx: &Context<'_>,
+        _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<String>)> {
-        // find the left side of cursor
-        let (left, _) = line.split_at(pos);
-        // remove the longest alphanumeric text before the cursor
-        let new_pos = left.trim_end_matches(|c: char| c.is_alphanumeric()).len();
-        let (_, search_prefix) = left.split_at(new_pos);
-
-        // search history and find all the matching 'words'
-        let res: HashSet<_> = ctx
-            .history()
-            .iter()
-            .flat_map(|h| h.split(|c: char| !c.is_alphanumeric()))
-            .filter(|s| !s.is_empty() && s.starts_with(search_prefix))
+        let completions = self
+            .command_context
+            .lock()
+            .unwrap()
+            .completions(line, pos)
+            .unwrap_or_else(|_| Completions::default());
+        let res: Vec<String> = completions
+            .completions
+            .into_iter()
+            .map(|c| c.code)
             .collect();
-        // make them unique using HashSet
-        let res: Vec<String> = res.iter().map(|s| (*s).into()).collect();
-
-        Ok((new_pos, res))
+        Ok((completions.start_offset, res))
     }
 }
 

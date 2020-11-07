@@ -39,6 +39,7 @@ pub use crate::command_context::CommandContext;
 pub use crate::errors::{CompilationError, Error};
 pub use crate::eval_context::{EvalCallbacks, EvalContext, EvalContextOutputs, EvalOutputs};
 pub use crate::runtime::runtime_hook;
+pub use rust_analyzer::Completions;
 
 /// Return the directory that evcxr tools should use for their configuration.
 ///

@@ -19,7 +19,7 @@ use evcxr::{CommandContext, CompilationError, Error};
 use rustyline::{error::ReadlineError, At, Cmd, EditMode, Editor, KeyPress, Movement, Word};
 use std::fs;
 use std::io;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use structopt::StructOpt;
 
 use evcxr_repl::EvcxrRustylineHelper;
@@ -27,7 +27,7 @@ use evcxr_repl::EvcxrRustylineHelper;
 const PROMPT: &str = ">> ";
 
 struct Repl {
-    command_context: CommandContext,
+    command_context: Arc<Mutex<CommandContext>>,
     ide_mode: bool,
 }
 
@@ -56,7 +56,7 @@ impl Repl {
         send_output(outputs.stdout, io::stdout(), None);
         send_output(outputs.stderr, io::stderr(), Some(Color::BrightRed));
         let mut repl = Repl {
-            command_context,
+            command_context: Arc::new(Mutex::new(command_context)),
             ide_mode,
         };
         repl.execute(":load_config");
@@ -64,7 +64,8 @@ impl Repl {
     }
 
     fn execute(&mut self, to_run: &str) {
-        let success = match self.command_context.execute(to_run) {
+        let execution_result = self.command_context.lock().unwrap().execute(to_run);
+        let success = match execution_result {
             Ok(output) => {
                 if let Some(text) = output.get("text/plain") {
                     println!("{}", text);
@@ -204,7 +205,11 @@ fn main() {
         }
     };
 
-    repl.command_context.set_opt_level(&options.opt).ok();
+    repl.command_context
+        .lock()
+        .unwrap()
+        .set_opt_level(&options.opt)
+        .ok();
     let config = match options.edit_mode {
         EditMode::Vi => rustyline::Config::builder()
             .edit_mode(EditMode::Vi)
@@ -221,7 +226,9 @@ fn main() {
         KeyPress::ControlRight,
         Cmd::Move(Movement::ForwardWord(1, At::AfterEnd, Word::Big)),
     );
-    editor.set_helper(Some(EvcxrRustylineHelper::default()));
+    editor.set_helper(Some(EvcxrRustylineHelper::new(Arc::clone(
+        &repl.command_context,
+    ))));
     let mut opt_history_file = None;
     let config_dir = evcxr::config_dir();
     if let Some(config_dir) = &config_dir {

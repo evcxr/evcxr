@@ -1,5 +1,6 @@
 # Version 0.6.0
 * Support for rustc 1.48.
+* Tab completion based on rust-analyzer (in both Jupyter kernel and REPL).
 * Minimum rust version is now 1.46
 * Now requires rust-src component
   * rustup component add rust-src
