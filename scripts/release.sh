@@ -13,6 +13,11 @@ if ! grep "# Version $VERSION" RELEASE_NOTES.md >/dev/null; then
   echo "Please add release notes first" >&2
   exit 1
 fi
+MIN_RUST_VER=$(sed -n -e '/rust: 1/ s/.*: *//p' .travis.yml)
+if [ -z "$MIN_RUST_VER" ]; then
+  echo "Failed to determine minimum rust version" >&2
+  exit 1
+fi
 git pull --rebase
 perl -pi -e 's/^version = "[\d\.]+"/version = "'$VERSION'"/;\
     s/^evcxr = \{ version = "=[\d\.]+"/evcxr = \{ version = "='$VERSION'"/' \
@@ -22,7 +27,7 @@ perl -pi -e 's/^version = "[\d\.]+"/version = "'$VERSION'"/;\
 cargo build
 cargo +stable test --all
 cargo +nightly test --all
-cargo +1.40.0-x86_64-unknown-linux-gnu test --all
+cargo +${MIN_RUST_VER}-x86_64-unknown-linux-gnu test --all
 git commit -a -m "Bump vesion to $VERSION"
 cd evcxr
 cargo publish
