@@ -244,7 +244,7 @@ impl RustAnalyzer {
                 use regex::Regex;
                 lazy_static! {
                     static ref ARG_PLACEHOLDER: Regex =
-                        Regex::new("\\$\\{[0-9]+:([^}]+)\\}").unwrap();
+                        Regex::new("\\$\\{[0-9]+:([^}]*)\\}").unwrap();
                 }
                 let mut indels = item.text_edit().iter();
                 if let Some(indel) = indels.next() {
