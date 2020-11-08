@@ -557,7 +557,7 @@ impl EvalContext {
         phases: &mut PhaseDetailsBuilder,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
-        self.module.write_cargo_toml(self)?;
+        self.write_cargo_toml()?;
         self.fix_variable_types(self.code_to_compile(user_code.clone(), self.compilation_mode()))?;
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
@@ -645,6 +645,11 @@ impl EvalContext {
 
         let output = self.run_and_capture_output(&so_file, callbacks)?;
         Ok(ExecutionArtifacts { output })
+    }
+
+    pub(crate) fn write_cargo_toml(&self) -> Result<()> {
+        self.module.write_cargo_toml(self)?;
+        Ok(())
     }
 
     fn fix_variable_types(&mut self, code: CodeBlock) -> Result<(), Error> {

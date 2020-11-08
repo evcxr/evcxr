@@ -104,9 +104,12 @@ impl CommandContext {
     pub fn completions(&mut self, src: &str, position: usize) -> Result<Completions> {
         let mut non_command_code = CodeBlock::new();
         for segment in CodeBlock::new().original_user_code(src).segments {
-            if let CodeKind::Command(_) = &segment.kind {
-                // TODO: Take :dep commands into account so that we can provide completions for
-                // newly added dependencies.
+            if let CodeKind::Command(command) = &segment.kind {
+                if command.command == ":dep" {
+                    // Best-effort. If anything goes wrong here, just ignore it.
+                    let _ = self.process_dep_command(&command.args);
+                    let _ = self.eval_context.write_cargo_toml();
+                }
             } else {
                 non_command_code = non_command_code.with_segment(segment);
             }
@@ -169,26 +172,7 @@ impl CommandContext {
                 ))
             }
             ":clear" => self.eval_context.clear().map(|_| EvalOutputs::new()),
-            ":dep" => {
-                use regex::Regex;
-                let args = if let Some(v) = args {
-                    v
-                } else {
-                    bail!(":dep requires arguments")
-                };
-                lazy_static! {
-                    static ref DEP_RE: Regex = Regex::new("^([^= ]+) *(= *(.+))?$").unwrap();
-                }
-                if let Some(captures) = DEP_RE.captures(args) {
-                    self.eval_context.add_dep(
-                        &captures[1],
-                        &captures.get(3).map_or("\"*\"", |m| m.as_str()),
-                    )?;
-                    Ok(EvalOutputs::new())
-                } else {
-                    bail!("Invalid :dep command. Expected: name = ... or just name");
-                }
-            }
+            ":dep" => self.process_dep_command(args),
             ":last_compile_dir" => {
                 text_output(format!("{:?}", self.eval_context.last_compile_dir()))
             }
@@ -313,6 +297,27 @@ impl CommandContext {
         }
         out.push_str("</table>");
         out
+    }
+
+    fn process_dep_command(&mut self, args: &Option<String>) -> Result<EvalOutputs, Error> {
+        use regex::Regex;
+        let args = if let Some(v) = args {
+            v
+        } else {
+            bail!(":dep requires arguments")
+        };
+        lazy_static! {
+            static ref DEP_RE: Regex = Regex::new("^([^= ]+) *(= *(.+))?$").unwrap();
+        }
+        if let Some(captures) = DEP_RE.captures(args) {
+            self.eval_context.add_dep(
+                &captures[1],
+                &captures.get(3).map_or("\"*\"", |m| m.as_str()),
+            )?;
+            Ok(EvalOutputs::new())
+        } else {
+            bail!("Invalid :dep command. Expected: name = ... or just name");
+        }
     }
 }
 

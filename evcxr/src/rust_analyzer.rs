@@ -79,14 +79,14 @@ impl RustAnalyzer {
     }
 
     pub(crate) fn set_source(&mut self, source: String) -> Result<()> {
-        self.current_source = Arc::new(source.to_owned());
+        self.current_source = Arc::new(source);
         let mut change = ra_ide::Change::new();
 
-        std::fs::write(self.source_file.as_path(), &source)
+        std::fs::write(self.source_file.as_path(), &*self.current_source)
             .with_context(|| format!("Failed to write {:?}", self.source_file))?;
         self.vfs.set_file_contents(
             self.source_file.clone().into(),
-            Some(source.bytes().collect()),
+            Some(self.current_source.bytes().collect()),
         );
         change.change_file(self.source_file_id, Some(Arc::clone(&self.current_source)));
 
