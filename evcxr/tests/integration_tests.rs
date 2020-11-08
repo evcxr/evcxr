@@ -611,7 +611,6 @@ fn define_then_call_macro() {
 #[test]
 fn code_completion() {
     let code = r#"
-        :dep unused_at_the_moment
         fn foo() -> Vec<String> {
             vec![]
         }
