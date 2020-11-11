@@ -122,6 +122,29 @@ $ sudo apt install lld
 ```
 `lld` will be used automatically if detected on all systems with the exception of Mac OS. You can check which linker is being used by running `:linker`.
 
+### Commands
+
+Here is a complete list of the configuration options you can set to customize your REPL experience:
+
+* `:opt [level]`      Toggle/set optimization level
+* `:fmt [format]`     Set output formatter (default: `{:?}`). 
+* `:efmt [format]`    Set the formatter for errors returned by `?`
+* `:sccache [0|1]`    Set whether to use sccache.
+* `:linker [linker]`  Set/print linker. Supported: `system`, `lld`
+* `:timing`           Toggle printing of how long evaluations take
+* `:time_passes`      Toggle printing of rustc pass times (requires nightly)
+* `:internal_debug`   Toggle internal code debugging output
+* `:preserve_vars_on_panic [0|1]`  Try to keep vars on panic
+
+And here are the supported REPL commands:
+
+* `:explain`          Print the explanation of last error
+* `:clear`            Clear all state, keeping compilation cache
+* `:last_compile_dir` Print the directory in which we last compiled
+* `:last_error_json`  Print the last compilation error as JSON (for debugging)
+* `:dep`              Add an external dependency. e.g. `:dep regex = "1.0"`
+* `:help`             View the help message
+
 ## Manual Installation
 
 You can install the REPL manually with git:
