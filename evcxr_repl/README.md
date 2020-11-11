@@ -1,58 +1,136 @@
 # Evcxr REPL
 
 [![Latest Version](https://img.shields.io/crates/v/evcxr_repl.svg)](https://crates.io/crates/evcxr_repl)
+[![Downloads](https://img.shields.io/crates/d/evcxr_repl)](https://crates.io/crates/evcxr_repl)
+[![License](https://img.shields.io/crates/l/evcxr_repl)](https://crates.io/crates/evcxr_repl)
 
-A REPL (Read-Eval-Print loop) for Rust.
+A REPL (Read-Eval-Print loop) for Rust using the [`evcxr`](https://github.com/google/evcxr/blob/master/evcxr/README.md) evaluation context.
 
-## Installation and usage
+## Installation and Usage
 
+Before you install the REPL, you must download a local copy of Rust's source code:
 ```sh
-rustup component add rust-src
-cargo install evcxr_repl
+$ rustup component add rust-src
 ```
 
-Then run with:
+Now you can go ahead and install the binary:
+```
+$ cargo install evcxr_repl
+```
 
+And start the REPL:
 ```sh
-evcxr
+$ evcxr  
+Welcome to evcxr. For help, type :help
+>> 
 ```
 
 ## Features
 
-* Define functions, structs, enums etc.
-* Assign values to variables then make use of them later.
-* Load crates from crates.io.
-  * e.g. `:dep regex = { version = "1.0" }` will load the regex crate.
-  * This can take a while, especially for large crates with many dependencies.
-* Expressions will be debug printed.
-* For the most part compilation errors are reported in a reasonably intuitive inline way.
+**Define functions, structs, enums, and other data types:**
+```rust
+>> pub struct User {
+     username: String
+  }
+>> let user = User { username: String::from("John Doe") };
+```
+
+
+**Assign values to variables then make use of them later:**
+```rust
+>> let x = "hello";
+>> // do other things
+>> println!("{}", x)
+```
+
+**Load crates from [crates.io](https://crates.io/):**
+```rust
+>> :dep rand = { version = "0.7.3" }
+>> let x: u8 = rand::random();
+```
+*Note that loading large crates with many dependencies may take a while.*
+
+**Nice error reporting:**
+```sh
+>> let x = unknown();
+           ^^^^^^ not found in this scope
+cannot find function `unknown` in this scope
+help: consider importing this function
+```
 
 ## Limitations
 
 * Storing references into variables that persist between compilations is not permitted.
-* Not yet any way to import macros from external crates.
+* There is currently no way to import macros from external crates.
 
-## More documentation
+## Documentation
 
-Some of the documentation for [Evcxr
-Jupyter](https://github.com/google/evcxr/tree/master/evcxr_jupyter) applies to
-the REPL as well. In particular, the later sections such as startup options,
-sccache integration and lld.
+### Startup Options
 
-## Installing from git head
+You can create an `init.evcxr` in one of the following locations, depending on your operating system:
 
-If there's a bugfix in git that you'd like to try out, you can install directly
-from git with the command:
+| Linux                        | OSX                                                 | Windows                                           |
+|------------------------------|-----------------------------------------------------|---------------------------------------------------|
+|` ~/.config/evcxr/init.evcxr` | `/Users/Alice/Library/Preferences/evcxr/init.evcxr` | `C:\Users\Alice\AppData\Roaming\evcxr\init.evcxr` |
+
+Any options set in this file will be automatically loaded at startup. For example:
+
+```rust
+:timing
+:dep { rand = "0.7.3" }
+:dep { log = "0.4.11" }
+```
+
+### Caching
+
+You can optionally cache compilation outputs with [scacche](https://github.com/mozilla/sccache). If you frequently use the same crates, this can speed things up quite a bit.
+
+You can install scacche with cargo:
+```sh
+$ cargo install sccache
+```
+
+And set the scacche configuration option:
+```sh
+:sccache 1
+```
+
+### Variable Persistence
+
+The `:vars` command will list all the variables defined in the current context:
+```rust
+>> let x = 0;
+>> let y = 1;
+>> :vars
+y: i32
+x: i32
+```
+
+If your code panics, all variables will be lost. To preserve variables on panics, you can set the `:preserve_vars_on_panic` configuration option:
+```rust
+>> :preserve_vars_on_panic 1
+Preserve vars on panic: true
+```
+
+Only variables that either are not referenced by the code being run or implement `Copy` will be preserved. Also note that this will slow down compilation.
+
+### Linker
+
+Installing the [`lld`](https://lld.llvm.org/) linker it is recommended as it is generally faster than the default system linker. On Debian-based systems you might be able to install it with:
+```sh
+$ sudo apt install lld
+```
+`lld` will be used automatically if detected on all systems with the exception of Mac OS. You can check which linker is being used by running `:linker`.
+
+## Manual Installation
+
+You can install the REPL manually with git:
 
 ```sh
-cargo install --force --git https://github.com/google/evcxr.git evcxr_repl
+$ cargo install --force --git https://github.com/google/evcxr.git evcxr_repl
 ```
 
 ## Similar projects
 
-* [cargo-eval](https://github.com/reitermarkus/cargo-eval) Not interactive, but
-  it gives you a quick way to evaluate Rust code from the command line and/or
-  scripts.
-* [rusti](https://github.com/murarth/rusti). From a quick look, it appears to
-  require a nightly compiler from 2016 and doesn't appear to persist variable
-  values. So I suspect the way that it works is pretty different.
+* [cargo-eval](https://github.com/reitermarkus/cargo-eval) Not interactive, but it gives you a quick way to evaluate Rust code from the command line and/or scripts.
+* [rusti](https://github.com/murarth/rusti). Deprecated since 2019. Also, rusti requires a nightly compiler from 2016 and doesn't appear to persist variable values.
