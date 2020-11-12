@@ -79,13 +79,13 @@ NoneError
 
 ## Documentation
 
-### Startup Options
+### Startup
 
-You can create an `init.evcxr` in one of the following locations, depending on your operating system:
+You can create an `init.evcxr` file in the `evcxr` config directory. The location of this directory varies depending on your operating system:
 
-| Linux                        | OSX                                                 | Windows                                           |
-|------------------------------|-----------------------------------------------------|---------------------------------------------------|
-|` ~/.config/evcxr/init.evcxr` | `/Users/Alice/Library/Preferences/evcxr/init.evcxr` | `C:\Users\Alice\AppData\Roaming\evcxr\init.evcxr` |
+| Linux             | OSX                                      | Windows                                |
+|-------------------|------------------------------------------|----------------------------------------|
+|` ~/.config/evcxr` | `/Users/Alice/Library/Preferences/evcxr` | `C:\Users\Alice\AppData\Roaming\evcxr` |
 
 Any options set in this file will be automatically loaded at startup. For example:
 
@@ -93,6 +93,20 @@ Any options set in this file will be automatically loaded at startup. For exampl
 :timing
 :dep { rand = "0.7.3" }
 :dep { log = "0.4.11" }
+```
+
+You can also create an `prelude.rs` file which will be evaluated on startup. For example:
+```rust
+// prelude.rs
+const msg: &str = "hello";
+```
+
+```rust
+$ evcxr                                                   
+Welcome to evcxr. For help, type :help
+Executing prelude from "~/.config/evcxr/prelude.rs"
+>> msg
+"hello"
 ```
 
 ### Caching
