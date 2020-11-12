@@ -1057,6 +1057,19 @@ impl EvalContext {
                     } else if error.code() == Some("E0277") && !self.state.allow_question_mark {
                         self.state.allow_question_mark = true;
                         fixed_errors.insert("Allow question mark");
+                    } else if error.code() == Some("E0658")
+                        && error
+                            .message()
+                            .contains("`let` expressions in this position are experimental")
+                    {
+                        // PR to add a semicolon is welcome. Ideally we'd not do so here though. It
+                        // should really be done based on the parse tree of the code. We currently
+                        // have two parsers, syn and rust-analyzer. We'd like to eventually get rid
+                        // of syn and just user rust-analyzer, but the code that could potentially
+                        // add a semicolon currently uses syn. So ideally we'd replace uses of syn
+                        // with rust-analyzer before adding new parse-tree based rules. But PRs that
+                        // just use syn to determine when to add a semicolon would also be OK.
+                        bail!("Looks like you're missing a semicolon");
                     }
                 }
                 _ => {}
