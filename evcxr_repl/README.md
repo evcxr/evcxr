@@ -30,8 +30,8 @@ Welcome to evcxr. For help, type :help
 **Define functions, structs, enums, and other data types:**
 ```rust
 >> pub struct User {
-     username: String
-  }
+       username: String
+   }
 >> let user = User { username: String::from("John Doe") };
 ```
 
