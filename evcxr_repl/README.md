@@ -111,9 +111,9 @@ Executing prelude from "~/.config/evcxr/prelude.rs"
 
 ### Caching
 
-You can optionally cache compilation outputs with [scacche](https://github.com/mozilla/sccache). If you frequently use the same crates, this can speed things up quite a bit.
+You can optionally cache compilation outputs with [sccache](https://github.com/mozilla/sccache). If you frequently use the same crates, this can speed things up quite a bit.
 
-You can install scacche with cargo:
+You can install sccache with cargo:
 ```sh
 $ cargo install sccache
 ```
