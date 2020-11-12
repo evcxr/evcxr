@@ -51,11 +51,25 @@ Welcome to evcxr. For help, type :help
 *Note that loading large crates with many dependencies may take a while.*
 
 **Nice error reporting:**
-```sh
+```rust
 >> let x = unknown();
            ^^^^^^ not found in this scope
 cannot find function `unknown` in this scope
 help: consider importing this function
+```
+
+**Support for the `?` operator**
+
+Evcxr REPL will automatically propogate errors caught with the `?` operator to the formatter set with `:efmt`. For example:
+```rust
+>> let var = std::env::var("UNKNOWN")?;
+NotPresent
+```
+
+If `:efmt` is set to `Debug`, this will also work for `Option`:
+```rust
+>> [1, 2, 3].get(4)?
+NoneError
 ```
 
 ## Limitations
