@@ -118,7 +118,7 @@ You can install scacche with cargo:
 $ cargo install sccache
 ```
 
-And set the scacche configuration option:
+And set the sccache configuration option:
 ```sh
 :sccache 1
 ```
