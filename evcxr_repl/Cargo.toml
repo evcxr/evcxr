@@ -13,7 +13,7 @@ edition = "2018"
 
 [dependencies]
 evcxr = { version = "=0.6.0", path = "../evcxr" }
-rustyline = "6.0.0"
+rustyline = "6.3.0"
 colored = "2.0.0"
 lazy_static = "1.4.0"
 regex = { version = "1.4.1", default-features = false, features = [ "std" ] }
