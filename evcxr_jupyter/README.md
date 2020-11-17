@@ -149,6 +149,12 @@ There are several Rust crates that provide Evcxr integration:
 * [Showata](https://crates.io/crates/showata)
   * Displays images, vectors, matrices (nalgebra and ndarray)
 
+## 3rd party resources
+
+* Dr. Shahin Rostami has written a book [Data Analysis with Rust
+  Notebooks](https://datacrayon.com/shop/product/data-analysis-with-rust-notebooks/). He's also put
+  up a great [getting started video](https://www.youtube.com/watch?v=0UEMn3yUoLo).
+
 ## Limitations
 
 * Don't ask Jupyter to "interrupt kernel", it won't work. Rust threads can't be
