@@ -61,7 +61,6 @@ NoneError
 
 ## Limitations
 
-* Storing references into variables that persist between compilations is not permitted.
 * There is currently no way to import macros from external crates.
 
 ## Documentation
@@ -131,6 +130,34 @@ Preserve vars on panic: true
 ```
 
 Only variables that either are not referenced by the code being run or implement `Copy` will be preserved. Also note that this will slow down compilation.
+
+### References
+
+Variables that persist cannot reference other variables. For example, you can't do this:
+
+```rust
+let all_values = vec![10, 20, 30, 40, 50];
+let some_values = &all_values[2..3];
+```
+
+There are a few ways to mitigate this limitation. Firstly, if you don't need `some_values` to
+persist, you can limit its scope:
+
+```rust
+let all_values = vec![10, 20, 30, 40, 50];
+{
+    let some_values = &all_values[2..3];
+    // Use some_value here
+}
+```
+
+If you really need `some_values` to persist, you can make `all_values` into a static reference by
+leaking it:
+
+```rust
+let all_values = Box::leak(Box::new(vec![10, 20, 30, 40, 50]));
+let some_values = &all_values[2..3];
+```
 
 ### Linker
 
