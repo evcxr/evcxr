@@ -69,17 +69,11 @@ for you, then [These
 instructions](https://github.com/google/evcxr/issues/53#issuecomment-530050850)
 might help.
 
-## Usage notes
+## Usage information
 
-* To see what variables you've got defined, type ":vars".
-* Don't ask Jupyter to "interrupt kernel", it won't work. Rust threads can't be
-  interrupted.
-* If your code panics, all variables will be lost. You can optionally run
-  `:preserve_vars_on_panic 1` to turn on preservation of variables. However note
-  that this will slow down compilation. Also, only variables that either are not
-  referenced by the code being run, or are Copy will be preserved.
-* If your code segfaults (e.g. due to buggy unsafe code), aborts, exits etc, the
-  process in which the code runs will be restarted. All variables will be lost.
+Evcxr is both a REPL and a Jupyter kernel. See [Evcxr common
+usage](https://github.com/google/evcxr/blob/master/evcxr/COMMON.md) for information that is common
+to both.
 
 ## Custom output
 
@@ -133,42 +127,6 @@ let name = evcxr_input::get_string("Name?");
 let password = evcxr_input::get_password("Password?");
 ```
 
-## Startup options
-If you always want particular options set, you can add these to init.evcxr
-which, if present will be run on startup. Sample locations:
-* Linux: ~/.config/evcxr/init.evcxr
-* Mac: /Users/Alice/Library/Preferences/evcxr/init.evcxr
-* Windows: C:\Users\Alice\AppData\Roaming\evcxr\init.evcxr
-
-For example, if you want to always turn on optimization (will make stuff slower
-to compile), you might put the following in init.evcxr:
-```
-:opt 2
-```
-
-## sccache integration
-
-sccache caches compilation outputs. If you frequently use the same crates, this
-can speed things up quite a bit.
-
-* `cargo install sccache`
-* Add `:sccache 1` to your init.evcxr (see Startup options above).
-* See [sccache](https://github.com/mozilla/sccache) for more details about
-  sccache.
-
-## Using lld for linking
-
-The linker "lld" will be used automatically if detected, except on Mac OS, where
-it doesn't work. Installing it is recommended, since it's generally a good bit
-faster than the system linker. On Debian-based systems you might be able to
-install it with:
-
-```sh
-sudo apt install lld
-```
-
-You can check if it's being used when within evcxr by running `:linker`.
-
 ## Installing from git head
 
 If there's a bugfix in git that you'd like to try out, you can install directly
@@ -190,6 +148,11 @@ There are several Rust crates that provide Evcxr integration:
   * Charts
 * [Showata](https://crates.io/crates/showata)
   * Displays images, vectors, matrices (nalgebra and ndarray)
+
+## Limitations
+
+* Don't ask Jupyter to "interrupt kernel", it won't work. Rust threads can't be
+  interrupted.
 
 ## Uninstall
 
