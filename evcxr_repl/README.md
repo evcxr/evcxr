@@ -28,7 +28,7 @@ Welcome to evcxr. For help, type :help
 ## Usage information
 
 Evcxr is both a REPL and a Jupyter kernel. See [Evcxr common
-usage](https://github.com/google/evcxr/blob/master/evcxr/COMMON.md) for usage information that is
+usage](https://github.com/google/evcxr/blob/master/COMMON.md) for usage information that is
 common to both.
 
 ## Manual Installation
