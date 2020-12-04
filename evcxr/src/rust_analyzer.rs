@@ -158,7 +158,7 @@ impl RustAnalyzer {
     fn load_cargo_toml(&mut self, change: &mut ra_ide::Change) -> Result<()> {
         let manifest = ProjectManifest::from_manifest_file(self.cargo_toml_filename())?;
         let workspace =
-            ProjectWorkspace::load(manifest, &CargoConfig::default(), self.with_sysroot).unwrap();
+            ProjectWorkspace::load(manifest, &CargoConfig::default(), self.with_sysroot)?;
         let load = workspace
             .to_roots()
             .iter()
