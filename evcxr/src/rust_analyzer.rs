@@ -157,8 +157,11 @@ impl RustAnalyzer {
 
     fn load_cargo_toml(&mut self, change: &mut ra_ide::Change) -> Result<()> {
         let manifest = ProjectManifest::from_manifest_file(self.cargo_toml_filename())?;
-        let workspace =
-            ProjectWorkspace::load(manifest, &CargoConfig::default(), self.with_sysroot)?;
+        let config = CargoConfig {
+            no_sysroot: !self.with_sysroot,
+            ..CargoConfig::default()
+        };
+        let workspace = ProjectWorkspace::load(manifest, &config)?;
         let load = workspace
             .to_roots()
             .iter()
@@ -231,6 +234,7 @@ impl RustAnalyzer {
             add_call_parenthesis: true,
             add_call_argument_snippets: true,
             snippet_cap: None,
+            ..ra_ide::CompletionConfig::default()
         };
         config.allow_snippets(true);
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
