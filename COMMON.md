@@ -37,6 +37,18 @@ and the [Evcxr Jupyter kernel](evcxr_jupyter/README.md).
 ```
 *Note that loading large crates with many dependencies may take a while.*
 
+If you'd like to use a crate with a different name than what it's know as on crates.io, you can use
+`:dep any_name = { package = "crates_io_name" }`. For example, if you wanted to load the crates.io
+package `unicode-xid`, but refer to it locally as `unicode_xid`, you could do that as follow.
+
+```rust
+:dep unicode_xid = { package = "unicode-xid", version = "*" }
+use unicode_xid;
+```
+
+There are many other options that can be specified. See Cargo's [official dependency
+documentation](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html) for details.
+
 **Nice error reporting:**
 ```rust
 >> let x = unknown();
