@@ -17,7 +17,7 @@ use ra_ap_base_db::{FileId, SourceRoot};
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
 use ra_ap_paths::AbsPathBuf;
-use ra_ap_project_model::{CargoConfig, ProcMacroClient, ProjectManifest, ProjectWorkspace};
+use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace};
 use ra_ap_syntax::ast::{self, AstNode};
 use ra_ap_vfs as ra_vfs;
 use ra_ap_vfs_notify as vfs_notify;
@@ -214,11 +214,9 @@ impl RustAnalyzer {
                 .map(|file_set| SourceRoot::new_local(file_set))
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(
-            None,
-            &ProcMacroClient::dummy(),
-            &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
-        ));
+        change.set_crate_graph(workspace.to_crate_graph(None, None, &mut |path| {
+            self.vfs.file_id(&path.to_path_buf().into())
+        }));
         Ok(())
     }
 
