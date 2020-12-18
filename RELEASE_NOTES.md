@@ -1,3 +1,9 @@
+# Version 0.6.1
+* Updates to rust-analyzer (improves tab completion)
+* Documentation improvements. Thanks Ibraheem!
+* Fixed a panic when doing tab completion after loading a crate with a
+  hyphenated name.
+
 # Version 0.6.0
 * Support for rustc 1.48.
 * Tab completion based on rust-analyzer (in both Jupyter kernel and REPL).
