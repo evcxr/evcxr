@@ -12,49 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use regex::Regex;
-use syn;
+use ra_ap_syntax::{ast, AstNode, SourceFile};
+
+/// Information about some code that the user supplied.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) struct UserCodeMetadata {
+    /// The starting byte in the code as the user wrote it.
+    pub(crate) start_byte: usize,
+}
 
 /// Attempt to split some code into separate statements. All of the input will be returned besides
 /// possibly some trailing whitespace. i.e. if we can't parse it as statements, everything from the
 /// point where we can't parse onwards will be returned as a single statement.
-pub fn split_into_statements(mut code: &str) -> Vec<&str> {
-    // Once proc_macro2::Span can be used, we shouldn't need this - we can instead just put
-    // everything inside braces and parse it as a block, then get the spans for whichever bits we
-    // care about. Until then, we have to live with this.
-
-    lazy_static! {
-        static ref SEPARATOR: Regex = Regex::new("(;|};?) *\n?").unwrap();
-    }
-    lazy_static! {
-        static ref ELSE_AT_START: Regex = Regex::new("^[ \n]*else[ \n]").unwrap();
-    }
-
+pub(crate) fn split_into_statements(code: &str) -> Vec<(&str, UserCodeMetadata)> {
     let mut output = Vec::new();
-    loop {
-        let mut got_statment = false;
-        for m in SEPARATOR.find_iter(code) {
-            let offset = m.end();
-            let candidate = &code[..offset];
-            let remainder = &code[offset..];
-            if ELSE_AT_START.is_match(remainder) {
-                continue;
-            }
-            if syn::parse_str::<syn::Stmt>(candidate).is_ok() {
-                output.push(candidate);
-                code = remainder;
-                got_statment = true;
-                break;
-            }
+    let prelude = "fn f(){";
+    let parsed_file = SourceFile::parse(&(prelude.to_owned() + code));
+    let mut start_byte = 0;
+    if let Some(block) = parsed_file
+        .syntax_node()
+        .children()
+        .next()
+        .and_then(ast::Fn::cast)
+        .as_ref()
+        .and_then(ast::Fn::body)
+    {
+        let mut children = block.syntax().children().peekable();
+        while let (Some(_child), next) = (children.next(), children.peek()) {
+            // With the possible exception of the first node, We want to include
+            // whitespace after nodes rather than before, so our end is the
+            // start of the next node, or failing that the end of the code.
+            let end = next
+                .map(|next| usize::from(next.text_range().start()) - prelude.len())
+                .unwrap_or(code.len());
+            output.push((&code[start_byte..end], UserCodeMetadata { start_byte }));
+            start_byte = end;
         }
-        if !got_statment {
-            break;
-        }
-    }
-    // Whatever is left gets added, whether or not it parses as a statement. That way errors can be
-    // reported.
-    if !code.trim().is_empty() {
-        output.push(code);
     }
     output
 }
@@ -63,10 +56,17 @@ pub fn split_into_statements(mut code: &str) -> Vec<&str> {
 mod test {
     use super::split_into_statements;
 
+    fn split_and_get_text(code: &str) -> Vec<&str> {
+        split_into_statements(code)
+            .into_iter()
+            .map(|(code, _meta)| code)
+            .collect()
+    }
+
     #[test]
     fn single_line() {
         assert_eq!(
-            split_into_statements("let mut a = 10i32; a += 32;"),
+            split_and_get_text("let mut a = 10i32; a += 32;"),
             vec!["let mut a = 10i32; ", "a += 32;"]
         );
     }
@@ -74,15 +74,15 @@ mod test {
     #[test]
     fn multiple_lines() {
         assert_eq!(
-            split_into_statements("let mut a = 10i32;\n  foo()"),
-            vec!["let mut a = 10i32;\n", "  foo()"]
+            split_and_get_text("let mut a = 10i32;\n  foo()"),
+            vec!["let mut a = 10i32;\n  ", "foo()"]
         );
     }
 
     #[test]
     fn statement_ends_with_brace() {
         assert_eq!(
-            split_into_statements("if a == b {foo(); bar();} baz();"),
+            split_and_get_text("if a == b {foo(); bar();} baz();"),
             vec!["if a == b {foo(); bar();} ", "baz();"]
         );
     }
@@ -90,12 +90,38 @@ mod test {
     #[test]
     fn else_statements() {
         assert_eq!(
-            split_into_statements(
-                "if a == b {foo(); bar();}  else if a < b {baz();} else {foo();} b"
-            ),
+            split_and_get_text("if a == b {foo(); bar();}  else if a < b {baz();} else {foo();} b"),
             vec![
                 "if a == b {foo(); bar();}  else if a < b {baz();} else {foo();} ",
                 "b"
+            ]
+        );
+    }
+
+    #[test]
+    fn crate_attributes() {
+        assert_eq!(
+            split_and_get_text("#![allow(non_ascii_idents)] let a = 10;"),
+            vec!["#![allow(non_ascii_idents)] ", "let a = 10;"]
+        );
+    }
+
+    #[test]
+    fn partial_code() {
+        let code = r#"
+        fn foo() -> Vec<String> {
+            vec![]
+        }
+        foo().res"#;
+        assert_eq!(
+            split_and_get_text(code),
+            vec![
+                r#"
+        fn foo() -> Vec<String> {
+            vec![]
+        }
+        "#,
+                "foo().res"
             ]
         );
     }

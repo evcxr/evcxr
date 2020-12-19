@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::statement_splitter;
+use crate::statement_splitter::{self, UserCodeMetadata};
 use anyhow::{anyhow, Result};
 use std;
 
@@ -40,13 +40,6 @@ impl Segment {
 pub(crate) struct Command {
     pub(crate) command: String,
     pub(crate) args: Option<String>,
-}
-
-/// Information about some code that the user supplied.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct UserCodeMetadata {
-    /// The starting byte in the code as the user wrote it.
-    start_byte: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -165,17 +158,11 @@ impl CodeBlock {
             } else {
                 // Anything else, we treat as Rust code to be executed. Since we don't accept commands after Rust code, we're done looking for commands.
                 let non_command_start_byte = line.as_ptr() as usize - user_code.as_ptr() as usize;
-                for statement_code in
+                for (statement_code, mut meta) in
                     statement_splitter::split_into_statements(&user_code[non_command_start_byte..])
                 {
-                    let statement_start_byte =
-                        statement_code.as_ptr() as usize - user_code.as_ptr() as usize;
-                    self = self.with(
-                        CodeKind::OriginalUserCode(UserCodeMetadata {
-                            start_byte: statement_start_byte,
-                        }),
-                        statement_code,
-                    );
+                    meta.start_byte += non_command_start_byte;
+                    self = self.with(CodeKind::OriginalUserCode(meta), statement_code);
                 }
                 break;
             }
