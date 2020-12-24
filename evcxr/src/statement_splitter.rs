@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ra_ap_syntax::{ast, AstNode, SourceFile};
+use ra_ap_syntax::{ast, AstNode, SourceFile, SyntaxNode};
 
-/// Information about some code that the user supplied.
-#[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct UserCodeMetadata {
-    /// The starting byte in the code as the user wrote it.
+pub(crate) struct OriginalUserCode<'a> {
+    pub(crate) code: &'a str,
+    pub(crate) node: SyntaxNode,
     pub(crate) start_byte: usize,
 }
 
 /// Attempt to split some code into separate statements. All of the input will be returned besides
 /// possibly some trailing whitespace. i.e. if we can't parse it as statements, everything from the
 /// point where we can't parse onwards will be returned as a single statement.
-pub(crate) fn split_into_statements(code: &str) -> Vec<(&str, UserCodeMetadata)> {
+pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
     let mut output = Vec::new();
     let prelude = "fn f(){";
-    let parsed_file = SourceFile::parse(&(prelude.to_owned() + code));
+    let parsed_file = SourceFile::parse(&(prelude.to_owned() + code + "}"));
     let mut start_byte = 0;
     if let Some(block) = parsed_file
         .syntax_node()
@@ -38,14 +37,18 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<(&str, UserCodeMetadata)>
         .and_then(ast::Fn::body)
     {
         let mut children = block.syntax().children().peekable();
-        while let (Some(_child), next) = (children.next(), children.peek()) {
+        while let (Some(child), next) = (children.next(), children.peek()) {
             // With the possible exception of the first node, We want to include
             // whitespace after nodes rather than before, so our end is the
             // start of the next node, or failing that the end of the code.
             let end = next
                 .map(|next| usize::from(next.text_range().start()) - prelude.len())
                 .unwrap_or(code.len());
-            output.push((&code[start_byte..end], UserCodeMetadata { start_byte }));
+            output.push(OriginalUserCode {
+                code: &code[start_byte..end],
+                node: child,
+                start_byte,
+            });
             start_byte = end;
         }
     }
@@ -54,12 +57,14 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<(&str, UserCodeMetadata)>
 
 #[cfg(test)]
 mod test {
+    use ra_ap_syntax::{ast, AstNode, SyntaxKind};
+
     use super::split_into_statements;
 
     fn split_and_get_text(code: &str) -> Vec<&str> {
         split_into_statements(code)
             .into_iter()
-            .map(|(code, _meta)| code)
+            .map(|orig| orig.code)
             .collect()
     }
 
@@ -124,5 +129,21 @@ mod test {
                 "foo().res"
             ]
         );
+    }
+
+    #[test]
+    fn expression() {
+        let out = split_into_statements("42");
+        assert_eq!(out.len(), 1);
+        let out = &out[0];
+        assert_eq!(out.node.kind(), SyntaxKind::LITERAL);
+    }
+
+    #[test]
+    fn macro_call() {
+        let out = split_into_statements("foo!(42)");
+        assert_eq!(out.len(), 1);
+        let out = &out[0];
+        assert!(ast::Expr::can_cast(out.node.kind()));
     }
 }

@@ -22,13 +22,13 @@ use crate::module::{Module, SoFile};
 use crate::runtime;
 use crate::rust_analyzer::{Completions, RustAnalyzer, VariableInfo};
 use anyhow::Result;
+use ra_ap_syntax::{ast, AstNode, SyntaxKind, SyntaxNode};
 use regex::Regex;
 use std;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
-use syn;
 use tempfile;
 
 pub struct EvalContext {
@@ -211,28 +211,17 @@ impl EvalContext {
 
     /// Evaluates the supplied Rust code.
     pub fn eval(&mut self, code: &str) -> Result<EvalOutputs, Error> {
-        self.eval_with_callbacks(
-            CodeBlock::new().original_user_code(code),
-            &mut EvalCallbacks::default(),
-        )
+        let (user_code, nodes) = CodeBlock::from_original_user_code(code);
+        self.eval_with_callbacks(user_code, &nodes, &mut EvalCallbacks::default())
     }
 
     /// Evaluates the supplied Rust code.
     pub(crate) fn eval_with_callbacks(
         &mut self,
         user_code: CodeBlock,
+        nodes: &[SyntaxNode],
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
-        fn parse_stmt_or_expr(code: &str) -> Result<syn::Stmt, ()> {
-            match syn::parse_str::<syn::Stmt>(code) {
-                Ok(stmt) => Ok(stmt),
-                Err(_) => match syn::parse_str::<syn::Expr>(code) {
-                    Ok(expr) => Ok(syn::Stmt::Expr(expr)),
-                    Err(_) => Err(()),
-                },
-            }
-        }
-
         let mut phases = PhaseDetailsBuilder::new();
 
         if self.preserve_vars_on_panic {
@@ -256,54 +245,76 @@ impl EvalContext {
         let mut previous_item_name = None;
         let num_statements = user_code.segments.len();
         for (statement_index, segment) in user_code.segments.into_iter().enumerate() {
-            if let Ok(stmt) = parse_stmt_or_expr(&segment.code) {
-                if self.debug_mode {
-                    println!("STMT: {:#?}", stmt);
+            let node = if let CodeKind::OriginalUserCode(meta) = &segment.kind {
+                &nodes[meta.node_index]
+            } else {
+                code_out = code_out.with_segment(segment);
+                continue;
+            };
+            if let Some(let_stmt) = ast::LetStmt::cast(node.clone()) {
+                if let Some(pat) = let_stmt.pat() {
+                    self.record_new_locals(pat, let_stmt.ty());
+                    code_out = code_out.with_segment(segment);
                 }
-                match &stmt {
-                    syn::Stmt::Local(local) => {
-                        self.record_new_locals(&local.pat, None);
-                        code_out = code_out.with_segment(segment);
-                    }
-                    syn::Stmt::Item(syn::Item::ExternCrate(syn::ItemExternCrate {
-                        ident, ..
-                    })) => {
-                        let crate_name = ident.to_string();
-                        if !self.dependency_lib_names()?.contains(&crate_name) {
+            } else if ast::Expr::can_cast(node.kind()) {
+                if statement_index == num_statements - 1 {
+                    code_out = code_out.code_with_fallback(
+                        // First we try calling .evcxr_display().
+                        CodeBlock::new()
+                            .generated("(")
+                            .with_segment(segment.clone())
+                            .generated(").evcxr_display();")
+                            .code_string(),
+                        // If that fails, we try debug format.
+                        CodeBlock::new()
+                            .generated(SEND_TEXT_PLAIN_DEF)
+                            .generated(&format!(
+                                "evcxr_send_text_plain(&format!(\"{}\",\n",
+                                self.output_format
+                            ))
+                            .with_segment(segment)
+                            .generated("));"),
+                    );
+                } else {
+                    // We got an expression, but it wasn't the last
+                    // statement, so don't try to print it.
+                    code_out = code_out.with_segment(segment);
+                }
+            } else if let Some(item) = ast::Item::cast(node.clone()) {
+                match item {
+                    ast::Item::ExternCrate(extern_crate) => {
+                        if let Some(crate_name) = extern_crate.name_ref() {
+                            let crate_name = crate_name.text().to_string();
+                            if !self.dependency_lib_names()?.contains(&crate_name) {
+                                self.state
+                                    .external_deps
+                                    .entry(crate_name.clone())
+                                    .or_insert_with(|| {
+                                        ExternalCrate::new(crate_name.clone(), "\"*\"".to_owned())
+                                            .unwrap()
+                                    });
+                            }
                             self.state
-                                .external_deps
-                                .entry(crate_name.clone())
-                                .or_insert_with(|| {
-                                    ExternalCrate::new(crate_name.clone(), "\"*\"".to_owned())
-                                        .unwrap()
-                                });
+                                .extern_crate_stmts
+                                .insert(crate_name, segment.code.clone());
                         }
-                        self.state
-                            .extern_crate_stmts
-                            .insert(crate_name, segment.code.clone());
                     }
-                    syn::Stmt::Item(syn::Item::Macro(item_macro)) => {
-                        // AFAICT this is always an invocation of macro_rules,
-                        // which means an item is being defined. Invocations of
-                        // macros seem to show up as syn::Expr::Macro.
-                        if let Some(ident) = &item_macro.ident {
+                    ast::Item::MacroRules(macro_rules) => {
+                        if let Some(name) = ast::NameOwner::name(&macro_rules) {
                             let item_block = CodeBlock::new().with_segment(segment);
                             self.state
                                 .items_by_name
-                                .insert(ident.to_string(), item_block);
+                                .insert(name.text().to_string(), item_block);
                         } else {
                             code_out = code_out.with_segment(segment);
                         }
                     }
-                    syn::Stmt::Semi(..) => {
-                        code_out = code_out.with_segment(segment);
-                    }
-                    syn::Stmt::Item(syn::Item::Use(..)) => {
+                    ast::Item::Use(..) => {
                         self.state.use_stmts.insert(segment.code.clone());
                     }
-                    syn::Stmt::Item(item) => {
+                    item => {
                         let item_block = CodeBlock::new().with_segment(segment);
-                        if let Some(item_name) = item::item_name(item) {
+                        if let Some(item_name) = item::item_name(&item) {
                             *self
                                 .state
                                 .items_by_name
@@ -324,35 +335,8 @@ impl EvalContext {
                             self.state.unnamed_items.push(item_block);
                         }
                     }
-                    syn::Stmt::Expr(_) => {
-                        if statement_index == num_statements - 1 {
-                            code_out = code_out.code_with_fallback(
-                                // First we try calling .evcxr_display().
-                                CodeBlock::new()
-                                    .generated("(")
-                                    .with_segment(segment.clone())
-                                    .generated(").evcxr_display();")
-                                    .code_string(),
-                                // If that fails, we try debug format.
-                                CodeBlock::new()
-                                    .generated(SEND_TEXT_PLAIN_DEF)
-                                    .generated(&format!(
-                                        "evcxr_send_text_plain(&format!(\"{}\",\n",
-                                        self.output_format
-                                    ))
-                                    .with_segment(segment)
-                                    .generated("));"),
-                            );
-                        } else {
-                            // We got an expression, but it wasn't the last
-                            // statement, so don't try to print it.
-                            code_out = code_out.with_segment(segment);
-                        }
-                    }
                 }
             } else {
-                // Syn couldn't parse the code, put it inside a function body and hopefully we'll
-                // get a reasonable error message from rustc.
                 code_out = code_out.with_segment(segment);
             }
         }
@@ -653,6 +637,7 @@ impl EvalContext {
     }
 
     fn fix_variable_types(&mut self, code: CodeBlock) -> Result<(), Error> {
+        println!("{}", code.code_string());
         self.analyzer.set_source(code.code_string())?;
         for (
             variable_name,
@@ -1027,7 +1012,7 @@ impl EvalContext {
                         }
                     } else if error.code() == Some("E0562") || error.code().is_none() {
                         bail!(
-                            "The variable `{}` has a type ({}) that can't be persisted. You can \
+                            "The variable `{}` has a type `{}` that can't be persisted. You can \
                             try wrapping your code in braces so that the variable goes out of \
                             scope before the end of the code to be executed.",
                             variable_name,
@@ -1078,31 +1063,33 @@ impl EvalContext {
         Ok(())
     }
 
-    fn record_new_locals(&mut self, pat: &syn::Pat, opt_ty: Option<&syn::Type>) {
+    fn record_new_locals(&mut self, pat: ast::Pat, opt_ty: Option<ast::Type>) {
         match pat {
-            syn::Pat::Ident(ident) => self.record_local(ident, opt_ty),
-            syn::Pat::Type(pat_type) => self.record_new_locals(&*pat_type.pat, Some(&*pat_type.ty)),
-            syn::Pat::Struct(ref pat_struct) => {
-                for field in &pat_struct.fields {
-                    self.record_new_locals(&field.pat, None);
+            ast::Pat::IdentPat(ident) => self.record_local(ident, opt_ty),
+            ast::Pat::RecordPat(ref pat_struct) => {
+                if let Some(record_fields) = pat_struct.record_pat_field_list() {
+                    for field in record_fields.fields() {
+                        if let Some(pat) = field.pat() {
+                            self.record_new_locals(pat, None);
+                        }
+                    }
                 }
             }
-            syn::Pat::Tuple(ref pat_tuple) => {
-                for member in &pat_tuple.elems {
-                    self.record_new_locals(member, None);
+            ast::Pat::TuplePat(ref pat_tuple) => {
+                for pat in pat_tuple.fields() {
+                    self.record_new_locals(pat, None);
                 }
             }
-            syn::Pat::TupleStruct(ref pat_tuple) => {
-                for member in &pat_tuple.pat.elems {
-                    self.record_new_locals(member, None);
+            ast::Pat::TupleStructPat(ref pat_tuple) => {
+                for pat in pat_tuple.fields() {
+                    self.record_new_locals(pat, None);
                 }
             }
             _ => {}
         }
     }
 
-    fn record_local(&mut self, pat_ident: &syn::PatIdent, opt_ty: Option<&syn::Type>) {
-        use syn::export::ToTokens;
+    fn record_local(&mut self, pat_ident: ast::IdentPat, opt_ty: Option<ast::Type>) {
         // Default new variables to some type, say String. Assuming it isn't a
         // String, we'll get a compilation error when we try to move the
         // variable into our variable store, then we'll see what type the error
@@ -1111,22 +1098,24 @@ impl EvalContext {
         // only correct if it's a single variable). This gives the user a way to
         // force the type if rustc is giving us a bad suggestion.
         let type_name = match opt_ty {
-            Some(ty) if type_is_fully_specified(ty) => format!("{}", ty.into_token_stream()),
+            Some(ty) if type_is_fully_specified(&ty) => format!("{}", AstNode::syntax(&ty).text()),
             _ => "String".to_owned(),
         };
-        self.state.variable_states.insert(
-            pat_ident.ident.to_string(),
-            VariableState {
-                type_name,
-                is_mut: pat_ident.mutability.is_some(),
-                // All new locals will initially be defined only inside our catch_unwind
-                // block.
-                move_state: VariableMoveState::MovedIntoCatchUnwind,
-                // If we're preserving copy types, then assume this variable
-                // is copy until we find out it's not.
-                is_copy_type: self.preserve_vars_on_panic,
-            },
-        );
+        if let Some(name) = ast::NameOwner::name(&pat_ident) {
+            self.state.variable_states.insert(
+                name.text().to_string(),
+                VariableState {
+                    type_name,
+                    is_mut: pat_ident.mut_token().is_some(),
+                    // All new locals will initially be defined only inside our catch_unwind
+                    // block.
+                    move_state: VariableMoveState::MovedIntoCatchUnwind,
+                    // If we're preserving copy types, then assume this variable
+                    // is copy until we find out it's not.
+                    is_copy_type: self.preserve_vars_on_panic,
+                },
+            );
+        }
     }
 
     fn store_variable_statements(&self, move_state: &VariableMoveState) -> CodeBlock {
@@ -1191,22 +1180,10 @@ impl EvalContext {
 }
 
 /// Returns whether a type is fully specified. i.e. it doesn't contain any '_'.
-fn type_is_fully_specified(ty: &syn::Type) -> bool {
-    struct InferenceFinder {
-        has_inference: bool,
-    }
-
-    impl<'ast> syn::visit::Visit<'ast> for InferenceFinder {
-        fn visit_type_infer(&mut self, _i: &'ast syn::TypeInfer) {
-            self.has_inference = true;
-        }
-    }
-
-    let mut inference_finder = InferenceFinder {
-        has_inference: false,
-    };
-    syn::visit::visit_type(&mut inference_finder, ty);
-    !inference_finder.has_inference
+fn type_is_fully_specified(ty: &ast::Type) -> bool {
+    !AstNode::syntax(ty)
+        .descendants()
+        .any(|n| n.kind() == SyntaxKind::INFER_TYPE)
 }
 
 #[derive(Debug)]

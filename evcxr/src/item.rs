@@ -12,26 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use proc_macro2;
-use syn;
+use ra_ap_syntax::ast;
 
 /// Returns the name of an item if it has one.
-pub(crate) fn item_name(item: &syn::Item) -> Option<String> {
+pub(crate) fn item_name(item: &ast::Item) -> Option<String> {
     item_ident(item).map(|ident| format!("{}", ident))
 }
 
 /// Returns the ident of an item if it has one.
-fn item_ident(item: &syn::Item) -> Option<&proc_macro2::Ident> {
-    Some(match item {
-        syn::Item::Static(i) => &i.ident,
-        syn::Item::Const(i) => &i.ident,
-        syn::Item::Fn(i) => &i.sig.ident,
-        syn::Item::Mod(i) => &i.ident,
-        syn::Item::Type(i) => &i.ident,
-        syn::Item::Struct(i) => &i.ident,
-        syn::Item::Enum(i) => &i.ident,
-        syn::Item::Union(i) => &i.ident,
-        syn::Item::Trait(i) => &i.ident,
+fn item_ident(item: &ast::Item) -> Option<ast::Name> {
+    match item {
+        ast::Item::Const(i) => ast::NameOwner::name(i),
+        ast::Item::Enum(i) => ast::NameOwner::name(i),
+        ast::Item::Fn(i) => ast::NameOwner::name(i),
+        ast::Item::MacroRules(i) => ast::NameOwner::name(i),
+        ast::Item::MacroDef(i) => ast::NameOwner::name(i),
+        ast::Item::Module(i) => ast::NameOwner::name(i),
+        ast::Item::Static(i) => ast::NameOwner::name(i),
+        ast::Item::Struct(i) => ast::NameOwner::name(i),
+        ast::Item::Trait(i) => ast::NameOwner::name(i),
+        ast::Item::TypeAlias(i) => ast::NameOwner::name(i),
+        ast::Item::Union(i) => ast::NameOwner::name(i),
         _ => return None,
-    })
+    }
 }

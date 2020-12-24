@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::statement_splitter::{self, UserCodeMetadata};
+use crate::statement_splitter;
 use anyhow::{anyhow, Result};
+use ra_ap_syntax::SyntaxNode;
+use statement_splitter::OriginalUserCode;
 use std;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -60,7 +62,7 @@ pub(crate) enum CodeKind {
     /// A line of code that has a fallback to be used in case the supplied line fails to compile.
     WithFallback(CodeBlock),
     /// Code that we generated, but which we don't expect errors from. If we get errors there's not
-    /// much we can do besides give the user as much information as we can, appologise and ask to
+    /// much we can do besides give the user as much information as we can, apologise and ask to
     /// file a bug report.
     OtherGeneratedCode,
     /// We had trouble determining what the error applied to.
@@ -87,6 +89,14 @@ impl CodeKind {
 
 fn num_lines(code: &str) -> usize {
     code.chars().filter(|ch| *ch == '\n').count()
+}
+
+/// Information about some code that the user supplied.
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) struct UserCodeMetadata {
+    /// The starting byte in the code as the user wrote it.
+    pub(crate) start_byte: usize,
+    pub(crate) node_index: usize,
 }
 
 /// Represents a unit of code. This may be code that the user supplied, in which case it might
@@ -138,15 +148,18 @@ impl CodeBlock {
         self.with(CodeKind::OtherUserCode, user_code)
     }
 
-    pub(crate) fn original_user_code(mut self, user_code: &str) -> CodeBlock {
+    pub(crate) fn from_original_user_code(user_code: &str) -> (CodeBlock, Vec<SyntaxNode>) {
         use regex::Regex;
         lazy_static! {
             static ref COMMAND_RE: Regex = Regex::new("^ *(:[^ ]+)( +(.*))?$").unwrap();
         }
+        let mut code_block = CodeBlock::new();
+        let mut nodes = Vec::new();
+
         for line in user_code.lines() {
             // We only accept commands up until the first non-command.
             if let Some(captures) = COMMAND_RE.captures(line) {
-                self = self.with(
+                code_block = code_block.with(
                     CodeKind::Command(Command {
                         command: captures[1].to_owned(),
                         args: captures.get(3).map(|m| m.as_str().to_owned()),
@@ -158,16 +171,27 @@ impl CodeBlock {
             } else {
                 // Anything else, we treat as Rust code to be executed. Since we don't accept commands after Rust code, we're done looking for commands.
                 let non_command_start_byte = line.as_ptr() as usize - user_code.as_ptr() as usize;
-                for (statement_code, mut meta) in
+                for OriginalUserCode {
+                    code,
+                    start_byte,
+                    node,
+                } in
                     statement_splitter::split_into_statements(&user_code[non_command_start_byte..])
                 {
-                    meta.start_byte += non_command_start_byte;
-                    self = self.with(CodeKind::OriginalUserCode(meta), statement_code);
+                    let node_index = nodes.len();
+                    code_block = code_block.with(
+                        CodeKind::OriginalUserCode(UserCodeMetadata {
+                            start_byte: start_byte + non_command_start_byte,
+                            node_index,
+                        }),
+                        code,
+                    );
+                    nodes.push(node);
                 }
                 break;
             }
         }
-        self
+        (code_block, nodes)
     }
 
     /// Tries to convert a user-code offset into an output code offset. For this to work as
@@ -278,14 +302,15 @@ impl CodeBlock {
 
 #[cfg(test)]
 mod test {
-    use super::{CodeBlock, CodeKind, UserCodeMetadata};
+    use super::{CodeBlock, CodeKind};
 
     #[test]
     fn basic_usage() {
         let user_code = "l3";
+        let (user_code_block, _nodes) = CodeBlock::from_original_user_code(user_code);
         let mut code = CodeBlock::new()
             .generated("l1\nl2")
-            .original_user_code(user_code)
+            .add_all(user_code_block)
             .add_all(CodeBlock::new().generated("l4"));
         code.pack_variable("v".to_owned(), "l5".to_owned());
         assert_eq!(code.code_string(), "l1\nl2\nl3\nl4\nl5\n");
@@ -300,10 +325,11 @@ mod test {
         assert_eq!(code.origin_for_line(0), &CodeKind::Unknown);
         assert_eq!(code.origin_for_line(1), &CodeKind::OtherGeneratedCode);
         assert_eq!(code.origin_for_line(2), &CodeKind::OtherGeneratedCode);
-        assert_eq!(
-            code.origin_for_line(3),
-            &CodeKind::OriginalUserCode(UserCodeMetadata { start_byte: 0 })
-        );
+        if let CodeKind::OriginalUserCode(meta3) = code.origin_for_line(3) {
+            assert_eq!(meta3.start_byte, 0);
+        } else {
+            panic!("Unexpected result for line 3");
+        }
         assert_eq!(code.origin_for_line(4), &CodeKind::OtherGeneratedCode);
         assert_eq!(
             code.origin_for_line(5),

@@ -14,9 +14,6 @@ authors = [
 edition = "2018"
 
 [dependencies]
-# TODO: Migrate off of syn and proc-macro2 and use rust-analyzer where needed.
-syn = { version = "1.0.48", default-features = false, features = ["parsing", "full", "printing", "clone-impls", "extra-traits", "visit"] }
-proc-macro2 = { version = "1.0.24", default-features = false }
 anyhow = "1.0.33"
 tempfile = "3.1.0"
 libc = "0.2.80"

@@ -58,7 +58,7 @@ fn write_file(dir: &Path, basename: &str, contents: &str) -> Result<(), Error> {
 fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
     // Copy file by reading and writing instead of using std::fs::copy. The src
     // is a hard-linked file and we want to make extra sure that we end up with
-    // a completely indepent copy.
+    // a completely independent copy.
     fn alt_copy(src: &Path, dest: &Path) -> Result<(), std::io::Error> {
         use std::fs::File;
         std::io::copy(&mut File::open(src)?, &mut File::create(dest)?)?;
@@ -133,7 +133,7 @@ impl Module {
             if let Ok(path) = which::which("sccache") {
                 self.sccache = Some(path);
             } else {
-                bail!("Couldn't find sccache. Try running `cargo install sscache`.");
+                bail!("Couldn't find sccache. Try running `cargo install sccache`.");
             }
         } else {
             self.sccache = None;

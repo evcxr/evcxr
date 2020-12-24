@@ -63,7 +63,8 @@ impl CommandContext {
         let mut eval_outputs = EvalOutputs::new();
         let start = Instant::now();
         let mut non_command_code = CodeBlock::new();
-        for segment in CodeBlock::new().original_user_code(to_run).segments {
+        let (user_code, nodes) = CodeBlock::from_original_user_code(to_run);
+        for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
                 eval_outputs.merge(self.process_command(&command.command, &command.args)?);
             } else {
@@ -74,7 +75,7 @@ impl CommandContext {
             Ok(EvalOutputs::new())
         } else {
             self.eval_context
-                .eval_with_callbacks(non_command_code, callbacks)
+                .eval_with_callbacks(non_command_code, &nodes, callbacks)
         };
         let duration = start.elapsed();
         match result {
@@ -103,7 +104,8 @@ impl CommandContext {
     /// any visible side effects.
     pub fn completions(&mut self, src: &str, position: usize) -> Result<Completions> {
         let mut non_command_code = CodeBlock::new();
-        for segment in CodeBlock::new().original_user_code(src).segments {
+        let (user_code, _nodes) = CodeBlock::from_original_user_code(src);
+        for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
                 if command.command == ":dep" {
                     // Best-effort. If anything goes wrong here, just ignore it.

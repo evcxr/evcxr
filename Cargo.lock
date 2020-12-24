@@ -507,7 +507,6 @@ dependencies = [
  "lazy_static",
  "libc",
  "libloading",
- "proc-macro2 1.0.24",
  "ra_ap_base_db",
  "ra_ap_hir",
  "ra_ap_ide",
@@ -518,7 +517,6 @@ dependencies = [
  "ra_ap_vfs-notify",
  "regex",
  "sig",
- "syn 1.0.48",
  "tempfile",
  "which",
 ]
