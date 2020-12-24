@@ -9,5 +9,5 @@ authors = ["David Lattimore <dml@google.com>"]
 edition = "2018"
 
 [dependencies]
-image = "0.22.1"
+image = "0.23.12"
 evcxr_runtime = {version = "1.1.0", path = "../../evcxr_runtime", features = [ "bytes" ]}

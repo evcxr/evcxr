@@ -22,13 +22,8 @@ pub trait ImageDisplay {
 impl ImageDisplay for image::RgbImage {
     fn evcxr_display(&self) {
         let mut buffer = Vec::new();
-        image::png::PNGEncoder::new(&mut buffer)
-            .encode(
-                &**self,
-                self.width(),
-                self.height(),
-                image::ColorType::RGB(8),
-            )
+        image::png::PngEncoder::new(&mut buffer)
+            .encode(&**self, self.width(), self.height(), image::ColorType::Rgb8)
             .unwrap();
         evcxr_runtime::mime_type("image/png").bytes(&buffer);
     }
@@ -37,13 +32,8 @@ impl ImageDisplay for image::RgbImage {
 impl ImageDisplay for image::GrayImage {
     fn evcxr_display(&self) {
         let mut buffer = Vec::new();
-        image::png::PNGEncoder::new(&mut buffer)
-            .encode(
-                &**self,
-                self.width(),
-                self.height(),
-                image::ColorType::Gray(8),
-            )
+        image::png::PngEncoder::new(&mut buffer)
+            .encode(&**self, self.width(), self.height(), image::ColorType::L8)
             .unwrap();
         evcxr_runtime::mime_type("image/png").bytes(&buffer);
     }
