@@ -12,16 +12,37 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evcxr;
-
 use evcxr::{CommandContext, Error, EvalContext, EvalContextOutputs};
 use std::collections::HashMap;
 use std::io;
 use std::sync::mpsc;
 use tempfile;
 
+#[track_caller]
+fn eval_and_unwrap(ctxt: &mut EvalContext, code: &str) -> HashMap<String, String> {
+    match ctxt.eval(code) {
+        Ok(output) => output.content_by_mime_type,
+        Err(err) => {
+            println!(
+                "======== last src ========\n{}==========================",
+                ctxt.last_source().unwrap()
+            );
+            match err {
+                Error::CompilationErrors(errors) => {
+                    for error in errors {
+                        println!("{}", error.rendered());
+                    }
+                }
+                other => println!("{}", other),
+            }
+
+            panic!("Unexpected compilation error. See above for details");
+        }
+    }
+}
+
 macro_rules! eval {
-    ($ctxt:expr, $($t:tt)*) => {$ctxt.eval(stringify!($($t)*)).unwrap().content_by_mime_type}
+    ($ctxt:expr, $($t:tt)*) => {eval_and_unwrap(&mut $ctxt, stringify!($($t)*))}
 }
 
 fn new_command_context_and_outputs() -> (CommandContext, EvalContextOutputs) {

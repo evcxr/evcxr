@@ -378,6 +378,10 @@ impl EvalContext {
         Ok(completions)
     }
 
+    pub fn last_source(&self) -> Result<String, std::io::Error> {
+        self.module.last_source()
+    }
+
     pub fn time_passes(&self) -> bool {
         self.module.time_passes
     }

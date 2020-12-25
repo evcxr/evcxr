@@ -145,6 +145,10 @@ impl Module {
         self.sccache.is_some()
     }
 
+    pub fn last_source(&self) -> Result<String, std::io::Error> {
+        std::fs::read_to_string(self.src_dir().join("lib.rs"))
+    }
+
     // Writes Cargo.toml. Should be called before compile.
     pub(crate) fn write_cargo_toml(&self, eval_context: &EvalContext) -> Result<(), Error> {
         write_file(
