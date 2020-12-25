@@ -3,6 +3,8 @@
 * Documentation improvements. Thanks Ibraheem!
 * Fixed a panic when doing tab completion after loading a crate with a
   hyphenated name.
+* Changed internal parsing logic to use rust-analyzer instead of syn (reduced
+  binary size from 24MB to 20MB).
 
 # Version 0.6.0
 * Support for rustc 1.48.
