@@ -529,7 +529,7 @@ dependencies = [
 
 [[package]]
 name = "evcxr_image"
-version = "1.0.0"
+version = "1.1.0"
 dependencies = [
  "evcxr_runtime",
  "image",
