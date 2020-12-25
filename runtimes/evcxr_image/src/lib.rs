@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::ops::Deref;
+
 use evcxr_runtime;
 use image;
 
@@ -19,21 +21,14 @@ pub trait ImageDisplay {
     fn evcxr_display(&self);
 }
 
-impl ImageDisplay for image::RgbImage {
+impl<P: image::Pixel<Subpixel = u8> + 'static, C> ImageDisplay for image::ImageBuffer<P, C>
+where
+    C: Deref<Target = [P::Subpixel]>,
+{
     fn evcxr_display(&self) {
         let mut buffer = Vec::new();
         image::png::PngEncoder::new(&mut buffer)
-            .encode(&**self, self.width(), self.height(), image::ColorType::Rgb8)
-            .unwrap();
-        evcxr_runtime::mime_type("image/png").bytes(&buffer);
-    }
-}
-
-impl ImageDisplay for image::GrayImage {
-    fn evcxr_display(&self) {
-        let mut buffer = Vec::new();
-        image::png::PngEncoder::new(&mut buffer)
-            .encode(&**self, self.width(), self.height(), image::ColorType::L8)
+            .encode(&**self, self.width(), self.height(), P::COLOR_TYPE)
             .unwrap();
         evcxr_runtime::mime_type("image/png").bytes(&buffer);
     }
