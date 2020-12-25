@@ -637,7 +637,6 @@ impl EvalContext {
     }
 
     fn fix_variable_types(&mut self, code: CodeBlock) -> Result<(), Error> {
-        println!("{}", code.code_string());
         self.analyzer.set_source(code.code_string())?;
         for (
             variable_name,
