@@ -4,14 +4,12 @@ Integration between [Evcxr
 Jupyter](https://github.com/google/evcxr/blob/master/evcxr_jupyter/README.md)
 and the image crate. Enables display of images in Evcxr Jupyter kernel.
 
-Currently only supports:
-* RgbImage
-* GrayImage
+Currently supports all 8 bit per channel formats:
 
 Example usage:
 ```rust
-extern crate evcxr_image;
-extern crate image;
+:dep image = "0.23"
+:dep evcxr_image = "1.1"
 
 use evcxr_image::ImageDisplay;
 
