@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::child_process::ChildProcess;
 use crate::code_block::{CodeBlock, CodeKind};
 use crate::crate_config::ExternalCrate;
 use crate::errors::{bail, CompilationError, Error};
@@ -21,6 +20,7 @@ use crate::item;
 use crate::module::{Module, SoFile};
 use crate::runtime;
 use crate::rust_analyzer::{Completions, RustAnalyzer, VariableInfo};
+use crate::{child_process::ChildProcess, use_trees::Import};
 use anyhow::Result;
 use ra_ap_syntax::{ast, AstNode, SyntaxKind, SyntaxNode};
 use regex::Regex;
@@ -309,8 +309,23 @@ impl EvalContext {
                             code_out = code_out.with_segment(segment);
                         }
                     }
-                    ast::Item::Use(..) => {
-                        self.state.use_stmts.insert(segment.code.clone());
+                    ast::Item::Use(use_stmt) => {
+                        if let Some(use_tree) = use_stmt.use_tree() {
+                            crate::use_trees::use_tree_names_do(&use_tree, &mut |import| {
+                                match import {
+                                    Import::Unnamed(code) => {
+                                        self.state
+                                            .unnamed_items
+                                            .push(CodeBlock::new().other_user_code(code));
+                                    }
+                                    Import::Named { name, code } => {
+                                        self.state
+                                            .items_by_name
+                                            .insert(name, CodeBlock::new().other_user_code(code));
+                                    }
+                                }
+                            });
+                        }
                     }
                     item => {
                         let item_block = CodeBlock::new().with_segment(segment);
@@ -1171,14 +1186,10 @@ impl EvalContext {
 
     fn get_imports(&self) -> CodeBlock {
         let mut extern_stmts = CodeBlock::new();
-        let mut use_stmts = CodeBlock::new();
         for stmt in self.state.extern_crate_stmts.values() {
             extern_stmts = extern_stmts.other_user_code(stmt.clone());
         }
-        for user_use_stmt in &self.state.use_stmts {
-            use_stmts = use_stmts.other_user_code(user_use_stmt.clone());
-        }
-        extern_stmts.add_all(use_stmts)
+        extern_stmts
     }
 }
 
@@ -1293,7 +1304,6 @@ struct ContextState {
     items_by_name: HashMap<String, CodeBlock>,
     unnamed_items: Vec<CodeBlock>,
     pub(crate) external_deps: HashMap<String, ExternalCrate>,
-    use_stmts: HashSet<String>,
     // Keyed by crate name. Could use a set, except that the statement might be
     // formatted slightly differently.
     extern_crate_stmts: HashMap<String, String>,
@@ -1308,7 +1318,6 @@ impl ContextState {
             items_by_name: HashMap::new(),
             unnamed_items: vec![],
             external_deps: HashMap::new(),
-            use_stmts: HashSet::new(),
             extern_crate_stmts: HashMap::new(),
             variable_states: HashMap::new(),
             async_mode: false,

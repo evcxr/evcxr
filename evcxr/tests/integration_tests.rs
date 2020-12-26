@@ -656,3 +656,51 @@ fn code_completion() {
         vec![]
     );
 }
+
+#[test]
+fn repeated_use_statements() {
+    let mut e = new_context();
+    eval_and_unwrap(
+        &mut e,
+        r#"
+        mod foo {
+            pub struct Bar {}
+            impl Bar {
+                pub fn result() -> i32 {
+                    42
+                }
+                pub fn new() -> Bar { Bar {} }
+            }
+            pub struct Baz {}
+            pub trait Foo {
+                fn do_foo(&self) -> i32 {42}
+            }
+            impl Foo for Bar {}
+            pub mod s1 {
+                pub fn f1() {}
+            }
+            pub mod s2 {
+                pub fn f2() {}
+            }
+        }
+        use std::iter::Iterator as _;
+        use foo::Foo as _;
+        use foo::s1::*;
+        use foo::s2::*;
+        use foo::Bar;"#,
+    );
+    // Try a bad import. This should fail, but shouldn't affect subsequent eval
+    // calls.
+    assert!(e.eval("use this::will::fail;").is_err());
+    assert_eq!(
+        eval_and_unwrap(&mut e, "use foo::Bar as _; Bar::result()"),
+        text_plain("42")
+    );
+    assert_eq!(
+        eval_and_unwrap(
+            &mut e,
+            "use foo::{Bar, Baz}; f1(); f2(); Bar::new().do_foo()"
+        ),
+        text_plain("42")
+    );
+}

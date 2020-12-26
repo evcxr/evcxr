@@ -34,6 +34,7 @@ mod module;
 mod runtime;
 mod rust_analyzer;
 mod statement_splitter;
+mod use_trees;
 
 pub use crate::command_context::CommandContext;
 pub use crate::errors::{CompilationError, Error};

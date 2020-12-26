@@ -146,4 +146,14 @@ mod test {
         let out = &out[0];
         assert!(ast::Expr::can_cast(out.node.kind()));
     }
+
+    #[test]
+    fn single_line_use_and_expr() {
+        let out = split_into_statements("use foo::Bar; Bar::result()");
+        assert_eq!(out.len(), 2);
+        assert!(ast::Use::can_cast(out[0].node.kind()));
+        assert_eq!(out[0].code, "use foo::Bar; ");
+        assert!(ast::Expr::can_cast(out[1].node.kind()));
+        assert_eq!(out[1].code, "Bar::result()");
+    }
 }

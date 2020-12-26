@@ -5,6 +5,8 @@
   hyphenated name.
 * Changed internal parsing logic to use rust-analyzer instead of syn (reduced
   binary size from 24MB to 20MB).
+* Improved semantics for use statements. e.g. `use a::{b, c};` followed by `use
+  a::{b, c, d}` now won't give you errors.
 
 # Version 0.6.0
 * Support for rustc 1.48.
