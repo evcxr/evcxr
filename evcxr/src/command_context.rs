@@ -104,7 +104,7 @@ impl CommandContext {
     /// any visible side effects.
     pub fn completions(&mut self, src: &str, position: usize) -> Result<Completions> {
         let mut non_command_code = CodeBlock::new();
-        let (user_code, _nodes) = CodeBlock::from_original_user_code(src);
+        let (user_code, nodes) = CodeBlock::from_original_user_code(src);
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
                 if command.command == ":dep" {
@@ -116,7 +116,7 @@ impl CommandContext {
                 non_command_code = non_command_code.with_segment(segment);
             }
         }
-        self.eval_context.completions(non_command_code, position)
+        self.eval_context.completions(non_command_code, &nodes, position)
     }
 
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {
@@ -166,11 +166,11 @@ impl CommandContext {
                 Ok(outputs)
             }
             ":preserve_vars_on_panic" => {
-                self.eval_context.preserve_vars_on_panic =
-                    args.as_ref().map(String::as_str) == Some("1");
+                self.eval_context.set_preserve_vars_on_panic(
+                    args.as_ref().map(String::as_str) == Some("1"));
                 text_output(format!(
                     "Preserve vars on panic: {}",
-                    self.eval_context.preserve_vars_on_panic
+                    self.eval_context.preserve_vars_on_panic()
                 ))
             }
             ":clear" => self.eval_context.clear().map(|_| EvalOutputs::new()),

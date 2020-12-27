@@ -122,6 +122,14 @@ impl CodeBlock {
         *self = block;
     }
 
+    pub(crate) fn commit_old_user_code(&mut self) {
+        for segment in self.segments.iter_mut() {
+            if matches!(segment.kind, CodeKind::OriginalUserCode(_)) {
+                segment.kind = CodeKind::OtherUserCode;
+            }
+        }
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self.segments.is_empty()
     }

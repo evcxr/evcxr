@@ -176,7 +176,7 @@ fn function_panics_with_variable_preserving() {
     // Don't allow stderr to be printed here. We don't really want to see the
     // panic stack trace when running tests.
     let (mut e, _) = EvalContext::new_for_testing();
-    e.preserve_vars_on_panic = true;
+    e.set_preserve_vars_on_panic(true);
     eval!(e, let a = vec![1, 2, 3];);
     eval!(e, let b = 42;);
     eval!(e, panic!("Intentional panic {}", b););
@@ -193,7 +193,7 @@ fn function_panics_without_variable_preserving() {
     // Don't allow stderr to be printed here. We don't really want to see the
     // panic stack trace when running tests.
     let (mut e, _) = EvalContext::new_for_testing();
-    e.preserve_vars_on_panic = false;
+    e.set_preserve_vars_on_panic(false);
     eval!(e, let a = vec![1, 2, 3];);
     eval!(e, let b = 42;);
     let result = e.eval(stringify!(panic!("Intentional panic {}", b);));
@@ -630,12 +630,26 @@ fn define_then_call_macro() {
 
 #[test]
 fn code_completion() {
+    let mut ctx = CommandContext::with_eval_context(new_context());
+    // This first bit of code that we execute serves two purposes. Firstly, it's
+    // used later in the test. Secondly, it ensures that our first attempt at
+    // completion doesn't get confused by user code that has already been
+    // evaluated.
+    ctx.execute(
+        r#"
+        mod bar {
+            pub struct Baz {}
+            impl Baz {
+                pub fn fff5() {}
+            }
+        }"#,
+    )
+    .unwrap();
     let code = r#"
         fn foo() -> Vec<String> {
             vec![]
         }
         foo().res"#;
-    let mut ctx = CommandContext::with_eval_context(new_context());
     let completions = ctx.completions(code, code.len()).unwrap();
     assert!(!completions.completions.is_empty());
     assert!(completions
@@ -655,6 +669,19 @@ fn code_completion() {
         ctx.completions(&code, code.len()).unwrap().completions,
         vec![]
     );
+
+    // We handle use-statements differently to other code, make sure that we can
+    // still get completions from them.
+    let code = "use bar::";
+    let completions = ctx.completions(code, code.len()).unwrap();
+    assert!(completions.completions.iter().any(|c| c.code == "Baz"));
+
+    // Rust-analyzer yet doesn't handle use-statements inside a block, so if the
+    // following use-statement ends up in a block, then `Baz` won't resolve and
+    // we won't get any completions.
+    let code = "use bar::Baz; Baz::";
+    let completions = ctx.completions(code, code.len()).unwrap();
+    assert!(completions.completions.iter().any(|c| c.code == "fff5()"));
 }
 
 #[test]
