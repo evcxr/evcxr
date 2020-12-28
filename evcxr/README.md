@@ -10,13 +10,14 @@ context.
 
 ```rust
 let mut context = EvalContext::new();
-context.eval("let s = String::new();")?;
-context.eval("s.push_str(\"Hello \");")?;
-context.eval("s.push_str(\" World\");")?;
-context.eval("println!(\"{}\", s);")?;
+context.eval("let s = String::new();", context.state())?;
+context.eval("s.push_str(\"Hello \");", context.state())?;
+context.eval("s.push_str(\" World\");", context.state())?;
+context.eval("println!(\"{}\", s);", context.state())?;
 ```
 
-You must call ```evcxr::runtime_hook()``` at the top of main, otherwise the library becomes a fork-bomb.
+You must call ```evcxr::runtime_hook()``` at the top of main, otherwise the
+library becomes a fork-bomb.
 
 I'll not go into too much detail here, since the purpose of this library is
 really to provide functionality to evcxr\_jupyter and evcxr\_repl. If you'd like

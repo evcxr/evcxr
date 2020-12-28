@@ -12,12 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{bail, CompilationError, Error};
 use crate::{
     code_block::{CodeBlock, CodeKind},
     eval_context::EvalCallbacks,
     rust_analyzer::Completions,
     EvalContext, EvalContextOutputs, EvalOutputs,
+};
+use crate::{
+    errors::{bail, CompilationError, Error},
+    eval_context::ContextState,
 };
 use anyhow::Result;
 
@@ -62,21 +65,23 @@ impl CommandContext {
         use std::time::Instant;
         let mut eval_outputs = EvalOutputs::new();
         let start = Instant::now();
+        let mut state = self.eval_context.state();
         let mut non_command_code = CodeBlock::new();
         let (user_code, nodes) = CodeBlock::from_original_user_code(to_run);
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
-                eval_outputs.merge(self.process_command(&command.command, &command.args)?);
+                eval_outputs.merge(self.process_command(
+                    &command.command,
+                    &mut state,
+                    &command.args,
+                )?);
             } else {
                 non_command_code = non_command_code.with_segment(segment);
             }
         }
-        let result = if non_command_code.is_empty() {
-            Ok(EvalOutputs::new())
-        } else {
+        let result =
             self.eval_context
-                .eval_with_callbacks(non_command_code, &nodes, callbacks)
-        };
+                .eval_with_callbacks(non_command_code, state, &nodes, callbacks);
         let duration = start.elapsed();
         match result {
             Ok(m) => {
@@ -104,19 +109,21 @@ impl CommandContext {
     /// any visible side effects.
     pub fn completions(&mut self, src: &str, position: usize) -> Result<Completions> {
         let mut non_command_code = CodeBlock::new();
+        let mut state = self.eval_context.state();
         let (user_code, nodes) = CodeBlock::from_original_user_code(src);
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
                 if command.command == ":dep" {
                     // Best-effort. If anything goes wrong here, just ignore it.
-                    let _ = self.process_dep_command(&command.args);
-                    let _ = self.eval_context.write_cargo_toml();
+                    let _ = self.process_dep_command(&mut state, &command.args);
+                    let _ = self.eval_context.write_cargo_toml(&state);
                 }
             } else {
                 non_command_code = non_command_code.with_segment(segment);
             }
         }
-        self.eval_context.completions(non_command_code, &nodes, position)
+        self.eval_context
+            .completions(non_command_code, state, &nodes, position)
     }
 
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {
@@ -145,12 +152,13 @@ impl CommandContext {
     fn process_command(
         &mut self,
         command: &str,
+        state: &mut ContextState,
         args: &Option<String>,
     ) -> Result<EvalOutputs, Error> {
         match command {
             ":internal_debug" => {
-                let debug_mode = !self.eval_context.debug_mode();
-                self.eval_context.set_debug_mode(debug_mode);
+                let debug_mode = !state.debug_mode();
+                state.set_debug_mode(debug_mode);
                 text_output(format!("Internals debugging: {}", debug_mode))
             }
             ":load_config" => self.load_config(),
@@ -166,45 +174,41 @@ impl CommandContext {
                 Ok(outputs)
             }
             ":preserve_vars_on_panic" => {
-                self.eval_context.set_preserve_vars_on_panic(
-                    args.as_ref().map(String::as_str) == Some("1"));
+                state.set_preserve_vars_on_panic(args.as_ref().map(String::as_str) == Some("1"));
                 text_output(format!(
                     "Preserve vars on panic: {}",
-                    self.eval_context.preserve_vars_on_panic()
+                    state.preserve_vars_on_panic()
                 ))
             }
             ":clear" => self.eval_context.clear().map(|_| EvalOutputs::new()),
-            ":dep" => self.process_dep_command(args),
+            ":dep" => self.process_dep_command(state, args),
             ":last_compile_dir" => {
                 text_output(format!("{:?}", self.eval_context.last_compile_dir()))
             }
             ":opt" => {
                 let new_level = if let Some(n) = args {
                     &n
-                } else if self.eval_context.opt_level() == "2" {
+                } else if state.opt_level() == "2" {
                     "0"
                 } else {
                     "2"
                 };
-                self.eval_context.set_opt_level(new_level)?;
-                text_output(format!("Optimization: {}", self.eval_context.opt_level()))
+                state.set_opt_level(new_level)?;
+                text_output(format!("Optimization: {}", state.opt_level()))
             }
             ":fmt" => {
                 let new_format = if let Some(f) = args { f } else { "{:?}" };
-                self.eval_context.set_output_format(new_format.to_owned());
-                text_output(format!(
-                    "Output format: {}",
-                    self.eval_context.output_format()
-                ))
+                state.set_output_format(new_format.to_owned());
+                text_output(format!("Output format: {}", state.output_format()))
             }
             ":efmt" => {
                 if let Some(f) = args {
-                    self.eval_context.set_error_format(f)?;
+                    state.set_error_format(f)?;
                 }
                 text_output(format!(
                     "Error format: {} (errors must implement {})",
-                    self.eval_context.error_format(),
-                    self.eval_context.error_format_trait()
+                    state.error_format(),
+                    state.error_format_trait()
                 ))
             }
             ":quit" => std::process::exit(0),
@@ -213,20 +217,18 @@ impl CommandContext {
                 text_output(format!("Timing: {}", self.print_timings))
             }
             ":time_passes" => {
-                self.eval_context
-                    .set_time_passes(!self.eval_context.time_passes());
-                text_output(format!("Time passes: {}", self.eval_context.time_passes()))
+                state.set_time_passes(!state.time_passes());
+                text_output(format!("Time passes: {}", state.time_passes()))
             }
             ":sccache" => {
-                self.eval_context
-                    .set_sccache(args.as_ref().map(String::as_str) != Some("0"))?;
-                text_output(format!("sccache: {}", self.eval_context.sccache()))
+                state.set_sccache(args.as_ref().map(String::as_str) != Some("0"))?;
+                text_output(format!("sccache: {}", state.sccache()))
             }
             ":linker" => {
                 if let Some(linker) = args {
-                    self.eval_context.set_linker(linker.to_owned());
+                    state.set_linker(linker.to_owned());
                 }
-                text_output(format!("linker: {}", self.eval_context.linker()))
+                text_output(format!("linker: {}", state.linker()))
             }
             ":explain" => {
                 if self.last_errors.is_empty() {
@@ -301,7 +303,11 @@ impl CommandContext {
         out
     }
 
-    fn process_dep_command(&mut self, args: &Option<String>) -> Result<EvalOutputs, Error> {
+    fn process_dep_command(
+        &self,
+        state: &mut ContextState,
+        args: &Option<String>,
+    ) -> Result<EvalOutputs, Error> {
         use regex::Regex;
         let args = if let Some(v) = args {
             v
@@ -312,7 +318,7 @@ impl CommandContext {
             static ref DEP_RE: Regex = Regex::new("^([^= ]+) *(= *(.+))?$").unwrap();
         }
         if let Some(captures) = DEP_RE.captures(args) {
-            self.eval_context.add_dep(
+            state.add_dep(
                 &captures[1],
                 &captures.get(3).map_or("\"*\"", |m| m.as_str()),
             )?;

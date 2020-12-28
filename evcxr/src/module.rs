@@ -12,15 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::code_block::CodeBlock;
-use crate::errors::{bail, CompilationError, Error};
-use crate::EvalContext;
+use crate::{code_block::CodeBlock, eval_context::ContextState};
+use crate::{
+    errors::{bail, CompilationError, Error},
+    eval_context::Config,
+};
 use json;
 use regex::Regex;
 use std;
 use std::fs;
 use std::path::{Path, PathBuf};
-use which;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     if cfg!(target_os = "macos") {
@@ -81,28 +82,15 @@ fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
 pub(crate) struct Module {
     pub(crate) tmpdir: PathBuf,
     build_num: i32,
-    /// Whether to pass -Ztime-passes to the compiler and print the result.
-    /// Causes the nightly compiler, which must be installed to be selected.
-    pub(crate) time_passes: bool,
-    pub(crate) linker: String,
-    sccache: Option<PathBuf>,
 }
 
 const CRATE_NAME: &str = "ctx";
 
 impl Module {
     pub(crate) fn new(tmpdir: PathBuf) -> Result<Module, Error> {
-        let linker = if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
-            "lld".to_owned()
-        } else {
-            "system".to_owned()
-        };
         let module = Module {
             tmpdir,
             build_num: 0,
-            time_passes: false,
-            linker,
-            sccache: None,
         };
         Ok(module)
     }
@@ -128,37 +116,24 @@ impl Module {
         &self.tmpdir
     }
 
-    pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
-        if enabled {
-            if let Ok(path) = which::which("sccache") {
-                self.sccache = Some(path);
-            } else {
-                bail!("Couldn't find sccache. Try running `cargo install sccache`.");
-            }
-        } else {
-            self.sccache = None;
-        }
-        Ok(())
-    }
-
-    pub fn sccache(&self) -> bool {
-        self.sccache.is_some()
-    }
-
     pub fn last_source(&self) -> Result<String, std::io::Error> {
         std::fs::read_to_string(self.src_dir().join("lib.rs"))
     }
 
     // Writes Cargo.toml. Should be called before compile.
-    pub(crate) fn write_cargo_toml(&self, eval_context: &EvalContext) -> Result<(), Error> {
+    pub(crate) fn write_cargo_toml(&self, state: &ContextState) -> Result<(), Error> {
         write_file(
             self.crate_dir(),
             "Cargo.toml",
-            &self.get_cargo_toml_contents(eval_context),
+            &self.get_cargo_toml_contents(state),
         )
     }
 
-    pub(crate) fn compile(&mut self, code_block: &CodeBlock) -> Result<SoFile, Error> {
+    pub(crate) fn compile(
+        &mut self,
+        code_block: &CodeBlock,
+        config: &Config,
+    ) -> Result<SoFile, Error> {
         write_file(&self.src_dir(), "lib.rs", &code_block.code_string())?;
 
         // Our compiler errors should all be in JSON format, but for errors from Cargo errors, we
@@ -169,7 +144,7 @@ impl Module {
         }
 
         let mut command = std::process::Command::new("cargo");
-        if self.time_passes {
+        if config.time_passes {
             command.arg("+nightly");
         }
         command
@@ -180,15 +155,15 @@ impl Module {
             .arg("prefer-dynamic")
             .env("CARGO_TARGET_DIR", "target")
             .current_dir(self.crate_dir());
-        if self.linker != "system" {
+        if config.linker != "system" {
             command
                 .arg("-C")
-                .arg(format!("link-arg=-fuse-ld={}", self.linker));
+                .arg(format!("link-arg=-fuse-ld={}", config.linker));
         }
-        if let Some(sccache) = &self.sccache {
+        if let Some(sccache) = &config.sccache {
             command.env("RUSTC_WRAPPER", sccache);
         }
-        if self.time_passes {
+        if config.time_passes {
             command.arg("-Ztime-passes");
         }
         let cargo_output = match command.output() {
@@ -196,7 +171,7 @@ impl Module {
             Err(err) => bail!("Error running 'cargo rustc': {}", err),
         };
         if cargo_output.status.success() {
-            if self.time_passes {
+            if config.time_passes {
                 let stdout = String::from_utf8_lossy(&cargo_output.stdout);
                 eprintln!("{}", stdout);
             }
@@ -251,8 +226,8 @@ impl Module {
         })
     }
 
-    fn get_cargo_toml_contents(&self, eval_context: &EvalContext) -> String {
-        let crate_imports = eval_context.format_cargo_deps();
+    fn get_cargo_toml_contents(&self, state: &ContextState) -> String {
+        let crate_imports = state.format_cargo_deps();
         format!(
             r#"
 [package]
@@ -278,7 +253,7 @@ overflow-checks = true
 {}
 "#,
             CRATE_NAME,
-            eval_context.opt_level(),
+            state.opt_level(),
             crate_imports
         )
     }

@@ -20,7 +20,7 @@ use tempfile;
 
 #[track_caller]
 fn eval_and_unwrap(ctxt: &mut EvalContext, code: &str) -> HashMap<String, String> {
-    match ctxt.eval(code) {
+    match ctxt.eval(code, ctxt.state()) {
         Ok(output) => output.content_by_mime_type,
         Err(err) => {
             println!(
@@ -103,7 +103,7 @@ fn save_and_restore_variables() {
     eval!(e, assert_eq!(a, 42););
     assert_eq!(eval!(e, a), text_plain("42"));
     // Try to change a mutable variable and check that the error we get is what we expect.
-    match e.eval("b = 2;") {
+    match e.eval("b = 2;", e.state()) {
         Err(Error::CompilationErrors(errors)) => {
             if errors.len() != 1 {
                 println!("{:#?}", errors);
@@ -196,7 +196,7 @@ fn function_panics_without_variable_preserving() {
     e.set_preserve_vars_on_panic(false);
     eval!(e, let a = vec![1, 2, 3];);
     eval!(e, let b = 42;);
-    let result = e.eval(stringify!(panic!("Intentional panic {}", b);));
+    let result = e.eval(stringify!(panic!("Intentional panic {}", b);), e.state());
     if let Err(Error::ChildProcessTerminated(message)) = result {
         assert!(message.contains("Child process terminated"));
     } else {
@@ -205,7 +205,7 @@ fn function_panics_without_variable_preserving() {
     assert_eq!(variable_names_and_types(&e), vec![]);
     // Make sure that a compilation error doesn't bring the variables back from
     // the dead.
-    assert!(e.eval("This will not compile").is_err());
+    assert!(e.eval("This will not compile", e.state()).is_err());
     assert_eq!(variable_names_and_types(&e), vec![]);
 }
 
@@ -359,7 +359,7 @@ fn statement_and_expression() {
 fn continue_execution_after_bad_use_statement() {
     let mut e = new_context();
     // First make sure we get the error we expect.
-    match e.eval("use foobar;") {
+    match e.eval("use foobar;", e.state()) {
         Err(Error::CompilationErrors(errors)) => {
             assert_eq!(errors.len(), 1);
             assert_eq!(errors[0].code(), Some("E0432"));
@@ -376,7 +376,10 @@ fn error_from_macro_expansion() {
     // The the following line we're missing & before format!. The compiler reports the error as
     // coming from "<format macros>" with expansion information leading to the user code. Make sure
     // we ignore the span from non-user code and use the expansion info correctly.
-    match e.eval("let mut s = String::new(); s.push_str(format!(\"\"));") {
+    match e.eval(
+        "let mut s = String::new(); s.push_str(format!(\"\"));",
+        e.state(),
+    ) {
         Err(Error::CompilationErrors(errors)) => {
             assert_eq!(errors.len(), 1);
             assert_eq!(errors[0].code(), Some("E0308")); // mismatched types
@@ -441,7 +444,7 @@ fn abort_and_restart() {
         // exists after a restart.
         let a = 42i32;
     );
-    let result = e.eval(stringify!(std::process::abort();));
+    let result = e.eval(stringify!(std::process::abort();), e.state());
     if let Err(Error::ChildProcessTerminated(message)) = result {
         #[cfg(not(windows))]
         {
@@ -465,7 +468,7 @@ fn abort_and_restart() {
 #[test]
 fn variable_assignment_compile_fail_then_use_statement() {
     let mut e = new_context();
-    assert!(e.eval(stringify!(let v = foo();)).is_err());
+    assert!(e.eval(stringify!(let v = foo();), e.state()).is_err());
     eval!(e, use std::collections::HashMap;);
     assert_eq!(eval!(e, 42), text_plain("42"));
 }
@@ -491,7 +494,7 @@ fn reserved_words() {
 #[test]
 fn unnamable_type_closure() {
     let mut e = new_context();
-    let result = e.eval(stringify!(let v = || {42};));
+    let result = e.eval(stringify!(let v = || {42};), e.state());
     if let Err(Error::Message(message)) = result {
         if !(message.starts_with("Sorry, the type")
             && message.contains("cannot currently be persisted"))
@@ -506,12 +509,15 @@ fn unnamable_type_closure() {
 #[test]
 fn unnamable_type_impl_trait() {
     let mut e = new_context();
-    let result = e.eval(stringify!(
-        pub trait Bar {}
-        impl Bar for i32 {}
-        pub fn foo() -> impl Bar {42}
-        let v = foo();
-    ));
+    let result = e.eval(
+        stringify!(
+            pub trait Bar {}
+            impl Bar for i32 {}
+            pub fn foo() -> impl Bar {42}
+            let v = foo();
+        ),
+        e.state(),
+    );
     if let Err(Error::Message(message)) = result {
         if !(message.starts_with("The variable `v` has a type")
             && message.contains("can't be persisted"))
@@ -718,7 +724,7 @@ fn repeated_use_statements() {
     );
     // Try a bad import. This should fail, but shouldn't affect subsequent eval
     // calls.
-    assert!(e.eval("use this::will::fail;").is_err());
+    assert!(e.eval("use this::will::fail;", e.state()).is_err());
     assert_eq!(
         eval_and_unwrap(&mut e, "use foo::Bar as _; Bar::result()"),
         text_plain("42")

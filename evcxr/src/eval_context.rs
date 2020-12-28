@@ -35,8 +35,6 @@ pub struct EvalContext {
     // Our tmpdir if EVCXR_TMPDIR wasn't set - Drop causes tmpdir to be cleaned up.
     _tmpdir: Option<tempfile::TempDir>,
     module: Module,
-    // TODO: Remove one of the following two variables.
-    state: ContextState,
     committed_state: ContextState,
     child_process: ChildProcess,
     stdout_sender: mpsc::Sender<String>,
@@ -44,7 +42,7 @@ pub struct EvalContext {
 }
 
 #[derive(Clone)]
-struct Config {
+pub(crate) struct Config {
     pub(crate) debug_mode: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
@@ -56,10 +54,20 @@ struct Config {
     completion_mode: bool,
     opt_level: String,
     error_fmt: &'static ErrorFormat,
+    /// Whether to pass -Ztime-passes to the compiler and print the result.
+    /// Causes the nightly compiler, which must be installed to be selected.
+    pub(crate) time_passes: bool,
+    pub(crate) linker: String,
+    pub(crate) sccache: Option<PathBuf>,
 }
 
 impl Default for Config {
     fn default() -> Self {
+        let linker = if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
+            "lld".to_owned()
+        } else {
+            "system".to_owned()
+        };
         Config {
             debug_mode: false,
             preserve_vars_on_panic: false,
@@ -67,7 +75,29 @@ impl Default for Config {
             completion_mode: false,
             opt_level: "2".to_owned(),
             error_fmt: &ERROR_FORMATS[0],
+            time_passes: false,
+            linker,
+            sccache: None,
         }
+    }
+}
+
+impl Config {
+    pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
+        if enabled {
+            if let Ok(path) = which::which("sccache") {
+                self.sccache = Some(path);
+            } else {
+                bail!("Couldn't find sccache. Try running `cargo install sccache`.");
+            }
+        } else {
+            self.sccache = None;
+        }
+        Ok(())
+    }
+
+    pub fn sccache(&self) -> bool {
+        self.sccache.is_some()
     }
 }
 
@@ -200,8 +230,7 @@ impl EvalContext {
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
         let mut context = EvalContext {
             _tmpdir: opt_tmpdir,
-            state: ContextState::new(module.crate_dir().to_owned()),
-            committed_state: ContextState::new(module.crate_dir().to_owned()),
+            committed_state: ContextState::new(module.crate_dir().to_owned(), Config::default()),
             module,
             child_process,
             stdout_sender,
@@ -211,40 +240,44 @@ impl EvalContext {
             stdout: stdout_receiver,
             stderr: stderr_receiver,
         };
-        if context.linker() == "lld" && context.eval("42").is_err() {
-            context.set_linker("system".to_owned());
+        if context.committed_state.linker() == "lld" && context.eval("42", context.state()).is_err()
+        {
+            context.committed_state.set_linker("system".to_owned());
         } else {
             // We need to eval something anyway, otherwise rust-analyzer crashes when trying to get
             // completions. Not 100% sure. Just writing Cargo.toml isn't sufficient.
-            context.eval("42")?;
+            context.eval("42", context.state())?;
         }
         Ok((context, outputs))
     }
 
+    /// Returns a new context state, suitable for passing to `eval` after
+    /// optionally calling things like `add_dep`.
+    pub fn state(&self) -> ContextState {
+        self.committed_state.clone()
+    }
+
     /// Evaluates the supplied Rust code.
-    pub fn eval(&mut self, code: &str) -> Result<EvalOutputs, Error> {
+    pub fn eval(&mut self, code: &str, state: ContextState) -> Result<EvalOutputs, Error> {
         let (user_code, nodes) = CodeBlock::from_original_user_code(code);
-        self.eval_with_callbacks(user_code, &nodes, &mut EvalCallbacks::default())
+        self.eval_with_callbacks(user_code, state, &nodes, &mut EvalCallbacks::default())
     }
 
     /// Evaluates the supplied Rust code.
     pub(crate) fn eval_with_callbacks(
         &mut self,
         user_code: CodeBlock,
+        mut state: ContextState,
         nodes: &[SyntaxNode],
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
         let mut phases = PhaseDetailsBuilder::new();
+        let code_out = state.apply(user_code, nodes)?;
 
-        let code_out = self.state.apply(user_code, nodes)?;
-
-        let mut outputs = match self.run_statements(code_out, &mut phases, callbacks) {
+        let mut outputs = match self.run_statements(code_out, &mut state, &mut phases, callbacks) {
             Err(error) => {
                 if let Error::ChildProcessTerminated(_) = error {
                     self.restart_child_process()?;
-                    self.commit_state();
-                } else {
-                    self.state = self.committed_state.clone();
                 }
                 return Err(error.without_non_reportable_errors());
             }
@@ -253,7 +286,7 @@ impl EvalContext {
 
         // Once, we reach here, our code has successfully executed, so we
         // conclude that variable changes are now applied.
-        self.commit_state();
+        self.commit_state(state);
 
         phases.phase_complete("Execution");
         outputs.phases = phases.phases;
@@ -264,10 +297,10 @@ impl EvalContext {
     pub(crate) fn completions(
         &mut self,
         user_code: CodeBlock,
+        mut state: ContextState,
         nodes: &[SyntaxNode],
         offset: usize,
     ) -> Result<Completions> {
-        let mut state = self.state.clone();
         state.config.completion_mode = true;
         let user_code = state.apply(user_code, nodes)?;
         let code = state.code_to_compile(user_code, CompilationMode::NoCatch);
@@ -283,180 +316,73 @@ impl EvalContext {
         self.module.last_source()
     }
 
-    pub fn time_passes(&self) -> bool {
-        self.module.time_passes
+    pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
+        self.committed_state.set_opt_level(level)
     }
 
     pub fn set_time_passes(&mut self, value: bool) {
-        self.module.time_passes = value;
-    }
-
-    pub fn preserve_vars_on_panic(&self) -> bool {
-        self.state.config.preserve_vars_on_panic
+        self.committed_state.set_time_passes(value);
     }
 
     pub fn set_preserve_vars_on_panic(&mut self, value: bool) {
-        self.state.config.preserve_vars_on_panic = value;
+        self.committed_state.set_preserve_vars_on_panic(value);
     }
 
-    pub fn opt_level(&self) -> &str {
-        &self.state.config.opt_level
-    }
-
-    pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
-        if level.is_empty() {
-            bail!("Optimization level cannot be an empty string");
-        }
-        self.state.config.opt_level = level.to_owned();
-        Ok(())
-    }
-    pub fn output_format(&self) -> &str {
-        &self.state.config.output_format
-    }
-
-    pub fn set_output_format(&mut self, output_format: String) {
-        self.state.config.output_format = output_format;
-    }
-
-    pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
-        self.module.set_sccache(enabled)
-    }
-
-    pub fn sccache(&self) -> bool {
-        self.module.sccache()
-    }
-
-    pub fn set_error_format(&mut self, format_str: &str) -> Result<(), Error> {
-        for format in ERROR_FORMATS {
-            if format.format_str == format_str {
-                self.state.config.error_fmt = format;
-                return Ok(());
-            }
-        }
-        bail!(
-            "Unsupported error format string. Available options: {}",
-            ERROR_FORMATS
-                .iter()
-                .map(|f| f.format_str)
-                .collect::<Vec<_>>()
-                .join(", ")
-        );
-    }
-
-    pub fn error_format(&self) -> &str {
-        self.state.config.error_fmt.format_str
-    }
-
-    pub fn error_format_trait(&self) -> &str {
-        self.state.config.error_fmt.format_trait
-    }
-
-    pub fn set_linker(&mut self, linker: String) {
-        self.module.linker = linker;
-    }
-
-    pub fn linker(&self) -> &str {
-        &self.module.linker
-    }
-
-    // TODO: Remove this function and just use add_dep().
-    pub fn add_extern_crate(&mut self, name: String, config: String) -> Result<EvalOutputs, Error> {
-        self.add_dep(&name, &config)?;
-        let result = self.eval("");
-        if result.is_err() {
-            self.state.external_deps.remove(&name);
-        }
-        result
-    }
-
-    /// Adds a crate dependency with the specified name and configuration.
-    /// Actual compilation is deferred until the next call to eval. If that call
-    /// fails, then this dependency will be reverted. If you want to compile
-    /// straight away and ensure that the change is committed, then follow this
-    /// call with a call to eval("");
-    pub fn add_dep(&mut self, name: &str, config: &str) -> Result<(), Error> {
-        self.state.external_deps.insert(
-            name.to_owned(),
-            ExternalCrate::new(name.to_owned(), config.to_owned())?,
-        );
-        Ok(())
-    }
-
-    pub fn debug_mode(&self) -> bool {
-        self.state.config.debug_mode
-    }
-
-    pub fn set_debug_mode(&mut self, debug_mode: bool) {
-        self.state.config.debug_mode = debug_mode;
+    pub fn set_error_format(&mut self, value: &str) -> Result<(), Error> {
+        self.committed_state.set_error_format(value)
     }
 
     pub fn variables_and_types(&self) -> impl Iterator<Item = (&str, &str)> {
-        self.state
+        self.committed_state
             .variable_states
             .iter()
             .map(|(v, t)| (v.as_str(), t.type_name.as_str()))
     }
 
     pub fn defined_item_names(&self) -> impl Iterator<Item = &str> {
-        self.state.items_by_name.keys().map(String::as_str)
+        self.committed_state
+            .items_by_name
+            .keys()
+            .map(String::as_str)
     }
 
     // Clears all state, while keeping tmpdir. This allows us to effectively
     // restart, but without having to recompile any external crates we'd already
     // compiled. Config is preserved.
     pub fn clear(&mut self) -> Result<(), Error> {
-        let config = self.state.config.clone();
-        self.state = ContextState::new(self.module.crate_dir().to_owned());
-        self.state.config = config;
+        let config = self.committed_state.config.clone();
+        self.committed_state = ContextState::new(self.module.crate_dir().to_owned(), config);
         self.restart_child_process()
     }
 
     fn restart_child_process(&mut self) -> Result<(), Error> {
-        self.state.variable_states.clear();
-        self.state.stored_variable_states.clear();
         self.committed_state.variable_states.clear();
         self.committed_state.stored_variable_states.clear();
         self.child_process = self.child_process.restart()?;
         Ok(())
     }
 
-    pub(crate) fn format_cargo_deps(&self) -> String {
-        self.state
-            .external_deps
-            .values()
-            .map(|krate| format!("{} = {}\n", krate.name, krate.config))
-            .collect::<Vec<_>>()
-            .join("")
-    }
-
     pub(crate) fn last_compile_dir(&self) -> &Path {
         self.module.crate_dir()
     }
 
-    fn commit_state(&mut self) {
-        self.state.stored_variable_states = self.state.variable_states.clone();
-        self.state.commit_old_user_code();
-        self.committed_state = self.state.clone();
-    }
-
-    fn compilation_mode(&self) -> CompilationMode {
-        if self.state.config.preserve_vars_on_panic {
-            CompilationMode::RunAndCatchPanics
-        } else {
-            CompilationMode::NoCatch
-        }
+    fn commit_state(&mut self, mut state: ContextState) {
+        state.stored_variable_states = state.variable_states.clone();
+        state.commit_old_user_code();
+        self.committed_state = state;
     }
 
     fn run_statements(
         &mut self,
         mut user_code: CodeBlock,
+        state: &mut ContextState,
         phases: &mut PhaseDetailsBuilder,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
-        self.write_cargo_toml()?;
+        self.write_cargo_toml(state)?;
         self.fix_variable_types(
-            self.state
-                .code_to_compile(user_code.clone(), self.compilation_mode()),
+            state,
+            state.code_to_compile(user_code.clone(), state.compilation_mode()),
         )?;
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
@@ -470,7 +396,8 @@ impl EvalContext {
             // Try to compile and run the code.
             let result = self.try_run_statements(
                 user_code.clone(),
-                self.compilation_mode(),
+                state,
+                state.compilation_mode(),
                 phases,
                 callbacks,
             );
@@ -487,7 +414,7 @@ impl EvalContext {
                     if remaining_retries > 0 {
                         let mut fixed = HashSet::new();
                         for error in &errors {
-                            self.attempt_to_fix_error(error, &mut user_code, &mut fixed)?;
+                            self.attempt_to_fix_error(error, &mut user_code, state, &mut fixed)?;
                         }
                         if !fixed.is_empty() {
                             remaining_retries -= 1;
@@ -503,6 +430,7 @@ impl EvalContext {
                         // an `FnOnce` closure `a` as mutable".
                         self.try_run_statements(
                             user_code,
+                            state,
                             CompilationMode::NoCatchExpectError,
                             phases,
                             callbacks,
@@ -513,8 +441,8 @@ impl EvalContext {
 
                 Err(Error::TypeRedefinedVariablesLost(variables)) => {
                     for variable in &variables {
-                        self.state.variable_states.remove(variable);
-                        self.state.stored_variable_states.remove(variable);
+                        state.variable_states.remove(variable);
+                        state.stored_variable_states.remove(variable);
                         self.committed_state.variable_states.remove(variable);
                         self.committed_state.stored_variable_states.remove(variable);
                     }
@@ -528,12 +456,13 @@ impl EvalContext {
     fn try_run_statements(
         &mut self,
         user_code: CodeBlock,
+        state: &mut ContextState,
         compilation_mode: CompilationMode,
         phases: &mut PhaseDetailsBuilder,
         callbacks: &mut EvalCallbacks,
     ) -> Result<ExecutionArtifacts, Error> {
-        let code = self.state.code_to_compile(user_code, compilation_mode);
-        let so_file = self.module.compile(&code)?;
+        let code = state.code_to_compile(user_code, compilation_mode);
+        let so_file = self.module.compile(&code, &state.config)?;
 
         if compilation_mode == CompilationMode::NoCatchExpectError {
             // Uh-oh, caller was expecting an error, return OK and the caller can return the
@@ -544,16 +473,20 @@ impl EvalContext {
         }
         phases.phase_complete("Final compile");
 
-        let output = self.run_and_capture_output(&so_file, callbacks)?;
+        let output = self.run_and_capture_output(state, &so_file, callbacks)?;
         Ok(ExecutionArtifacts { output })
     }
 
-    pub(crate) fn write_cargo_toml(&self) -> Result<()> {
-        self.module.write_cargo_toml(self)?;
+    pub(crate) fn write_cargo_toml(&self, state: &ContextState) -> Result<()> {
+        self.module.write_cargo_toml(state)?;
         Ok(())
     }
 
-    fn fix_variable_types(&mut self, code: CodeBlock) -> Result<(), Error> {
+    fn fix_variable_types(
+        &mut self,
+        state: &mut ContextState,
+        code: CodeBlock,
+    ) -> Result<(), Error> {
         self.analyzer.set_source(code.code_string())?;
         for (
             variable_name,
@@ -563,7 +496,7 @@ impl EvalContext {
             },
         ) in self
             .analyzer
-            .top_level_variables(&self.state.current_user_fn_name())
+            .top_level_variables(&state.current_user_fn_name())
         {
             // For now, we need to look for and escape any reserved words. This should probably in
             // theory be done in rust analyzer in a less hacky way.
@@ -578,8 +511,8 @@ impl EvalContext {
             {
                 continue;
             }
-            let preserve_vars_on_panic = self.state.config.preserve_vars_on_panic;
-            self.state
+            let preserve_vars_on_panic = state.config.preserve_vars_on_panic;
+            state
                 .variable_states
                 .entry(variable_name)
                 .or_insert_with(|| VariableState {
@@ -599,6 +532,7 @@ impl EvalContext {
 
     fn run_and_capture_output(
         &mut self,
+        state: &mut ContextState,
         so_file: &SoFile,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
@@ -606,14 +540,14 @@ impl EvalContext {
         // TODO: We should probably send an OsString not a String. Otherwise
         // things won't work if the path isn't UTF-8 - apparently that's a thing
         // on some platforms.
-        let fn_name = self.state.current_user_fn_name();
+        let fn_name = state.current_user_fn_name();
         self.child_process.send(&format!(
             "LOAD_AND_RUN {} {}",
             so_file.path.to_string_lossy(),
             fn_name,
         ))?;
 
-        self.state.build_num += 1;
+        state.build_num += 1;
 
         let mut got_panic = false;
         let mut lost_variables = Vec::new();
@@ -637,7 +571,7 @@ impl EvalContext {
                 // return. Any variables moved into the block in which the code
                 // was running, including any newly defined variables will have
                 // been lost (or possibly never even defined).
-                self.state
+                state
                     .variable_states
                     .retain(|_variable_name, variable_state| {
                         variable_state.move_state != VariableMoveState::MovedIntoCatchUnwind
@@ -672,7 +606,7 @@ impl EvalContext {
         }
         if got_panic {
             let mut lost = Vec::new();
-            self.state
+            state
                 .variable_states
                 .retain(|variable_name, variable_state| {
                     if variable_state.move_state == VariableMoveState::MovedIntoCatchUnwind {
@@ -701,6 +635,7 @@ impl EvalContext {
         &mut self,
         error: &CompilationError,
         user_code: &mut CodeBlock,
+        state: &mut ContextState,
         fixed_errors: &mut HashSet<&'static str>,
     ) -> Result<(), Error> {
         lazy_static! {
@@ -732,7 +667,7 @@ impl EvalContext {
                                 );
                             }
                             actual_type = replace_reserved_words_in_type(&actual_type);
-                            self.state
+                            state
                                 .variable_states
                                 .get_mut(variable_name)
                                 .unwrap()
@@ -744,8 +679,7 @@ impl EvalContext {
                     } else if error.code() == Some("E0382") {
                         // Use of moved value.
                         let old_move_state = std::mem::replace(
-                            &mut self
-                                .state
+                            &mut state
                                 .variable_states
                                 .get_mut(variable_name)
                                 .unwrap()
@@ -754,17 +688,15 @@ impl EvalContext {
                         );
                         if old_move_state == VariableMoveState::MovedIntoCatchUnwind {
                             // Variable is truly moved, forget about it.
-                            self.state.variable_states.remove(variable_name);
+                            state.variable_states.remove(variable_name);
                         }
                         fixed_errors.insert("Captured value");
                     } else if error.code() == Some("E0425") {
                         // cannot find value in scope.
-                        self.state.variable_states.remove(variable_name);
+                        state.variable_states.remove(variable_name);
                         fixed_errors.insert("Variable moved");
                     } else if error.code() == Some("E0603") {
-                        if let Some(variable_state) =
-                            self.state.variable_states.remove(variable_name)
-                        {
+                        if let Some(variable_state) = state.variable_states.remove(variable_name) {
                             bail!(
                                 "Failed to determine type of variable `{}`. rustc suggested type \
                              {}, but that's private. Sometimes adding an extern crate will help \
@@ -780,14 +712,14 @@ impl EvalContext {
                             try wrapping your code in braces so that the variable goes out of \
                             scope before the end of the code to be executed.",
                             variable_name,
-                            self.state.variable_states[variable_name].type_name
+                            state.variable_states[variable_name].type_name
                         );
                     }
                 }
                 CodeKind::AssertCopyType { variable_name } => {
                     if error.code() == Some("E0277") {
-                        if let Some(state) = self.state.variable_states.get_mut(variable_name) {
-                            state.is_copy_type = false;
+                        if let Some(variable_state) = state.variable_states.get_mut(variable_name) {
+                            variable_state.is_copy_type = false;
                             fixed_errors.insert("Non-copy type");
                         }
                     }
@@ -797,14 +729,14 @@ impl EvalContext {
                     fixed_errors.insert("Fallback");
                 }
                 CodeKind::OriginalUserCode(_) | CodeKind::OtherUserCode => {
-                    if error.code() == Some("E0728") && !self.state.async_mode {
-                        self.state.async_mode = true;
-                        if !self.state.external_deps.contains_key("tokio") {
-                            self.add_dep("tokio", "\"0.2\"")?;
+                    if error.code() == Some("E0728") && !state.async_mode {
+                        state.async_mode = true;
+                        if !state.external_deps.contains_key("tokio") {
+                            state.add_dep("tokio", "\"0.2\"")?;
                         }
                         fixed_errors.insert("Enabled async mode");
-                    } else if error.code() == Some("E0277") && !self.state.allow_question_mark {
-                        self.state.allow_question_mark = true;
+                    } else if error.code() == Some("E0277") && !state.allow_question_mark {
+                        state.allow_question_mark = true;
                         fixed_errors.insert("Allow question mark");
                     } else if error.code() == Some("E0658")
                         && error
@@ -935,7 +867,7 @@ enum CompilationMode {
 /// State that is cloned then modified every time we try to compile some code. If compilation
 /// succeeds, we keep the modified state, if it fails, we revert to the old state.
 #[derive(Clone)]
-struct ContextState {
+pub struct ContextState {
     crate_dir: PathBuf,
     items_by_name: HashMap<String, CodeBlock>,
     unnamed_items: Vec<CodeBlock>,
@@ -957,7 +889,7 @@ struct ContextState {
 }
 
 impl ContextState {
-    fn new(crate_dir: PathBuf) -> ContextState {
+    fn new(crate_dir: PathBuf, config: Config) -> ContextState {
         ContextState {
             crate_dir,
             items_by_name: HashMap::new(),
@@ -969,7 +901,116 @@ impl ContextState {
             async_mode: false,
             allow_question_mark: false,
             build_num: 0,
-            config: Config::default(),
+            config,
+        }
+    }
+
+    pub fn time_passes(&self) -> bool {
+        self.config.time_passes
+    }
+
+    pub fn set_time_passes(&mut self, value: bool) {
+        self.config.time_passes = value;
+    }
+
+    pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
+        self.config.set_sccache(enabled)
+    }
+
+    pub fn sccache(&self) -> bool {
+        self.config.sccache()
+    }
+
+    pub fn set_error_format(&mut self, format_str: &str) -> Result<(), Error> {
+        for format in ERROR_FORMATS {
+            if format.format_str == format_str {
+                self.config.error_fmt = format;
+                return Ok(());
+            }
+        }
+        bail!(
+            "Unsupported error format string. Available options: {}",
+            ERROR_FORMATS
+                .iter()
+                .map(|f| f.format_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+    }
+
+    pub fn error_format(&self) -> &str {
+        self.config.error_fmt.format_str
+    }
+
+    pub fn error_format_trait(&self) -> &str {
+        self.config.error_fmt.format_trait
+    }
+
+    pub fn set_linker(&mut self, linker: String) {
+        self.config.linker = linker;
+    }
+
+    pub fn linker(&self) -> &str {
+        &self.config.linker
+    }
+
+    pub fn preserve_vars_on_panic(&self) -> bool {
+        self.config.preserve_vars_on_panic
+    }
+
+    pub fn set_preserve_vars_on_panic(&mut self, value: bool) {
+        self.config.preserve_vars_on_panic = value;
+    }
+
+    pub fn debug_mode(&self) -> bool {
+        self.config.debug_mode
+    }
+
+    pub fn set_debug_mode(&mut self, debug_mode: bool) {
+        self.config.debug_mode = debug_mode;
+    }
+
+    pub fn opt_level(&self) -> &str {
+        &self.config.opt_level
+    }
+
+    pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
+        if level.is_empty() {
+            bail!("Optimization level cannot be an empty string");
+        }
+        self.config.opt_level = level.to_owned();
+        Ok(())
+    }
+    pub fn output_format(&self) -> &str {
+        &self.config.output_format
+    }
+
+    pub fn set_output_format(&mut self, output_format: String) {
+        self.config.output_format = output_format;
+    }
+
+    /// Adds a crate dependency with the specified name and configuration.
+    pub fn add_dep(&mut self, name: &str, config: &str) -> Result<(), Error> {
+        self.external_deps.insert(
+            name.to_owned(),
+            ExternalCrate::new(name.to_owned(), config.to_owned())?,
+        );
+        Ok(())
+    }
+
+    pub(crate) fn format_cargo_deps(&self) -> String {
+        self.external_deps
+            .values()
+            .map(|krate| format!("{} = {}\n", krate.name, krate.config))
+            .collect::<Vec<_>>()
+            .join("")
+    }
+
+    fn compilation_mode(&self) -> CompilationMode {
+        if self.config.preserve_vars_on_panic {
+            CompilationMode::RunAndCatchPanics
+        } else {
+            CompilationMode::NoCatch
         }
     }
 
