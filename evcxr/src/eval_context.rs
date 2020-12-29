@@ -305,6 +305,13 @@ impl EvalContext {
         let user_code = state.apply(user_code, nodes)?;
         let code = state.code_to_compile(user_code, CompilationMode::NoCatch);
         let wrapped_offset = code.user_offset_to_output_offset(offset)?;
+
+        if state.config.debug_mode {
+            let mut s = code.code_string();
+            s.insert_str(wrapped_offset, "<|>");
+            println!("=========\n{}\n==========", s);
+        }
+
         self.analyzer.set_source(code.code_string())?;
         let mut completions = self.analyzer.completions(wrapped_offset)?;
         completions.start_offset = code.output_offset_to_user_offset(completions.start_offset)?;
