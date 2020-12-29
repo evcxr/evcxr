@@ -42,6 +42,7 @@ impl Segment {
 pub(crate) struct Command {
     pub(crate) command: String,
     pub(crate) args: Option<String>,
+    start_byte: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -159,7 +160,7 @@ impl CodeBlock {
     pub(crate) fn from_original_user_code(user_code: &str) -> (CodeBlock, Vec<SyntaxNode>) {
         use regex::Regex;
         lazy_static! {
-            static ref COMMAND_RE: Regex = Regex::new("^ *(:[^ ]+)( +(.*))?$").unwrap();
+            static ref COMMAND_RE: Regex = Regex::new("^ *(:[^ ]*)( +(.*))?$").unwrap();
         }
         let mut code_block = CodeBlock::new();
         let mut nodes = Vec::new();
@@ -171,6 +172,7 @@ impl CodeBlock {
                     CodeKind::Command(Command {
                         command: captures[1].to_owned(),
                         args: captures.get(3).map(|m| m.as_str().to_owned()),
+                        start_byte: line.as_ptr() as usize - user_code.as_ptr() as usize,
                     }),
                     line,
                 );
@@ -200,6 +202,22 @@ impl CodeBlock {
             }
         }
         (code_block, nodes)
+    }
+
+    pub(crate) fn command_containing_user_offset(
+        &self,
+        user_code_offset: usize,
+    ) -> Option<(&Segment, usize)> {
+        self.segments.iter().find_map(|segment| {
+            if let CodeKind::Command(Command { start_byte, .. }) = &segment.kind {
+                if user_code_offset >= *start_byte
+                    && user_code_offset <= start_byte + segment.code.len()
+                {
+                    return Some((segment, user_code_offset - *start_byte));
+                }
+            }
+            None
+        })
     }
 
     /// Tries to convert a user-code offset into an output code offset. For this to work as

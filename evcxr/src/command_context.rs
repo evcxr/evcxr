@@ -15,9 +15,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    code_block::{CodeBlock, CodeKind},
+    code_block::{CodeBlock, CodeKind, Segment},
     eval_context::EvalCallbacks,
-    rust_analyzer::Completions,
+    rust_analyzer::{Completion, Completions},
     EvalContext, EvalContextOutputs, EvalOutputs,
 };
 use crate::{
@@ -113,6 +113,9 @@ impl CommandContext {
         let mut non_command_code = CodeBlock::new();
         let mut state = self.eval_context.state();
         let (user_code, nodes) = CodeBlock::from_original_user_code(src);
+        if let Some((segment, offset)) = user_code.command_containing_user_offset(position) {
+            return self.command_completions(segment, offset, position);
+        }
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
                 if command.command == ":dep" {
@@ -126,6 +129,26 @@ impl CommandContext {
         }
         self.eval_context
             .completions(non_command_code, state, &nodes, position)
+    }
+
+    fn command_completions(
+        &self,
+        segment: &Segment,
+        offset: usize,
+        full_position: usize,
+    ) -> Result<Completions> {
+        let existing = &segment.code[0..offset];
+        let mut completions = Completions::default();
+        completions.start_offset = full_position - offset;
+        completions.end_offset = full_position;
+        for cmd in Self::commands_by_name().keys() {
+            if cmd.starts_with(existing) {
+                completions.completions.push(Completion {
+                    code: (*cmd).to_owned(),
+                })
+            }
+        }
+        Ok(completions)
     }
 
     fn load_config(&mut self) -> Result<EvalOutputs, Error> {

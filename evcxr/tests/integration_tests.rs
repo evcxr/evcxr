@@ -670,6 +670,18 @@ fn code_completion() {
     assert_eq!(completions.start_offset, code.len() - "res".len());
     assert_eq!(completions.end_offset, code.len());
 
+    let completions = ctx.completions(":de", 3).unwrap();
+    assert_eq!(completions.start_offset, 0);
+    assert_eq!(completions.end_offset, 3);
+    assert_eq!(
+        completions
+            .completions
+            .iter()
+            .map(|c| c.code.as_str())
+            .collect::<Vec<_>>(),
+        vec![":dep"]
+    );
+
     let code = code.replace("res", "asdfasdf");
     assert_eq!(
         ctx.completions(&code, code.len()).unwrap().completions,
