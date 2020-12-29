@@ -1,5 +1,5 @@
-# Version 0.6.1
-* Updates to rust-analyzer (improves tab completion)
+# Version 0.7.0
+* Fixed a number of bugs in tab completion.
 * Documentation improvements. Thanks Ibraheem!
 * Fixed a panic when doing tab completion after loading a crate with a
   hyphenated name.
@@ -7,6 +7,7 @@
   binary size from 24MB to 20MB).
 * Improved semantics for use statements. e.g. `use a::{b, c};` followed by `use
   a::{b, c, d}` now won't give you errors.
+* API changes in the evcxr crate (used by the repl and jupyter kernel).
 
 # Version 0.6.0
 * Support for rustc 1.48.
