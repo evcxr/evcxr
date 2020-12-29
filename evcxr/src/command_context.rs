@@ -209,7 +209,11 @@ impl CommandContext {
                     text_output(format!("Internals debugging: {}", debug_mode))
                 },
             ),
-            Command::new(":load_config", "", |ctx, _state, _args| ctx.load_config()),
+            Command::new(
+                ":load_config",
+                "Reloads startup configuration files",
+                |ctx, _state, _args| ctx.load_config(),
+            ),
             Command::new(":version", "Print Evcxr version", |_ctx, _state, _args| {
                 text_output(env!("CARGO_PKG_VERSION"))
             }),
@@ -369,7 +373,7 @@ impl CommandContext {
                 let mut commands = CommandContext::create_commands();
                 commands.sort_by(|a, b| a.name.cmp(b.name));
                 for cmd in commands {
-                    writeln!(&mut text, "{:<9} {}", cmd.name, cmd.short_description).unwrap();
+                    writeln!(&mut text, "{:<17} {}", cmd.name, cmd.short_description).unwrap();
                     writeln!(
                         &mut html,
                         "<tr><td>{}</td><td>{}</td></tr>",
