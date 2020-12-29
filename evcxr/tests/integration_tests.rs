@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use evcxr::{CommandContext, Error, EvalContext, EvalContextOutputs};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io;
 use std::sync::mpsc;
 use tempfile;
@@ -634,6 +634,15 @@ fn define_then_call_macro() {
     assert_eq!(eval!(e, foo!(2)), text_plain("42"));
 }
 
+fn simple_completions(ctx: &mut CommandContext, code: &str) -> HashSet<String> {
+    ctx.completions(code, code.len())
+        .unwrap()
+        .completions
+        .into_iter()
+        .map(|c| c.code)
+        .collect()
+}
+
 #[test]
 fn code_completion() {
     let mut ctx = CommandContext::with_eval_context(new_context());
@@ -648,7 +657,9 @@ fn code_completion() {
             impl Baz {
                 pub fn fff5() {}
             }
-        }"#,
+        }
+        let var1 = 42;
+        let var2 = String::new();"#,
     )
     .unwrap();
     let code = r#"
@@ -670,6 +681,7 @@ fn code_completion() {
     assert_eq!(completions.start_offset, code.len() - "res".len());
     assert_eq!(completions.end_offset, code.len());
 
+    // Check command completions.
     let completions = ctx.completions(":de", 3).unwrap();
     assert_eq!(completions.start_offset, 0);
     assert_eq!(completions.end_offset, 3);
@@ -682,11 +694,22 @@ fn code_completion() {
         vec![":dep"]
     );
 
+    // Check that we get zero completions when expected.
     let code = code.replace("res", "asdfasdf");
     assert_eq!(
         ctx.completions(&code, code.len()).unwrap().completions,
         vec![]
     );
+
+    // Check that user-defined variables are included in the completions, but
+    // evcxr internal variables are not.
+    let completions = simple_completions(&mut ctx, "let _ = v");
+    assert!(completions.contains("var1"));
+    assert!(completions.contains("var2"));
+    assert!(!completions.contains("vars_ok"));
+    let completions = simple_completions(&mut ctx, "let _ = e");
+    assert!(!completions.contains("evcxr_variable_store"));
+    assert!(!completions.contains("evcxr_internal_runtime"));
 
     // We handle use-statements differently to other code, make sure that we can
     // still get completions from them.

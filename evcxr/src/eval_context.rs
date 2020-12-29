@@ -316,6 +316,12 @@ impl EvalContext {
         let mut completions = self.analyzer.completions(wrapped_offset)?;
         completions.start_offset = code.output_offset_to_user_offset(completions.start_offset)?;
         completions.end_offset = code.output_offset_to_user_offset(completions.end_offset)?;
+        // Filter internal identifiers.
+        completions.completions = completions
+            .completions
+            .into_iter()
+            .filter(|c| c.code != "evcxr_variable_store" && c.code != "evcxr_internal_runtime")
+            .collect();
         Ok(completions)
     }
 
