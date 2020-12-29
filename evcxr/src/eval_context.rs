@@ -819,6 +819,15 @@ impl EvalOutputs {
         }
     }
 
+    pub fn text_html(text: String, html: String) -> EvalOutputs {
+        let mut out = EvalOutputs::new();
+        out.content_by_mime_type
+            .insert("text/plain".to_owned(), text);
+        out.content_by_mime_type
+            .insert("text/html".to_owned(), html);
+        out
+    }
+
     pub fn is_empty(&self) -> bool {
         self.content_by_mime_type.is_empty()
     }

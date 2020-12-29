@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::HashMap;
+
 use crate::{
     code_block::{CodeBlock, CodeKind},
     eval_context::EvalCallbacks,
@@ -155,127 +157,206 @@ impl CommandContext {
         state: &mut ContextState,
         args: &Option<String>,
     ) -> Result<EvalOutputs, Error> {
-        match command {
-            ":internal_debug" => {
-                let debug_mode = !state.debug_mode();
-                state.set_debug_mode(debug_mode);
-                text_output(format!("Internals debugging: {}", debug_mode))
-            }
-            ":load_config" => self.load_config(),
-            ":version" => text_output(env!("CARGO_PKG_VERSION")),
-            ":vars" => {
-                let mut outputs = EvalOutputs::new();
-                outputs
-                    .content_by_mime_type
-                    .insert("text/plain".to_owned(), self.vars_as_text());
-                outputs
-                    .content_by_mime_type
-                    .insert("text/html".to_owned(), self.vars_as_html());
-                Ok(outputs)
-            }
-            ":preserve_vars_on_panic" => {
-                state.set_preserve_vars_on_panic(args.as_ref().map(String::as_str) == Some("1"));
-                text_output(format!(
-                    "Preserve vars on panic: {}",
-                    state.preserve_vars_on_panic()
-                ))
-            }
-            ":clear" => self.eval_context.clear().map(|_| EvalOutputs::new()),
-            ":dep" => self.process_dep_command(state, args),
-            ":last_compile_dir" => {
-                text_output(format!("{:?}", self.eval_context.last_compile_dir()))
-            }
-            ":opt" => {
-                let new_level = if let Some(n) = args {
-                    &n
-                } else if state.opt_level() == "2" {
-                    "0"
-                } else {
-                    "2"
-                };
-                state.set_opt_level(new_level)?;
-                text_output(format!("Optimization: {}", state.opt_level()))
-            }
-            ":fmt" => {
-                let new_format = if let Some(f) = args { f } else { "{:?}" };
-                state.set_output_format(new_format.to_owned());
-                text_output(format!("Output format: {}", state.output_format()))
-            }
-            ":efmt" => {
-                if let Some(f) = args {
-                    state.set_error_format(f)?;
-                }
-                text_output(format!(
-                    "Error format: {} (errors must implement {})",
-                    state.error_format(),
-                    state.error_format_trait()
-                ))
-            }
-            ":quit" => std::process::exit(0),
-            ":timing" => {
-                self.print_timings = !self.print_timings;
-                text_output(format!("Timing: {}", self.print_timings))
-            }
-            ":time_passes" => {
-                state.set_time_passes(!state.time_passes());
-                text_output(format!("Time passes: {}", state.time_passes()))
-            }
-            ":sccache" => {
-                state.set_sccache(args.as_ref().map(String::as_str) != Some("0"))?;
-                text_output(format!("sccache: {}", state.sccache()))
-            }
-            ":linker" => {
-                if let Some(linker) = args {
-                    state.set_linker(linker.to_owned());
-                }
-                text_output(format!("linker: {}", state.linker()))
-            }
-            ":explain" => {
-                if self.last_errors.is_empty() {
-                    bail!("No last error to explain");
-                } else {
-                    let mut all_explanations = String::new();
-                    for error in &self.last_errors {
-                        if let Some(explanation) = error.explanation() {
-                            all_explanations.push_str(explanation);
-                        } else {
-                            bail!("Sorry, last error has no explanation");
-                        }
-                    }
-                    text_output(all_explanations)
-                }
-            }
-            ":last_error_json" => {
-                let mut errors_out = String::new();
-                for error in &self.last_errors {
-                    use std::fmt::Write;
-                    write!(&mut errors_out, "{}", error.json)?;
-                    errors_out.push('\n');
-                }
-                bail!(errors_out);
-            }
-            ":help" => text_output(
-                ":vars             List bound variables and their types\n\
-                 :opt [level]      Toggle/set optimization level\n\
-                 :fmt [format]     Set output formatter (default: {:?}). \n\
-                 :efmt [format]    Set the formatter for errors returned by ?\n\
-                 :explain          Print explanation of last error\n\
-                 :clear            Clear all state, keeping compilation cache\n\
-                 :dep              Add dependency. e.g. :dep regex = \"1.0\"\n\
-                 :sccache [0|1]    Set whether to use sccache.\n\
-                 :linker [linker]  Set/print linker. Supported: system, lld\n\
-                 :version          Print Evcxr version\n\
-                 :quit             Quit evaluation and exit\n\
-                 :preserve_vars_on_panic [0|1]  Try to keep vars on panic\n\n\
-                 Mostly for development / debugging purposes:\n\
-                 :last_compile_dir Print the directory in which we last compiled\n\
-                 :timing           Toggle printing of how long evaluations take\n\
-                 :last_error_json  Print the last compilation error as JSON (for debugging)\n\
-                 :time_passes      Toggle printing of rustc pass times (requires nightly)\n\
-                 :internal_debug   Toggle various internal debugging code",
-            ),
-            _ => bail!("Unrecognised command {}", command),
+        if let Some(command) = Self::commands_by_name().get(command) {
+            (command.callback)(self, state, args)
+        } else {
+            bail!("Unrecognised command {}", command)
         }
+    }
+
+    fn commands_by_name() -> &'static HashMap<&'static str, Command> {
+        lazy_static! {
+            static ref COMMANDS_BY_NAME: HashMap<&'static str, Command> =
+                CommandContext::create_commands()
+                    .into_iter()
+                    .map(|command| (command.name, command))
+                    .collect();
+        }
+        &COMMANDS_BY_NAME
+    }
+
+    fn create_commands() -> Vec<Command> {
+        vec![
+            Command::new(
+                ":internal_debug",
+                "Toggle various internal debugging code",
+                |_ctx, state, _args| {
+                    let debug_mode = !state.debug_mode();
+                    state.set_debug_mode(debug_mode);
+                    text_output(format!("Internals debugging: {}", debug_mode))
+                },
+            ),
+            Command::new(":load_config", "", |ctx, _state, _args| ctx.load_config()),
+            Command::new(":version", "Print Evcxr version", |_ctx, _state, _args| {
+                text_output(env!("CARGO_PKG_VERSION"))
+            }),
+            Command::new(
+                ":vars",
+                "List bound variables and their types",
+                |ctx, _state, _args| {
+                    Ok(EvalOutputs::text_html(
+                        ctx.vars_as_text(),
+                        ctx.vars_as_html(),
+                    ))
+                },
+            ),
+            Command::new(
+                ":preserve_vars_on_panic",
+                "Try to keep vars on panic (0/1)",
+                |_ctx, state, args| {
+                    state
+                        .set_preserve_vars_on_panic(args.as_ref().map(String::as_str) == Some("1"));
+                    text_output(format!(
+                        "Preserve vars on panic: {}",
+                        state.preserve_vars_on_panic()
+                    ))
+                },
+            ),
+            Command::new(
+                ":clear",
+                "Clear all state, keeping compilation cache",
+                |ctx, _state, _args| ctx.eval_context.clear().map(|_| EvalOutputs::new()),
+            ),
+            Command::new(
+                ":dep",
+                "Add dependency. e.g. :dep regex = \"1.0\"",
+                |ctx, state, args| ctx.process_dep_command(state, args),
+            ),
+            Command::new(
+                ":last_compile_dir",
+                "Print the directory in which we last compiled",
+                |ctx, _state, _args| {
+                    text_output(format!("{:?}", ctx.eval_context.last_compile_dir()))
+                },
+            ),
+            Command::new(
+                ":opt",
+                "Set optimization level (0/1/2)",
+                |_ctx, state, args| {
+                    let new_level = if let Some(n) = args {
+                        &n
+                    } else if state.opt_level() == "2" {
+                        "0"
+                    } else {
+                        "2"
+                    };
+                    state.set_opt_level(new_level)?;
+                    text_output(format!("Optimization: {}", state.opt_level()))
+                },
+            ),
+            Command::new(
+                ":fmt",
+                "Set output formatter (default: {:?})",
+                |_ctx, state, args| {
+                    let new_format = if let Some(f) = args { f } else { "{:?}" };
+                    state.set_output_format(new_format.to_owned());
+                    text_output(format!("Output format: {}", state.output_format()))
+                },
+            ),
+            Command::new(
+                ":efmt",
+                "Set the formatter for errors returned by ?",
+                |_ctx, state, args| {
+                    if let Some(f) = args {
+                        state.set_error_format(f)?;
+                    }
+                    text_output(format!(
+                        "Error format: {} (errors must implement {})",
+                        state.error_format(),
+                        state.error_format_trait()
+                    ))
+                },
+            ),
+            Command::new(
+                ":quit",
+                "Quit evaluation and exit",
+                |_ctx, _state, _args| std::process::exit(0),
+            ),
+            Command::new(
+                ":timing",
+                "Toggle printing of how long evaluations take",
+                |ctx, _state, _args| {
+                    ctx.print_timings = !ctx.print_timings;
+                    text_output(format!("Timing: {}", ctx.print_timings))
+                },
+            ),
+            Command::new(
+                ":time_passes",
+                "Toggle printing of rustc pass times (requires nightly)",
+                |_ctx, state, _args| {
+                    state.set_time_passes(!state.time_passes());
+                    text_output(format!("Time passes: {}", state.time_passes()))
+                },
+            ),
+            Command::new(
+                ":sccache",
+                "Set whether to use sccache (0/1).",
+                |_ctx, state, args| {
+                    state.set_sccache(args.as_ref().map(String::as_str) != Some("0"))?;
+                    text_output(format!("sccache: {}", state.sccache()))
+                },
+            ),
+            Command::new(
+                ":linker",
+                "Set/print linker. Supported: system, lld",
+                |_ctx, state, args| {
+                    if let Some(linker) = args {
+                        state.set_linker(linker.to_owned());
+                    }
+                    text_output(format!("linker: {}", state.linker()))
+                },
+            ),
+            Command::new(
+                ":explain",
+                "Print explanation of last error",
+                |ctx, _state, _args| {
+                    if ctx.last_errors.is_empty() {
+                        bail!("No last error to explain");
+                    } else {
+                        let mut all_explanations = String::new();
+                        for error in &ctx.last_errors {
+                            if let Some(explanation) = error.explanation() {
+                                all_explanations.push_str(explanation);
+                            } else {
+                                bail!("Sorry, last error has no explanation");
+                            }
+                        }
+                        text_output(all_explanations)
+                    }
+                },
+            ),
+            Command::new(
+                ":last_error_json",
+                "Print the last compilation error as JSON (for debugging)",
+                |ctx, _state, _args| {
+                    let mut errors_out = String::new();
+                    for error in &ctx.last_errors {
+                        use std::fmt::Write;
+                        write!(&mut errors_out, "{}", error.json)?;
+                        errors_out.push('\n');
+                    }
+                    bail!(errors_out);
+                },
+            ),
+            Command::new(":help", "Print command help", |_ctx, _state, _args| {
+                use std::fmt::Write;
+                let mut text = String::new();
+                let mut html = String::new();
+                writeln!(&mut html, "<table>")?;
+                let mut commands = CommandContext::create_commands();
+                commands.sort_by(|a, b| a.name.cmp(b.name));
+                for cmd in commands {
+                    writeln!(&mut text, "{:<9} {}", cmd.name, cmd.short_description).unwrap();
+                    writeln!(
+                        &mut html,
+                        "<tr><td>{}</td><td>{}</td></tr>",
+                        cmd.name, cmd.short_description
+                    )?;
+                }
+                writeln!(&mut html, "</table>")?;
+                Ok(EvalOutputs::text_html(text, html))
+            }),
+        ]
     }
 
     fn vars_as_text(&self) -> String {
@@ -325,6 +406,40 @@ impl CommandContext {
             Ok(EvalOutputs::new())
         } else {
             bail!("Invalid :dep command. Expected: name = ... or just name");
+        }
+    }
+}
+
+struct Command {
+    name: &'static str,
+    short_description: &'static str,
+    callback: Box<
+        dyn Fn(
+                &mut CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
+            + 'static
+            + Sync,
+    >,
+}
+
+impl Command {
+    fn new(
+        name: &'static str,
+        short_description: &'static str,
+        callback: impl Fn(
+                &mut CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
+            + 'static
+            + Sync,
+    ) -> Command {
+        Command {
+            name,
+            short_description,
+            callback: Box::new(callback),
         }
     }
 }
