@@ -99,7 +99,7 @@ impl CompilationError {
             {
                 return None;
             }
-            message.to_owned()
+            sanitize_message(message)
         } else {
             return None;
         };
@@ -225,6 +225,14 @@ impl CompilationError {
         }
         None
     }
+}
+
+fn sanitize_message(message: &str) -> String {
+    // Any references to `evcxr_variable_store` are beyond the end of what the
+    // user typed, so we replace such references with something more meaningful.
+    // This is mostly helpful with missing semicolons on let statements, which
+    // produce errors such as "expected `;`, found `evcxr_variable_store`"
+    message.replace("`evcxr_variable_store`", "<end of input>")
 }
 
 fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<SpannedMessage> {

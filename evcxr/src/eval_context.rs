@@ -719,7 +719,9 @@ impl EvalContext {
                                 variable_state.type_name
                             );
                         }
-                    } else if error.code() == Some("E0562") || error.code().is_none() {
+                    } else if error.code() == Some("E0562")
+                        || (error.code().is_none() && error.code_origins.len() == 1)
+                    {
                         bail!(
                             "The variable `{}` has a type `{}` that can't be persisted. You can \
                             try wrapping your code in braces so that the variable goes out of \
