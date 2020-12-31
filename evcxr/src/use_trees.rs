@@ -64,6 +64,8 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
                 if let Some(segment) = path.segment() {
                     if let Some(name_ref) = segment.name_ref() {
                         path_parts.push(name_ref.text().clone());
+                    } else if let Some(token) = segment.crate_token() {
+                        path_parts.push(token.text().clone());
                     }
                     if let Some(qualifier) = path.qualifier() {
                         path = qualifier;
@@ -93,8 +95,8 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
             } else if let Some(star_token) = use_tree.star_token() {
                 new_prefix.push(star_token.text().clone());
                 out(Import::format(star_token.text(), &new_prefix));
-            } else {
-                out(Import::format(new_prefix.last().unwrap(), &new_prefix));
+            } else if let Some(ident) = new_prefix.last() {
+                out(Import::format(ident, &new_prefix));
             }
         }
     }

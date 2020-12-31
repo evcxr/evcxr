@@ -326,6 +326,17 @@ fn crate_name_with_hyphens() {
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
 }
 
+// A collection of bits of code that are invalid. Our bar here is that we don't
+// crash and each thing we try to evaluate results in an error. The actual
+// errors will be produced by the rust compiler and we don't want to tie our
+// tests needlessly to the specific error messages, so we don't check what the
+// errors are.
+#[test]
+fn invalid_code() {
+    let mut e = new_context();
+    assert!(e.eval("use crate;", e.state()).is_err());
+}
+
 #[test]
 fn struct_type_inference() {
     let mut e = new_context();
