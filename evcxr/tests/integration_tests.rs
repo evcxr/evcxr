@@ -19,8 +19,8 @@ use std::sync::mpsc;
 use tempfile;
 
 #[track_caller]
-fn eval_and_unwrap(ctxt: &mut EvalContext, code: &str) -> HashMap<String, String> {
-    match ctxt.eval(code, ctxt.state()) {
+fn eval_and_unwrap(ctxt: &mut CommandContext, code: &str) -> HashMap<String, String> {
+    match ctxt.execute(code) {
         Ok(output) => output.content_by_mime_type,
         Err(err) => {
             println!(
@@ -61,25 +61,25 @@ fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, m
     });
 }
 
-fn new_context() -> EvalContext {
-    let (context, outputs) = EvalContext::new_for_testing();
+fn new_context() -> CommandContext {
+    let (context, outputs) = new_command_context_and_outputs();
     send_output(outputs.stderr, io::stderr());
     context
 }
 
-fn defined_item_names(eval_context: &EvalContext) -> Vec<&str> {
+fn defined_item_names(eval_context: &CommandContext) -> Vec<&str> {
     let mut defined_names = eval_context.defined_item_names().collect::<Vec<_>>();
     defined_names.sort();
     defined_names
 }
 
-fn variable_names_and_types(ctx: &EvalContext) -> Vec<(&str, &str)> {
+fn variable_names_and_types(ctx: &CommandContext) -> Vec<(&str, &str)> {
     let mut var_names = ctx.variables_and_types().collect::<Vec<_>>();
     var_names.sort();
     var_names
 }
 
-fn variable_names(ctx: &EvalContext) -> Vec<&str> {
+fn variable_names(ctx: &CommandContext) -> Vec<&str> {
     let mut var_names = ctx
         .variables_and_types()
         .map(|(var_name, _)| var_name)
@@ -103,7 +103,7 @@ fn save_and_restore_variables() {
     eval!(e, assert_eq!(a, 42););
     assert_eq!(eval!(e, a), text_plain("42"));
     // Try to change a mutable variable and check that the error we get is what we expect.
-    match e.eval("b = 2;", e.state()) {
+    match e.execute("b = 2;") {
         Err(Error::CompilationErrors(errors)) => {
             if errors.len() != 1 {
                 println!("{:#?}", errors);
@@ -146,7 +146,7 @@ fn save_and_restore_variables() {
 fn missing_semicolon_on_let_stmt() {
     let mut e = new_context();
     eval_and_unwrap(&mut e, "mod foo {pub mod bar { pub struct Baz {} }}");
-    match e.eval("let v1 = foo::bar::Baz {}", e.state()) {
+    match e.execute("let v1 = foo::bar::Baz {}") {
         Err(Error::CompilationErrors(e)) => {
             assert!(e.first().unwrap().message().contains(";"));
         }
@@ -158,7 +158,7 @@ fn missing_semicolon_on_let_stmt() {
 
 #[test]
 fn printing() {
-    let (mut e, outputs) = EvalContext::new_for_testing();
+    let (mut e, outputs) = new_command_context_and_outputs();
 
     eval!(e,
         println!("This is stdout");
@@ -214,10 +214,15 @@ fn define_then_call_function() {
 fn function_panics_with_variable_preserving() {
     // Don't allow stderr to be printed here. We don't really want to see the
     // panic stack trace when running tests.
-    let (mut e, _) = EvalContext::new_for_testing();
-    e.set_preserve_vars_on_panic(true);
-    eval!(e, let a = vec![1, 2, 3];);
-    eval!(e, let b = 42;);
+    let (mut e, _) = new_command_context_and_outputs();
+    eval_and_unwrap(
+        &mut e,
+        r#"
+        :preserve_vars_on_panic 1
+        let a = vec![1, 2, 3];
+        let b = 42;
+    "#,
+    );
     eval!(e, panic!("Intentional panic {}", b););
     // The variable a isn't referenced by the code that panics, while the variable b implements
     // Copy, so neither should be lost.
@@ -231,11 +236,16 @@ fn function_panics_with_variable_preserving() {
 fn function_panics_without_variable_preserving() {
     // Don't allow stderr to be printed here. We don't really want to see the
     // panic stack trace when running tests.
-    let (mut e, _) = EvalContext::new_for_testing();
-    e.set_preserve_vars_on_panic(false);
-    eval!(e, let a = vec![1, 2, 3];);
-    eval!(e, let b = 42;);
-    let result = e.eval(stringify!(panic!("Intentional panic {}", b);), e.state());
+    let (mut e, _) = new_command_context_and_outputs();
+    eval_and_unwrap(
+        &mut e,
+        r#"
+        :preserve_vars_on_panic 0
+        let a = vec![1, 2, 3];
+        let b = 42;
+    "#,
+    );
+    let result = e.execute(stringify!(panic!("Intentional panic {}", b);));
     if let Err(Error::ChildProcessTerminated(message)) = result {
         assert!(message.contains("Child process terminated"));
     } else {
@@ -244,7 +254,7 @@ fn function_panics_without_variable_preserving() {
     assert_eq!(variable_names_and_types(&e), vec![]);
     // Make sure that a compilation error doesn't bring the variables back from
     // the dead.
-    assert!(e.eval("This will not compile", e.state()).is_err());
+    assert!(e.execute("This will not compile").is_err());
     assert_eq!(variable_names_and_types(&e), vec![]);
 }
 
@@ -357,7 +367,7 @@ fn crate_name_with_hyphens() {
 #[test]
 fn invalid_code() {
     let mut e = new_context();
-    assert!(e.eval("use crate;", e.state()).is_err());
+    assert!(e.execute("use crate;").is_err());
 }
 
 #[test]
@@ -407,7 +417,7 @@ fn statement_and_expression() {
 fn continue_execution_after_bad_use_statement() {
     let mut e = new_context();
     // First make sure we get the error we expect.
-    match e.eval("use foobar;", e.state()) {
+    match e.execute("use foobar;") {
         Err(Error::CompilationErrors(errors)) => {
             assert_eq!(errors.len(), 1);
             assert_eq!(errors[0].code(), Some("E0432"));
@@ -424,10 +434,7 @@ fn error_from_macro_expansion() {
     // The the following line we're missing & before format!. The compiler reports the error as
     // coming from "<format macros>" with expansion information leading to the user code. Make sure
     // we ignore the span from non-user code and use the expansion info correctly.
-    match e.eval(
-        "let mut s = String::new(); s.push_str(format!(\"\"));",
-        e.state(),
-    ) {
+    match e.execute("let mut s = String::new(); s.push_str(format!(\"\"));") {
         Err(Error::CompilationErrors(errors)) => {
             assert_eq!(errors.len(), 1);
             assert_eq!(errors[0].code(), Some("E0308")); // mismatched types
@@ -492,7 +499,7 @@ fn abort_and_restart() {
         // exists after a restart.
         let a = 42i32;
     );
-    let result = e.eval(stringify!(std::process::abort();), e.state());
+    let result = e.execute(stringify!(std::process::abort();));
     if let Err(Error::ChildProcessTerminated(message)) = result {
         #[cfg(not(windows))]
         {
@@ -509,14 +516,14 @@ fn abort_and_restart() {
         panic!("Unexpected result: {:?}", result);
     }
     eval!(e, assert_eq!(foo(), 42));
-    e.clear().unwrap();
+    eval_and_unwrap(&mut e, ":clear");
     eval!(e, assert_eq!(40 + 2, 42););
 }
 
 #[test]
 fn variable_assignment_compile_fail_then_use_statement() {
     let mut e = new_context();
-    assert!(e.eval(stringify!(let v = foo();), e.state()).is_err());
+    assert!(e.execute(stringify!(let v = foo();)).is_err());
     eval!(e, use std::collections::HashMap;);
     assert_eq!(eval!(e, 42), text_plain("42"));
 }
@@ -542,7 +549,7 @@ fn reserved_words() {
 #[test]
 fn unnamable_type_closure() {
     let mut e = new_context();
-    let result = e.eval(stringify!(let v = || {42};), e.state());
+    let result = e.execute(stringify!(let v = || {42};));
     if let Err(Error::Message(message)) = result {
         if !(message.starts_with("Sorry, the type")
             && message.contains("cannot currently be persisted"))
@@ -557,15 +564,12 @@ fn unnamable_type_closure() {
 #[test]
 fn unnamable_type_impl_trait() {
     let mut e = new_context();
-    let result = e.eval(
-        stringify!(
-            pub trait Bar {}
-            impl Bar for i32 {}
-            pub fn foo() -> impl Bar {42}
-            let v = foo();
-        ),
-        e.state(),
-    );
+    let result = e.execute(stringify!(
+        pub trait Bar {}
+        impl Bar for i32 {}
+        pub fn foo() -> impl Bar {42}
+        let v = foo();
+    ));
     if let Err(Error::Message(message)) = result {
         if !(message.starts_with("The variable `v` has a type")
             && message.contains("can't be persisted"))
@@ -598,8 +602,8 @@ fn question_mark_operator() {
     let mut e = new_context();
     // Make sure question mark works without variables.
     eval!(e, std::fs::read_to_string("/does/not/exist")?;);
-    assert!(e.set_error_format("x").is_err());
-    e.set_error_format("{:?}").unwrap();
+    assert!(e.execute(":efmt x").is_err());
+    eval_and_unwrap(&mut e, ":efmt {:?}");
     eval!(e,
         let owned = "owned".to_string();
         let copy = 40;
@@ -693,7 +697,7 @@ fn simple_completions(ctx: &mut CommandContext, code: &str) -> HashSet<String> {
 
 #[test]
 fn code_completion() {
-    let mut ctx = CommandContext::with_eval_context(new_context());
+    let mut ctx = new_context();
     // This first bit of code that we execute serves two purposes. Firstly, it's
     // used later in the test. Secondly, it ensures that our first attempt at
     // completion doesn't get confused by user code that has already been
@@ -808,7 +812,7 @@ fn repeated_use_statements() {
     );
     // Try a bad import. This should fail, but shouldn't affect subsequent eval
     // calls.
-    assert!(e.eval("use this::will::fail;", e.state()).is_err());
+    assert!(e.execute("use this::will::fail;").is_err());
     assert_eq!(
         eval_and_unwrap(&mut e, "use foo::Bar as _; Bar::result()"),
         text_plain("42")

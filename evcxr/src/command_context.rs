@@ -59,6 +59,14 @@ impl CommandContext {
         self.execute_with_callbacks(to_run, &mut EvalCallbacks::default())
     }
 
+    pub fn variables_and_types(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.eval_context.variables_and_types()
+    }
+
+    pub fn defined_item_names(&self) -> impl Iterator<Item = &str> {
+        self.eval_context.defined_item_names()
+    }
+
     pub fn execute_with_callbacks(
         &mut self,
         to_run: &str,
@@ -103,6 +111,10 @@ impl CommandContext {
 
     pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
         self.eval_context.set_opt_level(level)
+    }
+
+    pub fn last_source(&self) -> std::io::Result<String> {
+        self.eval_context.last_source()
     }
 
     /// Returns completions within `src` at `position`, which should be a byte offset. Note, this
