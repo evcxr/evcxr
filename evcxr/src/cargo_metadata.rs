@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use json::{self, JsonValue};
 use std;
 use std::collections::HashMap;
@@ -23,10 +23,20 @@ use std::path::Path;
 pub(crate) fn get_library_names(crate_dir: &Path) -> Result<Vec<String>> {
     let output = std::process::Command::new("cargo")
         .arg("metadata")
+        .arg("--format-version")
+        .arg("1")
         .current_dir(crate_dir)
         .output()
         .with_context(|| format!("Error running cargo metadata '{:?}'", crate_dir))?;
-    library_names_from_metadata(crate_dir, std::str::from_utf8(&output.stdout)?)
+    if output.status.success() {
+        library_names_from_metadata(crate_dir, std::str::from_utf8(&output.stdout)?)
+    } else {
+        bail!(
+            "cargo metadata failed with output:\n{}{}",
+            std::str::from_utf8(&output.stdout)?,
+            std::str::from_utf8(&output.stderr)?,
+        )
+    }
 }
 
 fn library_names_from_metadata(crate_dir: &Path, metadata: &str) -> Result<Vec<String>> {
@@ -73,8 +83,10 @@ fn library_names_from_metadata(crate_dir: &Path, metadata: &str) -> Result<Vec<S
 
 #[cfg(test)]
 mod tests {
-    use super::library_names_from_metadata;
+    use super::{get_library_names, library_names_from_metadata};
+    use anyhow::Result;
     use std::path::Path;
+    use tempfile;
 
     #[test]
     fn test_library_names_from_metadata() {
@@ -86,5 +98,68 @@ mod tests {
             .unwrap(),
             vec!["direct1", "direct2"]
         );
+    }
+
+    fn create_crate(path: &Path, name: &str, deps: &str) -> Result<()> {
+        let src_dir = path.join("src");
+        std::fs::create_dir_all(&src_dir)?;
+        std::fs::write(
+            path.join("Cargo.toml"),
+            format!(
+                r#"
+            [package]
+            name = "{}"
+            version = "0.0.1"
+            edition = "2018"
+
+            [dependencies]
+            {}
+        "#,
+                name, deps
+            ),
+        )?;
+        std::fs::write(src_dir.join("lib.rs"), "")?;
+        Ok(())
+    }
+
+    #[test]
+    fn valid_dependency() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let crate1 = tempdir.path().join("crate1");
+        let crate2 = tempdir.path().join("crate2");
+        create_crate(&crate1, "crate1", "")?;
+        create_crate(
+            &crate2,
+            "crate2",
+            &format!(r#"crate1 = {{ path = "{}" }}"#, crate1.to_string_lossy()),
+        )?;
+        assert_eq!(
+            get_library_names(&crate2).unwrap(),
+            vec!["crate1".to_owned()]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn invalid_feature() -> Result<()> {
+        let tempdir = tempfile::tempdir()?;
+        let crate1 = tempdir.path().join("crate1");
+        let crate2 = tempdir.path().join("crate2");
+        create_crate(&crate1, "crate1", "")?;
+        create_crate(
+            &crate2,
+            "crate2",
+            &format!(
+                r#"crate1 = {{ path = "{}", features = ["no_such_feature"] }}"#,
+                crate1.to_string_lossy()
+            ),
+        )?;
+        // Make sure that the problematic feature "no_such_feature" is mentioned
+        // somewhere in the error message.
+        assert!(get_library_names(&crate2)
+            .unwrap_err()
+            .to_string()
+            .contains("no_such_feature"));
+        Ok(())
     }
 }

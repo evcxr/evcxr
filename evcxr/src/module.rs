@@ -237,6 +237,7 @@ edition = "2018"
 
 [lib]
 crate-type = ["cdylib"]
+path = "src/lib.rs"
 
 [profile.dev]
 opt-level = {}

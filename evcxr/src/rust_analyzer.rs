@@ -24,6 +24,8 @@ use ra_ap_vfs_notify as vfs_notify;
 use std::sync::mpsc;
 use std::{collections::HashMap, convert::TryFrom, path::Path, sync::Arc};
 
+use crate::cargo_metadata;
+
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
     root_directory: AbsPathBuf,
@@ -99,7 +101,20 @@ impl RustAnalyzer {
             )
         })?);
         if cargo_toml != self.last_cargo_toml {
-            self.load_cargo_toml(&mut change)?;
+            match self.load_cargo_toml(&mut change) {
+                Ok(x) => x,
+                Err(err) => {
+                    // The errors returned by rust-analyzer when reading
+                    // Cargo.toml often don't include the cause of the problem.
+                    // Try running `cargo metadata` ourselves to see if we can
+                    // get a better error. Otherwise fall back to whatever
+                    // rust-analyzer reported. This is tested by the
+                    // "crate_deps" test (look for "no_such_feature" in that
+                    // test).
+                    cargo_metadata::get_library_names(&self.root_directory)?;
+                    return Err(err);
+                }
+            };
             self.last_cargo_toml = cargo_toml;
         }
 

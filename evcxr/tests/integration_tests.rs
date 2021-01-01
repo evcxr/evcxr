@@ -384,11 +384,13 @@ impl TmpCrate {
         })
     }
 
-    fn dep_command(&self) -> String {
+    fn dep_command(&self, extra_options: &str) -> String {
         format!(
-            ":dep {} = {{ path = \"{}\" }}",
+            ":dep {} = {{ path = \"{}\"{}{} }}",
             self.name,
-            self.tempdir.path().to_string_lossy().replace("\\", "\\\\")
+            self.tempdir.path().to_string_lossy().replace("\\", "\\\\"),
+            if extra_options.is_empty() { "" } else { ", " },
+            extra_options
         )
     }
 }
@@ -405,9 +407,13 @@ fn crate_deps() {
     );
     assert!(r.is_err());
     let crate1 = TmpCrate::new("crate1", "pub fn r20() -> i32 {20}").unwrap();
+    let error = e
+        .execute(&crate1.dep_command(r#"features = ["no_such_feature"]"#))
+        .unwrap_err();
+    assert!(error.to_string().contains("no_such_feature"));
     let crate2 = TmpCrate::new("crate2", "pub fn r22() -> i32 {22}").unwrap();
     let to_run =
-        crate1.dep_command() + "\n" + &crate2.dep_command() + "\ncrate1::r20() + crate2::r22()";
+        crate1.dep_command("") + "\n" + &crate2.dep_command("") + "\ncrate1::r20() + crate2::r22()";
     let outputs = e.execute(&to_run).unwrap();
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
 }
@@ -417,7 +423,7 @@ fn crate_name_with_hyphens() {
     let (mut e, _) = new_command_context_and_outputs();
     let crate1 = TmpCrate::new("crate-name-with-hyphens", "pub fn r42() -> i32 {42}").unwrap();
     let to_run =
-        crate1.dep_command() + "\nuse crate_name_with_hyphens;\ncrate_name_with_hyphens::r42()";
+        crate1.dep_command("") + "\nuse crate_name_with_hyphens;\ncrate_name_with_hyphens::r42()";
     let outputs = e.execute(&to_run).unwrap();
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
 }
