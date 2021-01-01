@@ -271,6 +271,14 @@ impl EvalContext {
         nodes: &[SyntaxNode],
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
+        if user_code.is_empty()
+            && !self
+                .committed_state
+                .state_change_can_fail_compilation(&state)
+        {
+            self.commit_state(state);
+            return Ok(EvalOutputs::default());
+        }
         let mut phases = PhaseDetailsBuilder::new();
         let code_out = state.apply(user_code, nodes)?;
 
@@ -1015,6 +1023,21 @@ impl ContextState {
             ExternalCrate::new(name.to_owned(), config.to_owned())?,
         );
         Ok(())
+    }
+
+    /// Returns whether transitioning to `new_state` might cause compilation
+    /// failures. e.g. if `new_state` has extra dependencies, then we must
+    /// return true. If we return false, we're saying that the proposed state
+    /// change cannot cause compilation failures, so compilation can be skipped
+    /// if there is otherwise no code to execute.
+    fn state_change_can_fail_compilation(&self, new_state: &ContextState) -> bool {
+        (self.extern_crate_stmts != new_state.extern_crate_stmts
+            && !new_state.extern_crate_stmts.is_empty())
+            || (self.external_deps != new_state.external_deps
+                && !new_state.external_deps.is_empty())
+            || (self.items_by_name != new_state.items_by_name
+                && !new_state.items_by_name.is_empty())
+            || (self.config.sccache != new_state.config.sccache)
     }
 
     pub(crate) fn format_cargo_deps(&self) -> String {
