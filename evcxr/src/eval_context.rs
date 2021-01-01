@@ -303,7 +303,7 @@ impl EvalContext {
     ) -> Result<Completions> {
         state.config.completion_mode = true;
         let user_code = state.apply(user_code, nodes)?;
-        let code = state.code_to_compile(user_code, CompilationMode::NoCatch);
+        let code = state.analysis_code(user_code);
         let wrapped_offset = code.user_offset_to_output_offset(offset)?;
 
         if state.config.debug_mode {
@@ -393,10 +393,7 @@ impl EvalContext {
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
         self.write_cargo_toml(state)?;
-        self.fix_variable_types(
-            state,
-            state.code_to_compile(user_code.clone(), state.compilation_mode()),
-        )?;
+        self.fix_variable_types(state, state.analysis_code(user_code.clone()))?;
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
         // fix. The limit is really to prevent retrying indefinitely in case our "fixing" of things
@@ -507,9 +504,7 @@ impl EvalContext {
                 type_name,
                 is_mutable,
             },
-        ) in self
-            .analyzer
-            .top_level_variables(&state.current_user_fn_name())
+        ) in self.analyzer.top_level_variables("evcxr_analysis_wrapper")
         {
             // For now, we need to look for and escape any reserved words. This should probably in
             // theory be done in rust analyzer in a less hacky way.
@@ -1038,6 +1033,29 @@ impl ContextState {
         }
     }
 
+    /// Returns code suitable for analysis purposes. Doesn't attempt to preserve runtime behavior.
+    fn analysis_code(&self, user_code: CodeBlock) -> CodeBlock {
+        let mut code = CodeBlock::new()
+            .generated("#![allow(unused_imports, unused_mut, dead_code)]")
+            .add_all(self.items_code())
+            .add_all(self.error_trait_code(true))
+            .generated("fn evcxr_analysis_wrapper(");
+        for (var_name, state) in &self.variable_states {
+            code = code.generated(format!(
+                "{}{}: {},",
+                if state.is_mut { "mut " } else { "" },
+                var_name,
+                state.type_name
+            ));
+        }
+        code = code
+            .generated(") -> Result<(), EvcxrUserCodeError> {")
+            .add_all(user_code)
+            .generated("Ok(())")
+            .generated("}");
+        code
+    }
+
     fn code_to_compile(
         &self,
         user_code: CodeBlock,
@@ -1045,10 +1063,7 @@ impl ContextState {
     ) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
-            .add_all(self.get_imports());
-        for item in self.items_by_name.values().chain(self.unnamed_items.iter()) {
-            code = code.add_all(item.clone());
-        }
+            .add_all(self.items_code());
         let has_user_code = !user_code.is_empty();
         if has_user_code {
             code = code.add_all(self.wrap_user_code(user_code, compilation_mode));
@@ -1065,6 +1080,36 @@ impl ContextState {
         code
     }
 
+    fn items_code(&self) -> CodeBlock {
+        let mut code = CodeBlock::new().add_all(self.get_imports());
+        for item in self.items_by_name.values().chain(self.unnamed_items.iter()) {
+            code = code.add_all(item.clone());
+        }
+        code
+    }
+
+    fn error_trait_code(&self, for_analysis: bool) -> CodeBlock {
+        CodeBlock::new().generated(format!(
+            r#"
+            struct EvcxrUserCodeError {{}}
+            impl<T: {}> From<T> for EvcxrUserCodeError {{
+                fn from(error: T) -> Self {{
+                    eprintln!("{}", error);
+                    {}
+                    EvcxrUserCodeError {{}}
+                }}
+            }}
+        "#,
+            self.config.error_fmt.format_trait,
+            self.config.error_fmt.format_str,
+            if for_analysis {
+                ""
+            } else {
+                "println!(\"{}\", evcxr_internal_runtime::USER_ERROR_OCCURRED);"
+            }
+        ))
+    }
+
     fn wrap_user_code(
         &self,
         mut user_code: CodeBlock,
@@ -1076,19 +1121,7 @@ impl ContextState {
             || self.allow_question_mark;
         let mut code = CodeBlock::new();
         if self.allow_question_mark {
-            code = code.generated(format!(
-                r#"
-                struct EvcxrUserCodeError {{}}
-                impl<T: {}> From<T> for EvcxrUserCodeError {{
-                    fn from(error: T) -> Self {{
-                        eprintln!("{}", error);
-                        println!("{{}}", evcxr_internal_runtime::USER_ERROR_OCCURRED);
-                        EvcxrUserCodeError {{}}
-                    }}
-                }}
-            "#,
-                self.config.error_fmt.format_trait, self.config.error_fmt.format_str
-            ));
+            code = code.add_all(self.error_trait_code(false));
         }
         if needs_variable_store {
             code = code

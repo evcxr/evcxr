@@ -37,6 +37,7 @@ pub(crate) struct RustAnalyzer {
     current_source: Arc<String>,
 }
 
+#[derive(Debug)]
 pub(crate) struct VariableInfo {
     /// The variable's type as Rust code.
     pub(crate) type_name: String,

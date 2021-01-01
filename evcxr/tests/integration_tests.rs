@@ -115,6 +115,31 @@ fn save_and_restore_variables() {
         }
         _ => unreachable!(),
     }
+
+    // Make sure that we can correctly determine variable types when using the
+    // question mark operator.
+    eval_and_unwrap(
+        &mut e,
+        r#"
+        pub mod foo {
+            pub mod bar {
+                pub struct Baz {}
+                impl Baz {
+                    pub fn r42(&self) -> i32 {42}
+                }
+            }
+        }
+        fn create_baz() -> Result<Option<foo::bar::Baz>, i32> {
+            Ok(Some(foo::bar::Baz {}))
+        }
+    "#,
+    );
+    eval_and_unwrap(&mut e, "let v1 = create_baz()?;");
+    eval_and_unwrap(&mut e, "let v2 = create_baz()?;");
+    assert_eq!(
+        eval_and_unwrap(&mut e, "v1.unwrap().r42() + v2.unwrap().r42()")["text/plain"],
+        "84"
+    );
 }
 
 #[test]
@@ -318,8 +343,8 @@ fn crate_deps() {
 fn crate_name_with_hyphens() {
     let (mut e, _) = new_command_context_and_outputs();
     let crate1 = TmpCrate::new("crate-name-with-hyphens", "pub fn r42() -> i32 {42}").unwrap();
-    let to_run = crate1.dep_command()
-        + "\nuse crate_name_with_hyphens;\ncrate_name_with_hyphens::r42()";
+    let to_run =
+        crate1.dep_command() + "\nuse crate_name_with_hyphens;\ncrate_name_with_hyphens::r42()";
     let outputs = e.execute(&to_run).unwrap();
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
 }
@@ -733,6 +758,7 @@ fn code_completion() {
     let completions = simple_completions(&mut ctx, "let _ = e");
     assert!(!completions.contains("evcxr_variable_store"));
     assert!(!completions.contains("evcxr_internal_runtime"));
+    assert!(!completions.contains("evcxr_analysis_wrapper"));
 
     // We handle use-statements differently to other code, make sure that we can
     // still get completions from them.
