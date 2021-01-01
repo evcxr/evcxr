@@ -224,7 +224,11 @@ impl CommandContext {
             Command::new(
                 ":load_config",
                 "Reloads startup configuration files",
-                |ctx, _state, _args| ctx.load_config(),
+                |ctx, state, _args| {
+                    let result = ctx.load_config();
+                    *state = ctx.eval_context.state();
+                    result
+                },
             ),
             Command::new(":version", "Print Evcxr version", |_ctx, _state, _args| {
                 text_output(env!("CARGO_PKG_VERSION"))
@@ -254,7 +258,12 @@ impl CommandContext {
             Command::new(
                 ":clear",
                 "Clear all state, keeping compilation cache",
-                |ctx, _state, _args| ctx.eval_context.clear().map(|_| EvalOutputs::new()),
+                |ctx, state, _args| {
+                    ctx.eval_context.clear().map(|_| {
+                        *state = ctx.eval_context.state();
+                        EvalOutputs::new()
+                    })
+                },
             ),
             Command::new(
                 ":dep",
