@@ -1374,8 +1374,9 @@ impl ContextState {
                     }
                 } else {
                     // We got an expression, but it wasn't the last statement,
-                    // so don't try to print it. Is this even possible? How can
-                    // there be an expression that isn't at the end.
+                    // so don't try to print it. Yes, this is possible. For
+                    // example `for x in y {}` is an expression. See the test
+                    // non_semi_statements.
                     code_out = code_out.with_segment(segment);
                 }
             } else if let Some(item) = ast::Item::cast(node.clone()) {

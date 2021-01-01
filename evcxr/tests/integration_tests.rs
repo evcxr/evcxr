@@ -100,7 +100,6 @@ fn save_and_restore_variables() {
 
     eval!(e, let mut a = 34; let b = 8;);
     eval!(e, a = a + b;);
-    eval!(e, assert_eq!(a, 42););
     assert_eq!(eval!(e, a), text_plain("42"));
     // Try to change a mutable variable and check that the error we get is what we expect.
     match e.execute("b = 2;") {
@@ -137,8 +136,8 @@ fn save_and_restore_variables() {
     eval_and_unwrap(&mut e, "let v1 = create_baz()?;");
     eval_and_unwrap(&mut e, "let v2 = create_baz()?;");
     assert_eq!(
-        eval_and_unwrap(&mut e, "v1.unwrap().r42() + v2.unwrap().r42()")["text/plain"],
-        "84"
+        eval_and_unwrap(&mut e, "v1.unwrap().r42() + v2.unwrap().r42()"),
+        text_plain("84")
     );
 }
 
@@ -178,12 +177,16 @@ fn rc_refcell_etc() {
     eval!(e,
         use std::cell::RefCell; use std::rc::Rc;
         let r: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
+        let r2: Rc<RefCell<String>> = Rc::clone(&r);
     );
-    eval!(e, let r2: Rc<RefCell<String>> = Rc::clone(&r););
-    eval!(e, r.borrow_mut().push_str("f"););
-    eval!(e, let s = "oo";);
-    eval!(e, r.borrow_mut().push_str(s););
-    eval!(e, assert!(*r.borrow() == "foo"););
+    eval!(e,
+        r.borrow_mut().push_str("f");
+        let s = "oo";
+    );
+    eval!(e,
+        r.borrow_mut().push_str(s);
+        assert!(*r.borrow() == "foo");
+    );
 }
 
 #[test]
@@ -200,8 +203,8 @@ fn define_then_call_function() {
         pub fn foo() -> i32 {
             bar()
         }
+        assert_eq!(foo(), 42);
     );
-    eval!(e, assert_eq!(foo(), 42););
     assert_eq!(defined_item_names(&e), vec!["bar", "foo"]);
 }
 
@@ -262,18 +265,20 @@ fn function_panics_without_variable_preserving() {
 #[test]
 fn tls_implementing_drop() {
     let mut e = new_context();
-    eval!(e, pub struct Foo {}
-    impl Drop for Foo {
-        fn drop(&mut self) {
-            println!("Dropping Foo");
+    eval!(e,
+        pub struct Foo {}
+        impl Drop for Foo {
+            fn drop(&mut self) {
+                println!("Dropping Foo");
+            }
         }
-    }
-    pub fn init_foo() {
-        thread_local! {
-            pub static FOO: Foo = Foo {};
+        pub fn init_foo() {
+            thread_local! {
+                pub static FOO: Foo = Foo {};
+            }
+            FOO.with(|f| ())
         }
-        FOO.with(|f| ())
-    });
+    );
     eval!(e, init_foo(););
 }
 
@@ -383,12 +388,14 @@ fn struct_type_inference() {
     );
     eval!(e, let p1 = Point {x: 3, y: 8};);
     // While we're here, also test that printing an expression doesn't move the (non-copy)
-    // value. Hey, these tests take time to run, we've got to economise :)
+    // value. Hey, these tests take time to run, we've got to economize :)
     eval!(e, p1);
     // Destructure our point.
     eval!(e, let Point {x, y: y2} = p1;);
-    eval!(e, assert_eq!(x, 3););
-    eval!(e, assert_eq!(y2, 8););
+    eval!(e,
+        assert_eq!(x, 3);
+        assert_eq!(y2, 8);
+    );
     let mut defined_names = e.defined_item_names().collect::<Vec<_>>();
     defined_names.sort();
     assert_eq!(defined_names, vec!["Point"]);
@@ -633,19 +640,7 @@ fn question_mark_operator() {
 #[test]
 fn format() {
     let mut e = new_context();
-    assert_eq!(eval!(e, format!("{:x}", 2)), text_plain("\"2\""));
     assert_eq!(eval!(e, format!("{:2x}", 2)), text_plain("\" 2\""));
-    assert_eq!(
-        eval!(
-            e,
-            [1, 2, 3, 4, 5]
-                .iter()
-                .map(|v| format!("{:x}", v))
-                .collect::<Vec<_>>()
-                .join(",")
-        ),
-        text_plain("\"1,2,3,4,5\""),
-    );
 }
 
 // The final statement, if it doesn't end in a semicolon will be printed. Make
