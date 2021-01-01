@@ -376,6 +376,10 @@ impl EvalContext {
         self.restart_child_process()
     }
 
+    pub fn reset_config(&mut self) {
+        self.committed_state.config = Config::default();
+    }
+
     fn restart_child_process(&mut self) -> Result<(), Error> {
         self.committed_state.variable_states.clear();
         self.committed_state.stored_variable_states.clear();

@@ -13,9 +13,11 @@
 // limitations under the License.
 
 use evcxr::{CommandContext, Error, EvalContext, EvalContextOutputs};
+use lazy_static::lazy_static;
 use std::collections::{HashMap, HashSet};
-use std::io;
+use std::ops::{Deref, DerefMut};
 use std::sync::mpsc;
+use std::{io, sync::Mutex};
 use tempfile;
 
 #[track_caller]
@@ -60,11 +62,67 @@ fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, m
         }
     });
 }
+fn context_pool() -> &'static Mutex<Vec<CommandContext>> {
+    lazy_static! {
+        static ref CONTEXT_POOL: Mutex<Vec<CommandContext>> = Mutex::new(vec![]);
+    }
+    &CONTEXT_POOL
+}
 
-fn new_context() -> CommandContext {
-    let (context, outputs) = new_command_context_and_outputs();
-    send_output(outputs.stderr, io::stderr());
-    context
+struct ContextHolder {
+    // Only `None` while being dropped.
+    ctx: Option<CommandContext>,
+}
+
+impl Drop for ContextHolder {
+    fn drop(&mut self) {
+        if is_context_pool_enabled() {
+            let mut pool = context_pool().lock().unwrap();
+            let mut ctx = self.ctx.take().unwrap();
+            ctx.reset_config();
+            ctx.execute(":clear").unwrap();
+            pool.push(ctx)
+        }
+    }
+}
+
+impl Deref for ContextHolder {
+    type Target = CommandContext;
+
+    fn deref(&self) -> &Self::Target {
+        self.ctx.as_ref().unwrap()
+    }
+}
+
+impl DerefMut for ContextHolder {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.ctx.as_mut().unwrap()
+    }
+}
+
+fn is_context_pool_enabled() -> bool {
+    std::env::var("EVCXR_DISABLE_CTX_POOL")
+        .map(|var| var != "1")
+        .unwrap_or(true)
+}
+
+/// Returns a ContextHolder, which will dereference to a CommandContext. When
+/// the ContextHolder is dropped, the held CommandContext will be cleared then
+/// returned to a global pool. This reuse speeds up running lots of tests by at
+/// least 25%. This is probably mostly due to avoiding the need to reload the
+/// standard library in rust-analyzer, as that is quite expensive. If you think
+/// a test is causing subsequent tests to misbehave, you can disable the pool by
+/// setting `EVCXR_DISABLE_CTX_POOL=1`. This can be helpful for debugging,
+/// however the interference problem should be fixed as the ":clear" command,
+/// combined with resetting configuration should really be sufficient to ensure
+/// that subsequent tests will pass.
+fn new_context() -> ContextHolder {
+    let ctx = context_pool().lock().unwrap().pop().unwrap_or_else(|| {
+        let (context, outputs) = new_command_context_and_outputs();
+        send_output(outputs.stderr, io::stderr());
+        context
+    });
+    ContextHolder { ctx: Some(ctx) }
 }
 
 fn defined_item_names(eval_context: &CommandContext) -> Vec<&str> {

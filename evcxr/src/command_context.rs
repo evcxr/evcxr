@@ -63,6 +63,10 @@ impl CommandContext {
         self.eval_context.variables_and_types()
     }
 
+    pub fn reset_config(&mut self) {
+        self.eval_context.reset_config();
+    }
+
     pub fn defined_item_names(&self) -> impl Iterator<Item = &str> {
         self.eval_context.defined_item_names()
     }
