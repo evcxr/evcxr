@@ -894,17 +894,12 @@ fn check(ctx: &mut CommandContext, code: &str) -> Vec<String> {
         if let Some(spanned_message) = err.primary_spanned_message() {
             if let Some(span) = spanned_message.span {
                 out.push(format!(
-                    "{} {}:{}-{}:{} {}",
+                    "{} {}:{}-{}:{}",
                     err.level(),
                     span.start_line,
                     span.start_column,
                     span.end_line,
                     span.end_column,
-                    if spanned_message.label.is_empty() {
-                        err.message()
-                    } else {
-                        spanned_message.label.to_owned()
-                    },
                 ));
             }
         }
@@ -935,10 +930,7 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
 }
 "#
         )),
-        vec![
-            "error 3:29-4:6 expected `i32`, found `()`",
-            "error 2:38-2:40 expected struct `String`, found integer"
-        ]
+        vec!["error 3:29-4:6", "error 2:38-2:40"]
     );
 
     // An unused variable not within a function shouldn't produce a warning.
@@ -947,7 +939,7 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
     // An unused variable within a function should produce a warning.
     assert_eq!(
         strs(&check(&mut ctx, "fn foo() {let mut s = String::new();}")),
-        vec!["warning 1:15-1:20 unused variable: `s`"]
+        vec!["warning 1:15-1:20"]
     );
 
     // Make sure we don't get errors about duplicate use statements after we've
