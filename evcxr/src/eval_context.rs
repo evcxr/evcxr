@@ -39,6 +39,7 @@ pub struct EvalContext {
     child_process: ChildProcess,
     stdout_sender: mpsc::Sender<String>,
     analyzer: RustAnalyzer,
+    initial_config: Config,
 }
 
 #[derive(Clone)]
@@ -66,25 +67,23 @@ pub(crate) struct Config {
     pub(crate) sccache: Option<PathBuf>,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        let linker = if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
-            "lld".to_owned()
-        } else {
-            "system".to_owned()
-        };
-        Config {
-            debug_mode: false,
-            preserve_vars_on_panic: false,
-            output_format: "{:?}".to_owned(),
-            display_final_expression: true,
-            expand_use_statements: true,
-            opt_level: "2".to_owned(),
-            error_fmt: &ERROR_FORMATS[0],
-            time_passes: false,
-            linker,
-            sccache: None,
-        }
+fn create_initial_config() -> Config {
+    let linker = if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
+        "lld".to_owned()
+    } else {
+        "system".to_owned()
+    };
+    Config {
+        debug_mode: false,
+        preserve_vars_on_panic: false,
+        output_format: "{:?}".to_owned(),
+        display_final_expression: true,
+        expand_use_statements: true,
+        opt_level: "2".to_owned(),
+        error_fmt: &ERROR_FORMATS[0],
+        time_passes: false,
+        linker,
+        sccache: None,
     }
 }
 
@@ -234,13 +233,17 @@ impl EvalContext {
         let (stdout_sender, stdout_receiver) = mpsc::channel();
         let (stderr_sender, stderr_receiver) = mpsc::channel();
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
+        let initial_config = create_initial_config();
+        let initial_state =
+            ContextState::new(module.crate_dir().to_owned(), initial_config.clone());
         let mut context = EvalContext {
             _tmpdir: opt_tmpdir,
-            committed_state: ContextState::new(module.crate_dir().to_owned(), Config::default()),
+            committed_state: initial_state,
             module,
             child_process,
             stdout_sender,
             analyzer,
+            initial_config,
         };
         let outputs = EvalContextOutputs {
             stdout: stdout_receiver,
@@ -254,6 +257,7 @@ impl EvalContext {
             // completions. Not 100% sure. Just writing Cargo.toml isn't sufficient.
             context.eval("42", context.state())?;
         }
+        context.initial_config = context.committed_state.config.clone();
         Ok((context, outputs))
     }
 
@@ -403,7 +407,7 @@ impl EvalContext {
     }
 
     pub fn reset_config(&mut self) {
-        self.committed_state.config = Config::default();
+        self.committed_state.config = self.initial_config.clone();
     }
 
     fn restart_child_process(&mut self) -> Result<(), Error> {
