@@ -84,7 +84,10 @@ impl CodeKind {
     }
 
     pub(crate) fn is_user_supplied(&self) -> bool {
-        matches!(self, CodeKind::OriginalUserCode(_) | CodeKind::OtherUserCode)
+        matches!(
+            self,
+            CodeKind::OriginalUserCode(_) | CodeKind::OtherUserCode
+        )
     }
 }
 
@@ -98,6 +101,11 @@ pub(crate) struct UserCodeMetadata {
     /// The starting byte in the code as the user wrote it.
     pub(crate) start_byte: usize,
     pub(crate) node_index: usize,
+    /// The line number (starting from 1) in the original user code on which this code starts.
+    pub(crate) start_line: usize,
+    /// The number of graphemes (not characters or bytes) on the line from which
+    /// this code came that are prior to and not included in this code.
+    pub(crate) column_offset: usize,
 }
 
 /// Represents a unit of code. This may be code that the user supplied, in which case it might
@@ -165,6 +173,10 @@ impl CodeBlock {
         let mut code_block = CodeBlock::new();
         let mut nodes = Vec::new();
 
+        let mut lines = user_code.lines();
+        let mut line_number = 1;
+        let mut current_line = lines.next().unwrap_or(user_code);
+
         for line in user_code.lines() {
             // We only accept commands up until the first non-command.
             if let Some(captures) = COMMAND_RE.captures(line) {
@@ -189,10 +201,26 @@ impl CodeBlock {
                     statement_splitter::split_into_statements(&user_code[non_command_start_byte..])
                 {
                     let node_index = nodes.len();
+                    while code.as_ptr() as usize
+                        >= current_line.as_ptr() as usize + current_line.len()
+                    {
+                        line_number += 1;
+                        // Unwrap must succeed since code is past the end of the current line.
+                        current_line = lines.next().unwrap();
+                    }
+                    let byte_offset = code.as_ptr() as usize - current_line.as_ptr() as usize;
+                    let column_offset =
+                        unicode_segmentation::UnicodeSegmentation::grapheme_indices(
+                            &current_line[..byte_offset],
+                            true,
+                        )
+                        .count();
                     code_block = code_block.with(
                         CodeKind::OriginalUserCode(UserCodeMetadata {
                             start_byte: start_byte + non_command_start_byte,
                             node_index,
+                            start_line: line_number,
+                            column_offset,
                         }),
                         code,
                     );
@@ -289,20 +317,21 @@ impl CodeBlock {
         output
     }
 
-    /// Returns the segment type for the specified line (starts from 1). Out-of-range indices will
-    /// return type Unknown.
-    pub(crate) fn origin_for_line(&self, line_number: usize) -> &CodeKind {
+    /// Returns the segment type for the specified line (starts from 1) together
+    /// with the line offset into that segment. Out-of-range indices will return
+    /// type Unknown.
+    pub(crate) fn origin_for_line(&self, line_number: usize) -> (&CodeKind, usize) {
         if line_number == 0 {
-            return &CodeKind::Unknown;
+            return (&CodeKind::Unknown, 0);
         }
         let mut current_line_number = 1;
         for segment in &self.segments {
-            current_line_number += segment.num_lines;
-            if current_line_number > line_number {
-                return &segment.kind;
+            if current_line_number + segment.num_lines > line_number {
+                return (&segment.kind, line_number - current_line_number);
             }
+            current_line_number += segment.num_lines;
         }
-        &CodeKind::Unknown
+        (&CodeKind::Unknown, 0)
     }
 
     pub(crate) fn get_lines(&self) -> Vec<String> {
@@ -348,22 +377,25 @@ mod test {
                 .collect::<Vec<_>>(),
             vec![2, 1, 1, 1]
         );
-        assert_eq!(code.origin_for_line(0), &CodeKind::Unknown);
-        assert_eq!(code.origin_for_line(1), &CodeKind::OtherGeneratedCode);
-        assert_eq!(code.origin_for_line(2), &CodeKind::OtherGeneratedCode);
-        if let CodeKind::OriginalUserCode(meta3) = code.origin_for_line(3) {
+        assert_eq!(code.origin_for_line(0), (&CodeKind::Unknown, 0));
+        assert_eq!(code.origin_for_line(1), (&CodeKind::OtherGeneratedCode, 0));
+        assert_eq!(code.origin_for_line(2), (&CodeKind::OtherGeneratedCode, 1));
+        if let (CodeKind::OriginalUserCode(meta3), 0) = code.origin_for_line(3) {
             assert_eq!(meta3.start_byte, 0);
         } else {
             panic!("Unexpected result for line 3");
         }
-        assert_eq!(code.origin_for_line(4), &CodeKind::OtherGeneratedCode);
+        assert_eq!(code.origin_for_line(4), (&CodeKind::OtherGeneratedCode, 0));
         assert_eq!(
             code.origin_for_line(5),
-            &CodeKind::PackVariable {
-                variable_name: "v".to_owned()
-            }
+            (
+                &CodeKind::PackVariable {
+                    variable_name: "v".to_owned()
+                },
+                0
+            )
         );
-        assert_eq!(code.origin_for_line(6), &CodeKind::Unknown);
+        assert_eq!(code.origin_for_line(6), (&CodeKind::Unknown, 0));
 
         assert_eq!(
             &code.code_string()[code.user_offset_to_output_offset(0).unwrap()

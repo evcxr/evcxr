@@ -50,8 +50,8 @@ pub(crate) struct Config {
     preserve_vars_on_panic: bool,
     output_format: String,
     /// Used only internally to ensure maximum preservation of user code. This
-    /// is necessary for tab completion.
-    completion_mode: bool,
+    /// is necessary for tab completion and running cargo check.
+    analysis_mode: bool,
     opt_level: String,
     error_fmt: &'static ErrorFormat,
     /// Whether to pass -Ztime-passes to the compiler and print the result.
@@ -72,7 +72,7 @@ impl Default for Config {
             debug_mode: false,
             preserve_vars_on_panic: false,
             output_format: "{:?}".to_owned(),
-            completion_mode: false,
+            analysis_mode: false,
             opt_level: "2".to_owned(),
             error_fmt: &ERROR_FORMATS[0],
             time_passes: false,
@@ -263,6 +263,18 @@ impl EvalContext {
         self.eval_with_callbacks(user_code, state, &nodes, &mut EvalCallbacks::default())
     }
 
+    pub(crate) fn check(
+        &mut self,
+        user_code: CodeBlock,
+        mut state: ContextState,
+        nodes: &[SyntaxNode],
+    ) -> Result<Vec<CompilationError>, Error> {
+        state.config.analysis_mode = true;
+        let user_code = state.apply(user_code, nodes)?;
+        let code = state.analysis_code(user_code);
+        self.module.check(&code)
+    }
+
     /// Evaluates the supplied Rust code.
     pub(crate) fn eval_with_callbacks(
         &mut self,
@@ -309,7 +321,7 @@ impl EvalContext {
         nodes: &[SyntaxNode],
         offset: usize,
     ) -> Result<Completions> {
-        state.config.completion_mode = true;
+        state.config.analysis_mode = true;
         let user_code = state.apply(user_code, nodes)?;
         let code = state.analysis_code(user_code);
         let wrapped_offset = code.user_offset_to_output_offset(offset)?;
@@ -1066,6 +1078,7 @@ impl ContextState {
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
             .add_all(self.items_code())
             .add_all(self.error_trait_code(true))
+            .generated("#[allow(unused_variables)]")
             .generated("fn evcxr_analysis_wrapper(");
         for (var_name, state) in &self.variable_states {
             code = code.generated(format!(
@@ -1352,7 +1365,7 @@ impl ContextState {
                 }
             } else if ast::Expr::can_cast(node.kind()) {
                 if statement_index == num_statements - 1 {
-                    if self.config.completion_mode {
+                    if self.config.analysis_mode {
                         code_out = code_out
                             .generated("let _ = ")
                             .with_segment(segment)
@@ -1410,7 +1423,7 @@ impl ContextState {
                         }
                     }
                     ast::Item::Use(use_stmt) => {
-                        if self.config.completion_mode {
+                        if self.config.analysis_mode {
                             // This is necessary to ensure that we can compute
                             // completions in use-statements. This may result in
                             // duplicate imports, but that shouldn't prevent

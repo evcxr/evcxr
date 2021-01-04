@@ -129,32 +129,31 @@ impl Module {
         )
     }
 
+    pub(crate) fn check(&mut self, code_block: &CodeBlock) -> Result<Vec<CompilationError>, Error> {
+        self.write_code(code_block)?;
+        let output = self.cargo_command("check").output();
+        let cargo_output = match output {
+            Ok(out) => out,
+            Err(err) => bail!("Error running 'cargo check': {}", err),
+        };
+        let (errors, _non_json_error) = errors_from_cargo_output(&cargo_output, code_block);
+        Ok(errors)
+    }
+
     pub(crate) fn compile(
         &mut self,
         code_block: &CodeBlock,
         config: &Config,
     ) -> Result<SoFile, Error> {
-        write_file(&self.src_dir(), "lib.rs", &code_block.code_string())?;
-
-        // Our compiler errors should all be in JSON format, but for errors from Cargo errors, we
-        // need to add explicit matching for those errors that we expect we might see.
-        lazy_static! {
-            static ref KNOWN_NON_JSON_ERRORS: Regex =
-                Regex::new("(error: no matching package named)").unwrap();
-        }
-
-        let mut command = std::process::Command::new("cargo");
+        let mut command = self.cargo_command("rustc");
         if config.time_passes {
             command.arg("+nightly");
         }
         command
-            .arg("rustc")
-            .arg("--message-format=json")
             .arg("--")
             .arg("-C")
             .arg("prefer-dynamic")
-            .env("CARGO_TARGET_DIR", "target")
-            .current_dir(self.crate_dir());
+            .env("CARGO_TARGET_DIR", "target");
         if config.linker != "system" {
             command
                 .arg("-C")
@@ -166,47 +165,11 @@ impl Module {
         if config.time_passes {
             command.arg("-Ztime-passes");
         }
-        let cargo_output = match command.output() {
-            Ok(out) => out,
-            Err(err) => bail!("Error running 'cargo rustc': {}", err),
-        };
-        if cargo_output.status.success() {
-            if config.time_passes {
-                let stdout = String::from_utf8_lossy(&cargo_output.stdout);
-                eprintln!("{}", stdout);
-            }
-        } else {
-            let stderr = String::from_utf8_lossy(&cargo_output.stderr);
+        self.write_code(code_block)?;
+        let cargo_output = run_cargo(command, code_block)?;
+        if config.time_passes {
             let stdout = String::from_utf8_lossy(&cargo_output.stdout);
-            let mut non_json_error = None;
-            let errors: Vec<CompilationError> = stderr
-                .lines()
-                .chain(stdout.lines())
-                .filter_map(|line| {
-                    json::parse(&line)
-                        .ok()
-                        .and_then(|json| CompilationError::opt_new(json, code_block))
-                        .or_else(|| {
-                            if KNOWN_NON_JSON_ERRORS.is_match(line) {
-                                non_json_error = Some(line);
-                            }
-                            None
-                        })
-                })
-                .collect();
-            if errors.is_empty() {
-                if let Some(error) = non_json_error {
-                    bail!(Error::Message(error.to_owned()));
-                } else {
-                    bail!(Error::Message(format!(
-                        "Compilation failed, but no parsable errors were found. STDERR:\n\
-                         {}\nSTDOUT:{}\n",
-                        stderr, stdout
-                    )));
-                }
-            } else {
-                bail!(Error::CompilationErrors(errors));
-            }
+            eprintln!("{}", stdout);
         }
         self.build_num += 1;
         let copied_so_file = self
@@ -224,6 +187,19 @@ impl Module {
         Ok(SoFile {
             path: copied_so_file,
         })
+    }
+
+    fn cargo_command(&self, cargo_subcommand: &str) -> std::process::Command {
+        let mut command = std::process::Command::new("cargo");
+        command
+            .current_dir(self.crate_dir())
+            .arg(cargo_subcommand)
+            .arg("--message-format=json");
+        command
+    }
+
+    fn write_code(&self, code_block: &CodeBlock) -> Result<(), Error> {
+        write_file(&self.src_dir(), "lib.rs", &code_block.code_string())
     }
 
     fn get_cargo_toml_contents(&self, state: &ContextState) -> String {
@@ -258,6 +234,68 @@ overflow-checks = true
             crate_imports
         )
     }
+}
+
+fn run_cargo(
+    mut command: std::process::Command,
+    code_block: &CodeBlock,
+) -> Result<std::process::Output, Error> {
+    let cargo_output = match command.output() {
+        Ok(out) => out,
+        Err(err) => bail!("Error running 'cargo rustc': {}", err),
+    };
+    if cargo_output.status.success() {
+        Ok(cargo_output)
+    } else {
+        let (errors, non_json_error) = errors_from_cargo_output(&cargo_output, code_block);
+        if errors.is_empty() {
+            if let Some(error) = non_json_error {
+                bail!(Error::Message(error.to_owned()));
+            } else {
+                bail!(Error::Message(format!(
+                    "Compilation failed, but no parsable errors were found. STDERR:\n\
+                     {}\nSTDOUT:{}\n",
+                    String::from_utf8_lossy(&cargo_output.stderr),
+                    String::from_utf8_lossy(&cargo_output.stdout)
+                )));
+            }
+        } else {
+            bail!(Error::CompilationErrors(errors));
+        }
+    }
+}
+
+fn errors_from_cargo_output(
+    cargo_output: &std::process::Output,
+    code_block: &CodeBlock,
+) -> (Vec<CompilationError>, Option<String>) {
+    // Our compiler errors should all be in JSON format, but for errors from
+    // Cargo errors, we need to add explicit matching for those errors that we
+    // expect we might see.
+    lazy_static! {
+        static ref KNOWN_NON_JSON_ERRORS: Regex =
+            Regex::new("(error: no matching package named)").unwrap();
+    }
+
+    let stderr = String::from_utf8_lossy(&cargo_output.stderr);
+    let stdout = String::from_utf8_lossy(&cargo_output.stdout);
+    let mut non_json_error = None;
+    let errors = stderr
+        .lines()
+        .chain(stdout.lines())
+        .filter_map(|line| {
+            json::parse(&line)
+                .ok()
+                .and_then(|json| CompilationError::opt_new(json, code_block))
+                .or_else(|| {
+                    if KNOWN_NON_JSON_ERRORS.is_match(line) {
+                        non_json_error = Some(line.to_owned());
+                    }
+                    None
+                })
+        })
+        .collect();
+    (errors, non_json_error)
 }
 
 pub(crate) struct SoFile {

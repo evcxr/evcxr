@@ -38,6 +38,9 @@ fn main() -> Result<()> {
     if let Some(arg) = args.next() {
         match arg.as_str() {
             "--control_file" => {
+                if let Err(error) = install::update_if_necessary() {
+                    eprintln!("Warning: tried to update client, but failed: {}", error);
+                }
                 return run(&args.next().ok_or_else(|| anyhow!("Missing control file"))?);
             }
             "--install" => return install::install(),

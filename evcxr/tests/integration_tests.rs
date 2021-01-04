@@ -886,3 +886,65 @@ fn repeated_use_statements() {
         text_plain("42")
     );
 }
+
+#[track_caller]
+fn check(ctx: &mut CommandContext, code: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    for err in ctx.check(code).unwrap() {
+        if let Some(spanned_message) = err.primary_spanned_message() {
+            if let Some(span) = spanned_message.span {
+                out.push(format!(
+                    "{} {}:{}-{}:{} {}",
+                    err.level(),
+                    span.start_line,
+                    span.start_column,
+                    span.end_line,
+                    span.end_column,
+                    if spanned_message.label.is_empty() {
+                        err.message()
+                    } else {
+                        spanned_message.label.to_owned()
+                    },
+                ));
+            }
+        }
+    }
+    out
+}
+
+fn strs(input: &[String]) -> Vec<&str> {
+    input.iter().map(|s| s.as_str()).collect()
+}
+
+#[test]
+fn check_for_errors() {
+    let mut ctx = new_context();
+
+    assert_eq!(
+        strs(&check(
+            &mut ctx,
+            r#"let a = 10;
+let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
+    println!("さび  äää"); (
+    )
+}
+"#
+        )),
+        vec![
+            "error 3:29-4:6 expected `i32`, found `()`",
+            "error 2:38-2:40 expected struct `String`, found integer"
+        ]
+    );
+
+    // An unused variable not within a function shouldn't produce a warning.
+    assert_eq!(
+        strs(&check(&mut ctx, "let mut s = String::new();")),
+        Vec::<&str>::new()
+    );
+
+    // An unused variable within a function should produce a warning.
+    assert_eq!(
+        strs(&check(&mut ctx, "fn foo() {let mut s = String::new();}")),
+        vec!["warning 1:15-1:20 unused variable: `s`"]
+    );
+}

@@ -33,6 +33,7 @@ ra_ap_vfs-notify = "=0.0.30"
 ra_ap_hir = "=0.0.30"
 ra_ap_base_db = "=0.0.30"
 ra_ap_syntax = "=0.0.30"
+unicode-segmentation = "1.7.1"
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
 sig = "1.0.0"

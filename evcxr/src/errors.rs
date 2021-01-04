@@ -40,7 +40,10 @@ fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
     None
 }
 
-fn get_code_origins_for_span<'a>(span: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a CodeKind> {
+fn get_code_origins_for_span<'a>(
+    span: &JsonValue,
+    code_block: &'a CodeBlock,
+) -> Vec<(&'a CodeKind, usize)> {
     let mut code_origins = Vec::new();
     if let Some(span) = spans_in_local_source(span) {
         if let (Some(line_start), Some(line_end)) =
@@ -58,7 +61,11 @@ fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a 
     let mut code_origins = Vec::new();
     if let JsonValue::Array(spans) = &json["spans"] {
         for span in spans {
-            code_origins.extend(get_code_origins_for_span(span, code_block));
+            code_origins.extend(
+                get_code_origins_for_span(span, code_block)
+                    .iter()
+                    .map(|(origin, _)| origin),
+            );
         }
     }
     code_origins
@@ -158,6 +165,14 @@ impl CompilationError {
         &self.spanned_messages[..]
     }
 
+    pub fn primary_spanned_message(&self) -> Option<&SpannedMessage> {
+        self.spanned_messages.iter().find(|msg| msg.is_primary)
+    }
+
+    pub fn level(&self) -> &str {
+        self.json["level"].as_str().unwrap_or("")
+    }
+
     pub fn help(&self) -> Vec<String> {
         if let JsonValue::Array(children) = &self.json["children"] {
             children
@@ -254,7 +269,9 @@ fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<Spann
 
 #[derive(Debug, Clone, Copy)]
 pub struct Span {
+    pub start_line: usize,
     pub start_column: usize,
+    pub end_line: usize,
     pub end_column: usize,
 }
 
@@ -263,6 +280,7 @@ pub struct SpannedMessage {
     pub span: Option<Span>,
     pub lines: Vec<String>,
     pub label: String,
+    pub is_primary: bool,
 }
 
 impl SpannedMessage {
@@ -289,13 +307,27 @@ impl SpannedMessage {
                 if start_line >= 1 && end_line <= all_lines.len() {
                     lines.extend(all_lines[start_line - 1..end_line].iter().cloned());
                 }
-                if get_code_origins_for_span(span_json, code_block)
-                    .into_iter()
-                    .all(CodeKind::is_user_supplied)
+                let origins = get_code_origins_for_span(span_json, code_block);
+                if let (
+                    Some((CodeKind::OriginalUserCode(start), start_line_offset)),
+                    Some((CodeKind::OriginalUserCode(end), end_line_offset)),
+                ) = (origins.first(), origins.last())
                 {
                     Some(Span {
-                        start_column,
-                        end_column,
+                        start_line: start.start_line + start_line_offset,
+                        start_column: start_column
+                            + (if *start_line_offset == 0 {
+                                start.column_offset
+                            } else {
+                                0
+                            }),
+                        end_line: end.start_line + end_line_offset,
+                        end_column: end_column
+                            + (if *end_line_offset == 0 {
+                                end.column_offset
+                            } else {
+                                0
+                            }),
                     })
                 } else {
                     // Spans within generated code won't mean anything to the user, suppress
@@ -328,6 +360,7 @@ impl SpannedMessage {
                 .as_str()
                 .map(|s| s.to_owned())
                 .unwrap_or_else(String::new),
+            is_primary: span_json["is_primary"].as_bool().unwrap_or(false),
         }
     }
 }

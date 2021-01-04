@@ -21,7 +21,6 @@ use evcxr;
 use evcxr::CommandContext;
 use json;
 use json::JsonValue;
-use std;
 use std::collections::HashMap;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -272,63 +271,79 @@ impl Server {
 
     fn handle_shell(
         self,
-        mut connection: Connection,
+        connection: Connection,
         execution_channel: &mpsc::Sender<JupyterMessage>,
         execution_reply_receiver: &mpsc::Receiver<JupyterMessage>,
         context: Arc<Mutex<CommandContext>>,
     ) -> Result<()> {
         loop {
-            let message = JupyterMessage::read(&mut connection)?;
-            // Processing of every message should be enclosed between "busy" and "idle"
-            // see https://jupyter-client.readthedocs.io/en/latest/messaging.html#messages-on-the-shell-router-dealer-channel
-            // Jupiter Lab doesn't use the kernel until it received "idle" for kernel_info_request
-            message
-                .new_message("status")
-                .with_content(object! {"execution_state" => "busy"})
-                .send(&mut *self.iopub.lock().unwrap())?;
-            let idle = message
-                .new_message("status")
-                .with_content(object! {"execution_state" => "idle"});
-            if message.message_type() == "kernel_info_request" {
-                message
-                    .new_reply()
-                    .with_content(kernel_info())
-                    .send(&mut connection)?;
-            } else if message.message_type() == "is_complete_request" {
-                message
-                    .new_reply()
-                    .with_content(object! {"status" => "complete"})
-                    .send(&mut connection)?;
-            } else if message.message_type() == "execute_request" {
-                execution_channel.send(message)?;
-                execution_reply_receiver.recv()?.send(&mut connection)?;
-            } else if message.message_type() == "comm_open" {
-                message
-                    .new_message("comm_close")
-                    .with_content(message.get_content().clone())
-                    .send(&mut connection)?;
-            } else if message.message_type() == "comm_info_request" {
-                // We don't handle this yet.
-            } else if message.message_type() == "complete_request" {
-                let reply = message.new_reply().with_content(
-                    match handle_completion_request(&context, message) {
-                        Ok(response_content) => response_content,
-                        Err(error) => object! {
-                            "status" => "error",
-                            "ename" => error.to_string(),
-                            "evalue" => "",
-                        },
-                    },
-                );
-                reply.send(&mut connection)?;
-            } else {
-                eprintln!(
-                    "Got unrecognized message type on shell channel: {}",
-                    message.message_type()
-                );
-            }
-            idle.send(&mut *self.iopub.lock().unwrap())?;
+            let message = JupyterMessage::read(&connection)?;
+            self.handle_shell_message(
+                message,
+                &connection,
+                execution_channel,
+                execution_reply_receiver,
+                &context,
+            )?;
         }
+    }
+
+    fn handle_shell_message(
+        &self,
+        message: JupyterMessage,
+        connection: &Connection,
+        execution_channel: &mpsc::Sender<JupyterMessage>,
+        execution_reply_receiver: &mpsc::Receiver<JupyterMessage>,
+        context: &Arc<Mutex<CommandContext>>,
+    ) -> Result<()> {
+        // Processing of every message should be enclosed between "busy" and "idle"
+        // see https://jupyter-client.readthedocs.io/en/latest/messaging.html#messages-on-the-shell-router-dealer-channel
+        // Jupiter Lab doesn't use the kernel until it received "idle" for kernel_info_request
+        message
+            .new_message("status")
+            .with_content(object! {"execution_state" => "busy"})
+            .send(&mut *self.iopub.lock().unwrap())?;
+        let idle = message
+            .new_message("status")
+            .with_content(object! {"execution_state" => "idle"});
+        if message.message_type() == "kernel_info_request" {
+            message
+                .new_reply()
+                .with_content(kernel_info())
+                .send(&connection)?;
+        } else if message.message_type() == "is_complete_request" {
+            message
+                .new_reply()
+                .with_content(object! {"status" => "complete"})
+                .send(&connection)?;
+        } else if message.message_type() == "execute_request" {
+            execution_channel.send(message)?;
+            execution_reply_receiver.recv()?.send(&connection)?;
+        } else if message.message_type() == "comm_open" {
+            comm_open(message, context, Arc::clone(&self.iopub))?;
+        } else if message.message_type() == "comm_msg" {
+        } else if message.message_type() == "comm_info_request" {
+            // We don't handle this yet.
+        } else if message.message_type() == "complete_request" {
+            let reply = message.new_reply().with_content(
+                match handle_completion_request(&context, message) {
+                    Ok(response_content) => response_content,
+                    Err(error) => object! {
+                        "status" => "error",
+                        "ename" => error.to_string(),
+                        "evalue" => "",
+                    },
+                },
+            );
+            reply.send(&connection)?;
+        } else {
+            eprintln!(
+                "Got unrecognized message type on shell channel: {}",
+                message.message_type()
+            );
+        }
+        idle.send(&mut *self.iopub.lock().unwrap())?;
+        Ok(())
     }
 
     fn handle_control(self, mut connection: Connection) -> Result<()> {
@@ -442,6 +457,69 @@ impl Server {
             }
         }
         Ok(())
+    }
+}
+
+fn comm_open(
+    message: JupyterMessage,
+    context: &Arc<Mutex<CommandContext>>,
+    iopub: Arc<Mutex<Connection>>,
+) -> Result<()> {
+    if message.target_name() == "evcxr-cargo-check" {
+        let context = Arc::clone(context);
+        std::thread::spawn(move || {
+            if let Some(code) = message.data()["code"].as_str() {
+                let data = cargo_check(code, &context);
+                let response_content = object! {
+                    "comm_id" => message.comm_id(),
+                    "data" => data,
+                };
+                message
+                    .new_message("comm_msg")
+                    .without_parent_header()
+                    .with_content(response_content)
+                    .send(&iopub.lock().unwrap())
+                    .unwrap();
+            }
+            message
+                .comm_close_message()
+                .send(&iopub.lock().unwrap())
+                .unwrap();
+        });
+        Ok(())
+    } else {
+        // Unrecognised comm target, just close the comm.
+        message.comm_close_message().send(&iopub.lock().unwrap())
+    }
+}
+
+fn cargo_check(code: &str, context: &Mutex<CommandContext>) -> JsonValue {
+    let problems = context.lock().unwrap().check(code).unwrap_or_default();
+    let problems_json: Vec<JsonValue> = problems
+        .iter()
+        .filter_map(|problem| {
+            if let Some(primary_spanned_message) = problem.primary_spanned_message() {
+                if let Some(span) = primary_spanned_message.span {
+                    let message = if primary_spanned_message.label.is_empty() {
+                        problem.message()
+                    } else {
+                        primary_spanned_message.label.clone()
+                    };
+                    return Some(object! {
+                        "message" => message,
+                        "severity" => problem.level(),
+                        "start_line" => span.start_line,
+                        "start_column" => span.start_column,
+                        "end_column" => span.end_column,
+                        "end_line" => span.end_line,
+                    });
+                }
+            }
+            None
+        })
+        .collect();
+    object! {
+        "problems" => problems_json,
     }
 }
 

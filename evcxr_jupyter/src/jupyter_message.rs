@@ -26,8 +26,14 @@ struct RawMessage {
 }
 
 impl RawMessage {
-    pub(crate) fn read(connection: &mut Connection) -> Result<RawMessage> {
-        let mut multipart = connection.socket.recv_multipart(0)?;
+    pub(crate) fn read(connection: &Connection) -> Result<RawMessage> {
+        Self::from_multipart(connection.socket.recv_multipart(0)?, connection)
+    }
+
+    pub(crate) fn from_multipart(
+        mut multipart: Vec<Vec<u8>>,
+        connection: &Connection,
+    ) -> Result<RawMessage> {
         let delimiter_index = multipart
             .iter()
             .position(|part| &part[..] == DELIMITER)
@@ -55,7 +61,7 @@ impl RawMessage {
         Ok(raw_message)
     }
 
-    fn send(self, connection: &mut Connection) -> Result<()> {
+    fn send(self, connection: &Connection) -> Result<()> {
         use hmac::Mac;
         let hmac = if let Some(mac_template) = &connection.mac {
             let mut mac = mac_template.clone();
@@ -97,9 +103,11 @@ pub(crate) struct JupyterMessage {
 const DELIMITER: &[u8] = b"<IDS|MSG>";
 
 impl JupyterMessage {
-    pub(crate) fn read(connection: &mut Connection) -> Result<JupyterMessage> {
-        let raw_message = RawMessage::read(connection)?;
+    pub(crate) fn read(connection: &Connection) -> Result<JupyterMessage> {
+        Self::from_raw_message(RawMessage::read(connection)?)
+    }
 
+    fn from_raw_message(raw_message: RawMessage) -> Result<JupyterMessage> {
         fn message_to_json(message: &[u8]) -> Result<JsonValue> {
             Ok(json::parse(std::str::from_utf8(message)?)?)
         }
@@ -129,6 +137,18 @@ impl JupyterMessage {
         self.content["cursor_pos"].as_usize().unwrap_or_default()
     }
 
+    pub(crate) fn target_name(&self) -> &str {
+        self.content["target_name"].as_str().unwrap_or("")
+    }
+
+    pub(crate) fn data(&self) -> &JsonValue {
+        &self.content["data"]
+    }
+
+    pub(crate) fn comm_id(&self) -> &str {
+        self.content["comm_id"].as_str().unwrap_or("")
+    }
+
     // Creates a new child message of this message. ZMQ identities are not transferred.
     pub(crate) fn new_message(&self, msg_type: &str) -> JupyterMessage {
         let mut header = self.header.clone();
@@ -154,6 +174,13 @@ impl JupyterMessage {
         reply
     }
 
+    #[must_use = "Need to send this message for it to have any effect"]
+    pub(crate) fn comm_close_message(&self) -> JupyterMessage {
+        self.new_message("comm_close").with_content(object! {
+            "comm_id" => self.comm_id()
+        })
+    }
+
     pub(crate) fn get_content(&self) -> &JsonValue {
         &self.content
     }
@@ -168,7 +195,12 @@ impl JupyterMessage {
         self
     }
 
-    pub(crate) fn send(&self, connection: &mut Connection) -> Result<()> {
+    pub(crate) fn without_parent_header(mut self) -> JupyterMessage {
+        self.parent_header = object! {};
+        self
+    }
+
+    pub(crate) fn send(&self, connection: &Connection) -> Result<()> {
         // If performance is a concern, we can probably avoid the clone and to_vec calls with a bit
         // of refactoring.
         let raw_message = RawMessage {

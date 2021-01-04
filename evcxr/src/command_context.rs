@@ -59,6 +59,12 @@ impl CommandContext {
         self.execute_with_callbacks(to_run, &mut EvalCallbacks::default())
     }
 
+    pub fn check(&mut self, code: &str) -> Result<Vec<CompilationError>, Error> {
+        let (user_code, nodes) = CodeBlock::from_original_user_code(code);
+        let (non_command_code, state) = self.prepare_for_analysis(user_code);
+        self.eval_context.check(non_command_code, state, &nodes)
+    }
+
     pub fn variables_and_types(&self) -> impl Iterator<Item = (&str, &str)> {
         self.eval_context.variables_and_types()
     }
@@ -126,12 +132,18 @@ impl CommandContext {
     /// completions. It also assumes exclusive access to those resources. However there should be
     /// any visible side effects.
     pub fn completions(&mut self, src: &str, position: usize) -> Result<Completions> {
-        let mut non_command_code = CodeBlock::new();
-        let mut state = self.eval_context.state();
         let (user_code, nodes) = CodeBlock::from_original_user_code(src);
         if let Some((segment, offset)) = user_code.command_containing_user_offset(position) {
             return self.command_completions(segment, offset, position);
         }
+        let (non_command_code, state) = self.prepare_for_analysis(user_code);
+        self.eval_context
+            .completions(non_command_code, state, &nodes, position)
+    }
+
+    fn prepare_for_analysis(&self, user_code: CodeBlock) -> (CodeBlock, ContextState) {
+        let mut non_command_code = CodeBlock::new();
+        let mut state = self.eval_context.state();
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
                 if command.command == ":dep" {
@@ -143,8 +155,7 @@ impl CommandContext {
                 non_command_code = non_command_code.with_segment(segment);
             }
         }
-        self.eval_context
-            .completions(non_command_code, state, &nodes, position)
+        (non_command_code, state)
     }
 
     fn command_completions(
@@ -467,10 +478,10 @@ struct Command {
     short_description: &'static str,
     callback: Box<
         dyn Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
+            &mut CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
             + 'static
             + Sync,
     >,
@@ -481,10 +492,10 @@ impl Command {
         name: &'static str,
         short_description: &'static str,
         callback: impl Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
+            &mut CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
             + 'static
             + Sync,
     ) -> Command {

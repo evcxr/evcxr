@@ -21,6 +21,11 @@ use std::{env, fs};
 const LOGO_32X32: &[u8] = include_bytes!("../third_party/rust/rust-logo-32x32.png");
 const LOGO_64X64: &[u8] = include_bytes!("../third_party/rust/rust-logo-64x64.png");
 const LOGO_LICENSE: &[u8] = include_bytes!("../third_party/rust/LICENSE.md");
+const KERNEL_JS: &[u8] = include_bytes!("../client/kernel.js");
+const LINT_JS: &[u8] = include_bytes!("../third_party/CodeMirror/addons/lint/lint.js");
+const LINT_CSS: &[u8] = include_bytes!("../third_party/CodeMirror/addons/lint/lint.css");
+const LINT_LICENSE: &[u8] = include_bytes!("../third_party/CodeMirror/LICENSE");
+const VERSION_TXT: &[u8] = include_bytes!("../client/version.txt");
 
 pub(crate) fn install() -> Result<()> {
     let kernel_dir = get_kernel_dir()?;
@@ -41,7 +46,29 @@ pub(crate) fn install() -> Result<()> {
     install_resource(&kernel_dir, "logo-32x32.png", LOGO_32X32)?;
     install_resource(&kernel_dir, "logo-64x64.png", LOGO_64X64)?;
     install_resource(&kernel_dir, "logo-LICENSE.md", LOGO_LICENSE)?;
+    install_resource(&kernel_dir, "kernel.js", KERNEL_JS)?;
+    install_resource(&kernel_dir, "lint.js", LINT_JS)?;
+    install_resource(&kernel_dir, "lint.css", LINT_CSS)?;
+    install_resource(&kernel_dir, "lint-LICENSE", LINT_LICENSE)?;
+    install_resource(&kernel_dir, "version.txt", VERSION_TXT)?;
     println!("Installation complete");
+    Ok(())
+}
+
+/// Checks if the current installation is out-of-date, by looking at what's in
+/// version.txt. If it is out of date, then updates it.
+pub(crate) fn update_if_necessary() -> Result<()> {
+    let kernel_dir = get_kernel_dir()?;
+    let installed_version = std::fs::read(kernel_dir.join("version.txt")).unwrap_or_default();
+    if installed_version != VERSION_TXT {
+        install()?;
+        eprintln!(
+            "\n\n==================================================================\n\
+            Updated Evcxr Jupyter installation. Note, updates unfortunately \n\
+            won't take effect until the next time you start jupyter notebook.\n\
+            ==================================================================\n"
+        );
+    }
     Ok(())
 }
 
