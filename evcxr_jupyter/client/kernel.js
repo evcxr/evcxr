@@ -76,9 +76,6 @@ define([
 
     return {
         onload: function () {
-            for (var i = 4; i < 10; i++) {
-                console.info('Rust kernel specific javascript loaded v2: ' + i);
-            }
             $('head').append(
                 $('<link rel="stylesheet" type="text/css" />').attr('href', requireJs.toUrl('./lint.css'))
             )
