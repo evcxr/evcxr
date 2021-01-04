@@ -122,6 +122,10 @@ mod tests {
         Ok(())
     }
 
+    fn path_to_string(path: &Path) -> String {
+        path.to_string_lossy().replace("\\", "\\\\")
+    }
+
     #[test]
     fn valid_dependency() -> Result<()> {
         let tempdir = tempfile::tempdir()?;
@@ -131,7 +135,7 @@ mod tests {
         create_crate(
             &crate2,
             "crate2",
-            &format!(r#"crate1 = {{ path = "{}" }}"#, crate1.to_string_lossy()),
+            &format!(r#"crate1 = {{ path = "{}" }}"#, path_to_string(&crate1)),
         )?;
         assert_eq!(
             get_library_names(&crate2).unwrap(),
@@ -151,7 +155,7 @@ mod tests {
             "crate2",
             &format!(
                 r#"crate1 = {{ path = "{}", features = ["no_such_feature"] }}"#,
-                crate1.to_string_lossy()
+                path_to_string(&crate1)
             ),
         )?;
         // Make sure that the problematic feature "no_such_feature" is mentioned

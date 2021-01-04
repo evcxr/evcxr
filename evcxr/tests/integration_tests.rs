@@ -949,5 +949,8 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
 
     // Make sure we do get errors for a bad use statement. Currently this is
     // limited to simple use statements (with {}).
-    assert_eq!(strs(&check(&mut ctx, "use std::foo::Bar;")), vec!["error 1:10-1:13"]);
+    assert_eq!(
+        strs(&check(&mut ctx, "use std::foo::Bar;")),
+        vec!["error 1:10-1:13"]
+    );
 }
