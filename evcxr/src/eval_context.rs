@@ -49,9 +49,14 @@ pub(crate) struct Config {
     // attempt to determine if the type of the variable is copy.
     preserve_vars_on_panic: bool,
     output_format: String,
-    /// Used only internally to ensure maximum preservation of user code. This
-    /// is necessary for tab completion and running cargo check.
-    analysis_mode: bool,
+    /// Whether to try to display the final expression. Currently this needs to
+    /// be turned off when doing tab completion or cargo check, but otherwise it
+    /// should always be on.
+    display_final_expression: bool,
+    /// Whether to expand and deduplicate use statements. We need to be able to
+    /// turn this off in order for tab-completion of use statements to work, but
+    /// otherwise this should always be on.
+    expand_use_statements: bool,
     opt_level: String,
     error_fmt: &'static ErrorFormat,
     /// Whether to pass -Ztime-passes to the compiler and print the result.
@@ -72,7 +77,8 @@ impl Default for Config {
             debug_mode: false,
             preserve_vars_on_panic: false,
             output_format: "{:?}".to_owned(),
-            analysis_mode: false,
+            display_final_expression: true,
+            expand_use_statements: true,
             opt_level: "2".to_owned(),
             error_fmt: &ERROR_FORMATS[0],
             time_passes: false,
@@ -269,7 +275,7 @@ impl EvalContext {
         mut state: ContextState,
         nodes: &[SyntaxNode],
     ) -> Result<Vec<CompilationError>, Error> {
-        state.config.analysis_mode = true;
+        state.config.display_final_expression = false;
         let user_code = state.apply(user_code, nodes)?;
         let code = state.analysis_code(user_code);
         self.module.check(&code)
@@ -321,7 +327,15 @@ impl EvalContext {
         nodes: &[SyntaxNode],
         offset: usize,
     ) -> Result<Completions> {
-        state.config.analysis_mode = true;
+        // Wrapping the final expression in order to display it might interfere
+        // with completions on that final expression.
+        state.config.display_final_expression = false;
+        // Expanding use statements would prevent us from tab-completing those
+        // use statements, since we lose information about where each bit came
+        // from when we expand. This could be fixed with some work, but there's
+        // not really any downside to turn it off here. It'll produce errors,
+        // but those errors don't effect the analysis needed for completions.
+        state.config.expand_use_statements = false;
         let user_code = state.apply(user_code, nodes)?;
         let code = state.analysis_code(user_code);
         let wrapped_offset = code.user_offset_to_output_offset(offset)?;
@@ -1365,12 +1379,7 @@ impl ContextState {
                 }
             } else if ast::Expr::can_cast(node.kind()) {
                 if statement_index == num_statements - 1 {
-                    if self.config.analysis_mode {
-                        code_out = code_out
-                            .generated("let _ = ")
-                            .with_segment(segment)
-                            .generated(";");
-                    } else {
+                    if self.config.display_final_expression {
                         code_out = code_out.code_with_fallback(
                             // First we try calling .evcxr_display().
                             CodeBlock::new()
@@ -1388,6 +1397,11 @@ impl ContextState {
                                 .with_segment(segment)
                                 .generated("));"),
                         );
+                    } else {
+                        code_out = code_out
+                            .generated("let _ = ")
+                            .with_segment(segment)
+                            .generated(";");
                     }
                 } else {
                     // We got an expression, but it wasn't the last statement,
@@ -1423,7 +1437,7 @@ impl ContextState {
                         }
                     }
                     ast::Item::Use(use_stmt) => {
-                        if self.config.analysis_mode {
+                        if !self.config.expand_use_statements {
                             // This is necessary to ensure that we can compute
                             // completions in use-statements. This may result in
                             // duplicate imports, but that shouldn't prevent

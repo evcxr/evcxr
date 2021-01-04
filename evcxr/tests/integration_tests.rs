@@ -916,6 +916,11 @@ fn strs(input: &[String]) -> Vec<&str> {
     input.iter().map(|s| s.as_str()).collect()
 }
 
+#[track_caller]
+fn assert_no_errors(ctx: &mut CommandContext, code: &str) {
+    assert_eq!(strs(&check(ctx, code)), Vec::<&str>::new());
+}
+
 #[test]
 fn check_for_errors() {
     let mut ctx = new_context();
@@ -937,14 +942,16 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
     );
 
     // An unused variable not within a function shouldn't produce a warning.
-    assert_eq!(
-        strs(&check(&mut ctx, "let mut s = String::new();")),
-        Vec::<&str>::new()
-    );
+    assert_no_errors(&mut ctx, "let mut s = String::new();");
 
     // An unused variable within a function should produce a warning.
     assert_eq!(
         strs(&check(&mut ctx, "fn foo() {let mut s = String::new();}")),
         vec!["warning 1:15-1:20 unused variable: `s`"]
     );
+
+    // Make sure we don't get errors about duplicate use statements after we've
+    // executed some code.
+    eval_and_unwrap(&mut ctx, "use std::fmt::Debug; 42");
+    assert_no_errors(&mut ctx, "use std::fmt::Debug; 42");
 }
