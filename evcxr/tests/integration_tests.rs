@@ -946,4 +946,8 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
     // executed some code.
     eval_and_unwrap(&mut ctx, "use std::fmt::Debug; 42");
     assert_no_errors(&mut ctx, "use std::fmt::Debug; 42");
+
+    // Make sure we do get errors for a bad use statement. Currently this is
+    // limited to simple use statements (with {}).
+    assert_eq!(strs(&check(&mut ctx, "use std::foo::Bar;")), vec!["error 1:10-1:13"]);
 }

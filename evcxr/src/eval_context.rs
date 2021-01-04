@@ -280,6 +280,7 @@ impl EvalContext {
         nodes: &[SyntaxNode],
     ) -> Result<Vec<CompilationError>, Error> {
         state.config.display_final_expression = false;
+        state.config.expand_use_statements = false;
         let user_code = state.apply(user_code, nodes)?;
         let code = state.analysis_code(user_code);
         self.module.check(&code)
@@ -1441,26 +1442,47 @@ impl ContextState {
                         }
                     }
                     ast::Item::Use(use_stmt) => {
-                        if !self.config.expand_use_statements {
-                            // This is necessary to ensure that we can compute
-                            // completions in use-statements. This may result in
-                            // duplicate imports, but that shouldn't prevent
-                            // completions from working.
-                            self.unnamed_items
-                                .push(CodeBlock::new().with_segment(segment));
-                        } else if let Some(use_tree) = use_stmt.use_tree() {
-                            crate::use_trees::use_tree_names_do(&use_tree, &mut |import| {
-                                match import {
-                                    Import::Unnamed(code) => {
-                                        self.unnamed_items
-                                            .push(CodeBlock::new().other_user_code(code));
+                        if let Some(use_tree) = use_stmt.use_tree() {
+                            if self.config.expand_use_statements {
+                                // This mode is used for normal execution as it results in all named
+                                // items being stored separately, which permits future code to
+                                // deduplicate / replace those items. It doesn't however preserve
+                                // traceability back to the original user's code, so isn't so useful
+                                // for analysis purposes.
+                                crate::use_trees::use_tree_names_do(&use_tree, &mut |import| {
+                                    match import {
+                                        Import::Unnamed(code) => {
+                                            self.unnamed_items
+                                                .push(CodeBlock::new().other_user_code(code));
+                                        }
+                                        Import::Named { name, code } => {
+                                            self.items_by_name.insert(
+                                                name,
+                                                CodeBlock::new().other_user_code(code),
+                                            );
+                                        }
                                     }
-                                    Import::Named { name, code } => {
-                                        self.items_by_name
-                                            .insert(name, CodeBlock::new().other_user_code(code));
+                                });
+                            } else {
+                                // This mode finds all names that the use statement expands to, then
+                                // removes any previous definitions of those names and then adds the
+                                // original user code as-is. This allows error reporting on the
+                                // added line. It's only good for one-off usage though, since all
+                                // the names get put into `unnamed_items`, so can't get tracked.
+                                // Fortunately this is fine for analysis purposes, since we always
+                                // through away the state after we're done with analysis.
+                                crate::use_trees::use_tree_names_do(&use_tree, &mut |import| {
+                                    if let Import::Named { name, .. } = import {
+                                        self.items_by_name.remove(&name);
                                     }
-                                }
-                            });
+                                });
+                                self.unnamed_items
+                                    .push(CodeBlock::new().with_segment(segment));
+                            }
+                        } else {
+                            // No use-tree probably means something is malformed, just put it into
+                            // the output as-is so that we can get proper error reporting.
+                            code_out = code_out.with_segment(segment);
                         }
                     }
                     item => {
