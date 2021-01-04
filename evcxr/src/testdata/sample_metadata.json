@@ -1,7 +1,14 @@
 {
     "packages": [
         {
-            "name": "direct-1",
+            "name": "crate1",
+            "version": "0.0.1",
+            "id": "crate1 0.0.1 (path+file:///var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate1)",
+            "license": null,
+            "license_file": null,
+            "description": null,
+            "source": null,
+            "dependencies": [],
             "targets": [
                 {
                     "kind": [
@@ -10,52 +17,47 @@
                     "crate_types": [
                         "lib"
                     ],
-                    "name": "direct1"
+                    "name": "crate1",
+                    "src_path": "/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate1/src/lib.rs",
+                    "edition": "2018",
+                    "doctest": true,
+                    "test": true
                 }
-            ]
+            ],
+            "features": {},
+            "manifest_path": "/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate1/Cargo.toml",
+            "metadata": null,
+            "publish": null,
+            "authors": [],
+            "categories": [],
+            "keywords": [],
+            "readme": null,
+            "repository": null,
+            "homepage": null,
+            "documentation": null,
+            "edition": "2018",
+            "links": null
         },
         {
-            "name": "direct-2",
-            "targets": [
-                {
-                    "kind": [
-                        "lib"
-                    ],
-                    "crate_types": [
-                        "lib"
-                    ],
-                    "name": "direct2"
-                }
-            ]
-        },
-        {
-            "name": "sample",
+            "name": "crate2",
+            "version": "0.0.1",
+            "id": "crate2 0.0.1 (path+file:///private/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate2)",
+            "license": null,
+            "license_file": null,
+            "description": null,
+            "source": null,
             "dependencies": [
                 {
-                    "name": "direct-1"
-                },
-                {
-                    "name": "direct-2"
-                }
-            ],
-            "targets": [
-                {
-                    "kind": [
-                        "bin"
-                    ],
-                    "crate_types": [
-                        "bin"
-                    ],
-                    "name": "metadata"
-                }
-            ],
-            "manifest_path": "/home/foo/project/Cargo.toml"
-        },
-        {
-            "name": "indirect",
-            "dependencies": [
-                {
-                    "name": "indirect2"
+                    "name": "crate1",
+                    "source": null,
+                    "req": "*",
+                    "kind": null,
+                    "rename": null,
+                    "optional": false,
+                    "uses_default_features": true,
+                    "features": [],
+                    "target": null,
+                    "registry": null
                 }
             ],
             "targets": [
@@ -66,9 +68,63 @@
                     "crate_types": [
                         "lib"
                     ],
-                    "name": "indirect"
+                    "name": "crate2",
+                    "src_path": "/private/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate2/src/lib.rs",
+                    "edition": "2018",
+                    "doctest": true,
+                    "test": true
                 }
-            ]
+            ],
+            "features": {},
+            "manifest_path": "/private/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate2/Cargo.toml",
+            "metadata": null,
+            "publish": null,
+            "authors": [],
+            "categories": [],
+            "keywords": [],
+            "readme": null,
+            "repository": null,
+            "homepage": null,
+            "documentation": null,
+            "edition": "2018",
+            "links": null
         }
-    ]
+    ],
+    "workspace_members": [
+        "crate2 0.0.1 (path+file:///private/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate2)"
+    ],
+    "resolve": {
+        "nodes": [
+            {
+                "id": "crate1 0.0.1 (path+file:///var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate1)",
+                "dependencies": [],
+                "deps": [],
+                "features": []
+            },
+            {
+                "id": "crate2 0.0.1 (path+file:///private/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate2)",
+                "dependencies": [
+                    "crate1 0.0.1 (path+file:///var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate1)"
+                ],
+                "deps": [
+                    {
+                        "name": "crate1",
+                        "pkg": "crate1 0.0.1 (path+file:///var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate1)",
+                        "dep_kinds": [
+                            {
+                                "kind": null,
+                                "target": null
+                            }
+                        ]
+                    }
+                ],
+                "features": []
+            }
+        ],
+        "root": "crate2 0.0.1 (path+file:///private/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate2)"
+    },
+    "target_directory": "/private/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate2/target",
+    "version": 1,
+    "workspace_root": "/private/var/folders/nz/vv4_9tw56nv9k3tkvyszvwg80000gn/T/.tmpAn1ccQ/crate2",
+    "metadata": null
 }

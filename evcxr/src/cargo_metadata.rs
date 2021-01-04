@@ -29,7 +29,7 @@ pub(crate) fn get_library_names(crate_dir: &Path) -> Result<Vec<String>> {
         .output()
         .with_context(|| format!("Error running cargo metadata '{:?}'", crate_dir))?;
     if output.status.success() {
-        library_names_from_metadata(crate_dir, std::str::from_utf8(&output.stdout)?)
+        library_names_from_metadata(std::str::from_utf8(&output.stdout)?)
     } else {
         bail!(
             "cargo metadata failed with output:\n{}{}",
@@ -39,20 +39,23 @@ pub(crate) fn get_library_names(crate_dir: &Path) -> Result<Vec<String>> {
     }
 }
 
-fn library_names_from_metadata(crate_dir: &Path, metadata: &str) -> Result<Vec<String>> {
+fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
     let metadata = json::parse(metadata)?;
     let mut direct_dependencies = Vec::new();
     let mut crate_to_library_names = HashMap::new();
-    if let JsonValue::Array(packages) = &metadata["packages"] {
+    if let (JsonValue::Array(packages), Some(main_crate_id)) = (
+        &metadata["packages"],
+        metadata["workspace_members"][0].as_str(),
+    ) {
         for package in packages {
-            if let Some(package_name) = package["name"].as_str() {
-                if let Some(manifest_path) = package["manifest_path"].as_str() {
-                    if Path::new(manifest_path).parent() == Some(crate_dir) {
-                        if let JsonValue::Array(dependencies) = &package["dependencies"] {
-                            for dependency in dependencies {
-                                if let Some(dependency_name) = dependency["name"].as_str() {
-                                    direct_dependencies.push(dependency_name);
-                                }
+            if let (Some(package_name), Some(id)) =
+                (package["name"].as_str(), package["id"].as_str())
+            {
+                if id == main_crate_id {
+                    if let JsonValue::Array(dependencies) = &package["dependencies"] {
+                        for dependency in dependencies {
+                            if let Some(dependency_name) = dependency["name"].as_str() {
+                                direct_dependencies.push(dependency_name);
                             }
                         }
                     }
@@ -91,12 +94,8 @@ mod tests {
     #[test]
     fn test_library_names_from_metadata() {
         assert_eq!(
-            library_names_from_metadata(
-                Path::new("/home/foo/project"),
-                include_str!("testdata/sample_metadata.json")
-            )
-            .unwrap(),
-            vec!["direct1", "direct2"]
+            library_names_from_metadata(include_str!("testdata/sample_metadata.json")).unwrap(),
+            vec!["crate1"]
         );
     }
 
