@@ -131,7 +131,12 @@ impl Module {
 
     pub(crate) fn check(&mut self, code_block: &CodeBlock) -> Result<Vec<CompilationError>, Error> {
         self.write_code(code_block)?;
-        let output = self.cargo_command("check").output();
+        let output = self
+            .cargo_command()
+            .arg("check")
+            .arg("--message-format=json")
+            .output();
+
         let cargo_output = match output {
             Ok(out) => out,
             Err(err) => bail!("Error running 'cargo check': {}", err),
@@ -145,10 +150,12 @@ impl Module {
         code_block: &CodeBlock,
         config: &Config,
     ) -> Result<SoFile, Error> {
-        let mut command = self.cargo_command("rustc");
+        let mut command = self.cargo_command();
         if config.time_passes {
             command.arg("+nightly");
         }
+        command.arg("rustc").arg("--message-format=json");
+
         command
             .arg("--")
             .arg("-C")
@@ -189,12 +196,9 @@ impl Module {
         })
     }
 
-    fn cargo_command(&self, cargo_subcommand: &str) -> std::process::Command {
+    fn cargo_command(&self) -> std::process::Command {
         let mut command = std::process::Command::new("cargo");
-        command
-            .current_dir(self.crate_dir())
-            .arg(cargo_subcommand)
-            .arg("--message-format=json");
+        command.current_dir(self.crate_dir());
         command
     }
 
