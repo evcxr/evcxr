@@ -203,7 +203,27 @@ impl Module {
     }
 
     fn write_code(&self, code_block: &CodeBlock) -> Result<(), Error> {
-        write_file(&self.src_dir(), "lib.rs", &code_block.code_string())
+        write_file(&self.src_dir(), "lib.rs", &code_block.code_string())?;
+        self.maybe_bump_lib_mtime();
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn maybe_bump_lib_mtime(&self) {}
+
+    #[cfg(target_os = "macos")]
+    fn maybe_bump_lib_mtime(&self) {
+        // Some Macs use a filesystem that only has 1 second precision on file modification
+        // timestamps. Cargo uses these timestamps to see if it needs to recompile things, otherwise
+        // it just reuses the previous output. We set the modification timestamp on our source file
+        // to be 10 seconds in the future. That way it's guaranteed to be newer than any outputs
+        // produced by previous runs. In the event that setting the mtime fails, we just ignore it,
+        // as this mostly affects tests and we don't want inability to set mtime to break things for
+        // users.
+        let _ = filetime::set_file_mtime(
+            self.src_dir().join("lib.rs"),
+            filetime::FileTime::from_unix_time(filetime::FileTime::now().unix_seconds() + 10, 0),
+        );
     }
 
     fn get_cargo_toml_contents(&self, state: &ContextState) -> String {

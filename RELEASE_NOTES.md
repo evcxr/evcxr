@@ -4,6 +4,7 @@
   jupyter notebook is recommended. It will auto-update when the evcxr jupyter
   kernel starts, however that update may not effect the current session.
 * Fixed `:clear` command.
+* Work around imprecise timestamps on Macs that use a HPFS filesystem
 
 # Version 0.7.0
 * Fixed a number of bugs in tab completion.
