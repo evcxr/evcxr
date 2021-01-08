@@ -38,5 +38,5 @@ unicode-segmentation = "1.7.1"
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
 sig = "1.0.0"
 
-[target.'cfg(target_os = "mac")'.dependencies]
+[target.'cfg(target_os = "macos")'.dependencies]
 filetime = "0.2.13"
