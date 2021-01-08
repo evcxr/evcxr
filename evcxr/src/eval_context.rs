@@ -42,7 +42,7 @@ pub struct EvalContext {
     initial_config: Config,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub(crate) struct Config {
     pub(crate) debug_mode: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
@@ -106,6 +106,7 @@ impl Config {
     }
 }
 
+#[derive(Debug)]
 struct ErrorFormat {
     format_str: &'static str,
     format_trait: &'static str,
@@ -892,7 +893,7 @@ impl EvalOutputs {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct VariableState {
     type_name: String,
     is_mut: bool,
@@ -928,7 +929,7 @@ enum CompilationMode {
 
 /// State that is cloned then modified every time we try to compile some code. If compilation
 /// succeeds, we keep the modified state, if it fails, we revert to the old state.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ContextState {
     crate_dir: PathBuf,
     items_by_name: HashMap<String, CodeBlock>,
@@ -1058,6 +1059,15 @@ impl ContextState {
             ExternalCrate::new(name.to_owned(), config.to_owned())?,
         );
         Ok(())
+    }
+
+    /// Clears fields that aren't useful for inclusion in bug reports and which might give away
+    /// things like usernames.
+    pub(crate) fn clear_non_debug_relevant_fields(&mut self) {
+        self.crate_dir = PathBuf::from("redacted");
+        if self.config.sccache.is_some() {
+            self.config.sccache = Some(PathBuf::from("redacted"));
+        }
     }
 
     /// Returns whether transitioning to `new_state` might cause compilation

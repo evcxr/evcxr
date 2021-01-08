@@ -16,6 +16,7 @@ use std::collections::HashMap;
 
 use crate::{
     code_block::{CodeBlock, CodeKind, Segment},
+    crash_guard::CrashGuard,
     eval_context::EvalCallbacks,
     rust_analyzer::{Completion, Completions},
     EvalContext, EvalContextOutputs, EvalOutputs,
@@ -78,6 +79,32 @@ impl CommandContext {
     }
 
     pub fn execute_with_callbacks(
+        &mut self,
+        to_run: &str,
+        callbacks: &mut EvalCallbacks,
+    ) -> Result<EvalOutputs, Error> {
+        let mut state = self.eval_context.state();
+        state.clear_non_debug_relevant_fields();
+        let mut guard = CrashGuard::new(|| {
+            eprintln!(
+                r#"
+=============================================================================
+Panic detected. Here's some useful information if you're filing a bug report.
+<CODE>
+{}
+</CODE>
+<STATE>
+{:?}
+</STATE>"#,
+                to_run, state
+            );
+        });
+        let result = self.execute_with_callbacks_internal(to_run, callbacks);
+        guard.disarm();
+        result
+    }
+
+    fn execute_with_callbacks_internal(
         &mut self,
         to_run: &str,
         callbacks: &mut EvalCallbacks,
@@ -478,10 +505,10 @@ struct Command {
     short_description: &'static str,
     callback: Box<
         dyn Fn(
-            &mut CommandContext,
-            &mut ContextState,
-            &Option<String>,
-        ) -> Result<EvalOutputs, Error>
+                &mut CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
             + 'static
             + Sync,
     >,
@@ -492,10 +519,10 @@ impl Command {
         name: &'static str,
         short_description: &'static str,
         callback: impl Fn(
-            &mut CommandContext,
-            &mut ContextState,
-            &Option<String>,
-        ) -> Result<EvalOutputs, Error>
+                &mut CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
             + 'static
             + Sync,
     ) -> Command {

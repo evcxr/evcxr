@@ -16,7 +16,7 @@ use crate::errors::{bail, Error};
 use regex::Regex;
 use std::path::Path;
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct ExternalCrate {
     // The name, as it appears in the crate registry. This may be different than the key against
     // which this ExternalCrate is stored. If this name is "foo-bar", the key would be normalized as

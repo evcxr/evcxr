@@ -25,6 +25,7 @@ mod cargo_metadata;
 mod child_process;
 mod code_block;
 mod command_context;
+mod crash_guard;
 mod crate_config;
 mod eval_context;
 #[allow(dead_code)]
