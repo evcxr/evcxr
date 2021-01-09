@@ -181,7 +181,16 @@ impl CompilationError {
                     if child["level"].as_str() != Some("help") {
                         return None;
                     }
-                    child["message"].as_str().map(|s| s.to_owned())
+                    child["message"].as_str().map(|s| {
+                        let mut message = s.to_owned();
+                        if let Some(replacement) =
+                            child["spans"][0]["suggested_replacement"].as_str()
+                        {
+                            use std::fmt::Write;
+                            write!(&mut message, "\n\n{}", replacement.trim_end()).unwrap();
+                        }
+                        message
+                    })
                 })
                 .collect()
         } else {
