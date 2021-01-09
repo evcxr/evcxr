@@ -500,11 +500,15 @@ fn cargo_check(code: &str, context: &Mutex<CommandContext>) -> JsonValue {
         .filter_map(|problem| {
             if let Some(primary_spanned_message) = problem.primary_spanned_message() {
                 if let Some(span) = primary_spanned_message.span {
-                    let message = if primary_spanned_message.label.is_empty() {
-                        problem.message()
-                    } else {
-                        primary_spanned_message.label.clone()
-                    };
+                    use std::fmt::Write;
+                    let mut message = primary_spanned_message.label.clone();
+                    if !message.is_empty() {
+                        message.push('\n');
+                    }
+                    message.push_str(&problem.message());
+                    for help in problem.help() {
+                        write!(&mut message, "\nhelp: {}", help).unwrap();
+                    }
                     return Some(object! {
                         "message" => message,
                         "severity" => problem.level(),
