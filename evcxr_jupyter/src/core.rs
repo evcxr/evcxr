@@ -422,6 +422,9 @@ impl Server {
                             }
                         }
                         traceback.push(error.message());
+                        for help in error.help() {
+                            traceback.push(format!("{}: {}", "help".bold(), help));
+                        }
                         parent_message
                             .new_message("error")
                             .with_content(object! {
