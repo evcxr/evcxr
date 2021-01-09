@@ -1,10 +1,13 @@
 # Version 0.8.0 (UNRELEASED)
-* Jupyter kernel now shows errors and warnings inline as you type by running
-  cargo check on the backend. Running `evcxr\_jupyter --install` before starting
-  jupyter notebook is recommended. It will auto-update when the evcxr jupyter
-  kernel starts, however that update may not effect the current session.
+* Jupyter kernel now shows errors and warnings inline as you type by running cargo check on the
+  backend. Running `evcxr\_jupyter --install` before starting jupyter notebook is recommended. It
+  will auto-update when the evcxr jupyter kernel starts, however that update may not effect the
+  current session.
 * Fixed `:clear` command.
 * Work around imprecise timestamps on Macs that use a HPFS filesystem
+* Added `:toolchain` command to allow specifying rust compiler toolchains (e.g. "nightly").
+* Added `:offline` to turn on offline mode when running Cargo.
+* Various improvements to error reporting.
 
 # Version 0.7.0
 * Fixed a number of bugs in tab completion.
