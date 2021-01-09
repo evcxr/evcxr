@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::code_block::{CodeBlock, CodeKind, Segment};
+use crate::code_block::{CodeBlock, CodeKind, CommandCall, Segment};
 use json::{self, JsonValue};
 use regex::Regex;
 use std;
@@ -121,11 +121,14 @@ impl CompilationError {
         })
     }
 
-    /// Returns a synthesized error that spans the entire segment. Currently only command segments
-    /// are supported.
-    pub(crate) fn from_segment(segment: &Segment, message: String) -> CompilationError {
+    /// Returns a synthesized error that spans the specified portion of `segment`.
+    pub(crate) fn from_segment_span(
+        segment: &Segment,
+        message: String,
+        span: Span,
+    ) -> CompilationError {
         CompilationError {
-            spanned_messages: vec![SpannedMessage::entire_segment(segment)],
+            spanned_messages: vec![SpannedMessage::from_segment_span(segment, span)],
             message,
             json: JsonValue::Null,
             code_origins: vec![segment.kind.clone()],
@@ -309,19 +312,18 @@ pub struct Span {
 }
 
 impl Span {
-    fn entire_segment(segment: &Segment) -> Option<Span> {
-        if let CodeKind::Command(command) = &segment.kind {
-            let end_column = segment.code.chars().count();
-            Some(Span {
-                start_line: command.line_number,
-                start_column: 1,
-                end_line: command.line_number,
-                end_column,
-                output_start_column: 1,
-                output_end_column: end_column,
-            })
-        } else {
-            None
+    pub(crate) fn from_command(
+        command: &CommandCall,
+        start_column: usize,
+        end_column: usize,
+    ) -> Span {
+        Span {
+            start_line: command.line_number,
+            start_column,
+            end_line: command.line_number,
+            end_column,
+            output_start_column: start_column,
+            output_end_column: end_column,
         }
     }
 }
@@ -420,9 +422,9 @@ impl SpannedMessage {
         }
     }
 
-    fn entire_segment(segment: &Segment) -> SpannedMessage {
+    fn from_segment_span(segment: &Segment, span: Span) -> SpannedMessage {
         SpannedMessage {
-            span: Span::entire_segment(segment),
+            span: Some(span),
             lines: segment.code.lines().map(|line| line.to_owned()).collect(),
             label: String::new(),
             is_primary: true,

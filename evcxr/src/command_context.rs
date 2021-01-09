@@ -15,8 +15,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    code_block::{CodeBlock, CodeKind, Segment},
+    code_block::{CodeBlock, CodeKind, CommandCall, Segment},
     crash_guard::CrashGuard,
+    errors::Span,
     eval_context::EvalCallbacks,
     rust_analyzer::{Completion, Completions},
     EvalContext, EvalContextOutputs, EvalOutputs,
@@ -123,8 +124,9 @@ Panic detected. Here's some useful information if you're filing a bug report.
         let (user_code, nodes) = CodeBlock::from_original_user_code(to_run);
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
-                eval_outputs.merge(self.process_command(
-                    &command.command,
+                eval_outputs.merge(self.execute_command(
+                    command,
+                    &segment,
                     &mut state,
                     &command.args,
                 )?);
@@ -175,7 +177,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
     }
 
     fn prepare_for_analysis(
-        &self,
+        &mut self,
         user_code: CodeBlock,
     ) -> Result<(CodeBlock, ContextState, Vec<CompilationError>)> {
         let mut non_command_code = CodeBlock::new();
@@ -183,16 +185,16 @@ Panic detected. Here's some useful information if you're filing a bug report.
         let mut errors = Vec::new();
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
-                if command.command == ":dep" {
-                    if let Err(error) = self.process_dep_command(&mut state, &command.args) {
-                        errors.push(CompilationError::from_segment(&segment, error.to_string()));
-                    }
-                    self.eval_context.write_cargo_toml(&state)?;
+                if let Err(error) =
+                    self.process_command(command, &segment, &mut state, &command.args, true)
+                {
+                    errors.push(error);
                 }
             } else {
                 non_command_code = non_command_code.with_segment(segment);
             }
         }
+        self.eval_context.write_cargo_toml(&state)?;
         Ok((non_command_code, state, errors))
     }
 
@@ -239,22 +241,67 @@ Panic detected. Here's some useful information if you're filing a bug report.
         Ok(outputs)
     }
 
-    fn process_command(
+    fn execute_command(
         &mut self,
-        command: &str,
+        command: &CommandCall,
+        segment: &Segment,
         state: &mut ContextState,
         args: &Option<String>,
     ) -> Result<EvalOutputs, Error> {
-        if let Some(command) = Self::commands_by_name().get(command) {
-            (command.callback)(self, state, args)
+        self.process_command(command, segment, state, args, false)
+            .map_err(|err| Error::CompilationErrors(vec![err]))
+    }
+
+    fn process_command(
+        &mut self,
+        command_call: &CommandCall,
+        segment: &Segment,
+        state: &mut ContextState,
+        args: &Option<String>,
+        analysis_mode: bool,
+    ) -> Result<EvalOutputs, CompilationError> {
+        if let Some(command) = Self::commands_by_name().get(command_call.command.as_str()) {
+            let result = match &command.analysis_callback {
+                Some(analysis_callback) if analysis_mode => (analysis_callback)(self, state, args),
+                _ => (command.callback)(self, state, args),
+            };
+            result.map_err(|error| {
+                // Span from the start of the arguments to the end of the arguments, or if no
+                // arguments are found, span the command. We look for the first non-space character
+                // after a space is found.
+                let mut found_space = false;
+                let start_column = segment
+                    .code
+                    .chars()
+                    .enumerate()
+                    .find(|(_index, char)| {
+                        if *char == ' ' {
+                            found_space = true;
+                            return false;
+                        }
+                        return found_space;
+                    })
+                    .map(|(index, _char)| index + 1)
+                    .unwrap_or(1);
+                let end_column = segment.code.chars().count();
+                CompilationError::from_segment_span(
+                    &segment,
+                    error.to_string(),
+                    Span::from_command(command_call, start_column, end_column),
+                )
+            })
         } else {
-            bail!("Unrecognised command {}", command)
+            return Err(CompilationError::from_segment_span(
+                &segment,
+                format!("Unrecognised command {}", command_call.command),
+                Span::from_command(command_call, 1, command_call.command.chars().count() + 1),
+            ));
         }
     }
 
-    fn commands_by_name() -> &'static HashMap<&'static str, Command> {
+    fn commands_by_name() -> &'static HashMap<&'static str, AvailableCommand> {
         lazy_static! {
-            static ref COMMANDS_BY_NAME: HashMap<&'static str, Command> =
+            static ref COMMANDS_BY_NAME: HashMap<&'static str, AvailableCommand> =
                 CommandContext::create_commands()
                     .into_iter()
                     .map(|command| (command.name, command))
@@ -263,9 +310,9 @@ Panic detected. Here's some useful information if you're filing a bug report.
         &COMMANDS_BY_NAME
     }
 
-    fn create_commands() -> Vec<Command> {
+    fn create_commands() -> Vec<AvailableCommand> {
         vec![
-            Command::new(
+            AvailableCommand::new(
                 ":internal_debug",
                 "Toggle various internal debugging code",
                 |_ctx, state, _args| {
@@ -274,7 +321,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("Internals debugging: {}", debug_mode))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":load_config",
                 "Reloads startup configuration files",
                 |ctx, state, _args| {
@@ -282,11 +329,12 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     *state = ctx.eval_context.state();
                     result
                 },
-            ),
-            Command::new(":version", "Print Evcxr version", |_ctx, _state, _args| {
+            )
+            .disable_in_analysis(),
+            AvailableCommand::new(":version", "Print Evcxr version", |_ctx, _state, _args| {
                 text_output(env!("CARGO_PKG_VERSION"))
             }),
-            Command::new(
+            AvailableCommand::new(
                 ":vars",
                 "List bound variables and their types",
                 |ctx, _state, _args| {
@@ -296,7 +344,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     ))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":preserve_vars_on_panic",
                 "Try to keep vars on panic (0/1)",
                 |_ctx, state, args| {
@@ -308,7 +356,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     ))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":clear",
                 "Clear all state, keeping compilation cache",
                 |ctx, state, _args| {
@@ -317,20 +365,24 @@ Panic detected. Here's some useful information if you're filing a bug report.
                         EvalOutputs::new()
                     })
                 },
-            ),
-            Command::new(
+            )
+            .with_analysis_callback(|ctx, state, _args| {
+                *state = ctx.eval_context.cleared_state();
+                Ok(EvalOutputs::default())
+            }),
+            AvailableCommand::new(
                 ":dep",
                 "Add dependency. e.g. :dep regex = \"1.0\"",
-                |ctx, state, args| ctx.process_dep_command(state, args),
+                |_ctx, state, args| process_dep_command(state, args),
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":last_compile_dir",
                 "Print the directory in which we last compiled",
                 |ctx, _state, _args| {
                     text_output(format!("{:?}", ctx.eval_context.last_compile_dir()))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":opt",
                 "Set optimization level (0/1/2)",
                 |_ctx, state, args| {
@@ -345,7 +397,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("Optimization: {}", state.opt_level()))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":fmt",
                 "Set output formatter (default: {:?})",
                 |_ctx, state, args| {
@@ -354,7 +406,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("Output format: {}", state.output_format()))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":efmt",
                 "Set the formatter for errors returned by ?",
                 |_ctx, state, args| {
@@ -368,7 +420,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     ))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":toolchain",
                 "Set which toolchain to use (e.g. nightly)",
                 |_ctx, state, args| {
@@ -378,7 +430,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("Toolchain: {}", state.toolchain()))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":offline",
                 "Set offline mode when invoking cargo",
                 |_ctx, state, args| {
@@ -386,12 +438,13 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("Offline mode: {}", state.offline_mode()))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":quit",
                 "Quit evaluation and exit",
                 |_ctx, _state, _args| std::process::exit(0),
-            ),
-            Command::new(
+            )
+            .disable_in_analysis(),
+            AvailableCommand::new(
                 ":timing",
                 "Toggle printing of how long evaluations take",
                 |ctx, _state, _args| {
@@ -399,7 +452,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("Timing: {}", ctx.print_timings))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":time_passes",
                 "Toggle printing of rustc pass times (requires nightly)",
                 |_ctx, state, _args| {
@@ -407,7 +460,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("Time passes: {}", state.time_passes()))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":sccache",
                 "Set whether to use sccache (0/1).",
                 |_ctx, state, args| {
@@ -415,7 +468,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("sccache: {}", state.sccache()))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":linker",
                 "Set/print linker. Supported: system, lld",
                 |_ctx, state, args| {
@@ -425,7 +478,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     text_output(format!("linker: {}", state.linker()))
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":explain",
                 "Print explanation of last error",
                 |ctx, _state, _args| {
@@ -444,7 +497,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     }
                 },
             ),
-            Command::new(
+            AvailableCommand::new(
                 ":last_error_json",
                 "Print the last compilation error as JSON (for debugging)",
                 |ctx, _state, _args| {
@@ -457,7 +510,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     bail!(errors_out);
                 },
             ),
-            Command::new(":help", "Print command help", |_ctx, _state, _args| {
+            AvailableCommand::new(":help", "Print command help", |_ctx, _state, _args| {
                 use std::fmt::Write;
                 let mut text = String::new();
                 let mut html = String::new();
@@ -502,34 +555,33 @@ Panic detected. Here's some useful information if you're filing a bug report.
         out.push_str("</table>");
         out
     }
+}
 
-    fn process_dep_command(
-        &self,
-        state: &mut ContextState,
-        args: &Option<String>,
-    ) -> Result<EvalOutputs, Error> {
-        use regex::Regex;
-        let args = if let Some(v) = args {
-            v
-        } else {
-            bail!(":dep requires arguments")
-        };
-        lazy_static! {
-            static ref DEP_RE: Regex = Regex::new("^([^= ]+) *(= *(.+))?$").unwrap();
-        }
-        if let Some(captures) = DEP_RE.captures(args) {
-            state.add_dep(
-                &captures[1],
-                &captures.get(3).map_or("\"*\"", |m| m.as_str()),
-            )?;
-            Ok(EvalOutputs::new())
-        } else {
-            bail!("Invalid :dep command. Expected: name = ... or just name");
-        }
+fn process_dep_command(
+    state: &mut ContextState,
+    args: &Option<String>,
+) -> Result<EvalOutputs, Error> {
+    use regex::Regex;
+    let args = if let Some(v) = args {
+        v
+    } else {
+        bail!(":dep requires arguments")
+    };
+    lazy_static! {
+        static ref DEP_RE: Regex = Regex::new("^([^= ]+) *(= *(.+))?$").unwrap();
+    }
+    if let Some(captures) = DEP_RE.captures(args) {
+        state.add_dep(
+            &captures[1],
+            &captures.get(3).map_or("\"*\"", |m| m.as_str()),
+        )?;
+        Ok(EvalOutputs::new())
+    } else {
+        bail!("Invalid :dep command. Expected: name = ... or just name");
     }
 }
 
-struct Command {
+struct AvailableCommand {
     name: &'static str,
     short_description: &'static str,
     callback: Box<
@@ -541,9 +593,21 @@ struct Command {
             + 'static
             + Sync,
     >,
+    /// If `Some`, this callback will be run when preparing for analysis instead of `callback`.
+    analysis_callback: Option<
+        Box<
+            dyn Fn(
+                    &CommandContext,
+                    &mut ContextState,
+                    &Option<String>,
+                ) -> Result<EvalOutputs, Error>
+                + 'static
+                + Sync,
+        >,
+    >,
 }
 
-impl Command {
+impl AvailableCommand {
     fn new(
         name: &'static str,
         short_description: &'static str,
@@ -554,12 +618,27 @@ impl Command {
             ) -> Result<EvalOutputs, Error>
             + 'static
             + Sync,
-    ) -> Command {
-        Command {
+    ) -> AvailableCommand {
+        AvailableCommand {
             name,
             short_description,
             callback: Box::new(callback),
+            analysis_callback: None,
         }
+    }
+
+    fn with_analysis_callback(
+        mut self,
+        callback: impl Fn(&CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>
+            + 'static
+            + Sync,
+    ) -> Self {
+        self.analysis_callback = Some(Box::new(callback));
+        self
+    }
+
+    fn disable_in_analysis(self) -> Self {
+        self.with_analysis_callback(|_ctx, _state, _args| Ok(EvalOutputs::default()))
     }
 }
 

@@ -430,9 +430,14 @@ impl EvalContext {
     // restart, but without having to recompile any external crates we'd already
     // compiled. Config is preserved.
     pub fn clear(&mut self) -> Result<(), Error> {
-        let config = self.committed_state.config.clone();
-        self.committed_state = ContextState::new(config);
+        self.committed_state = self.cleared_state();
         self.restart_child_process()
+    }
+
+    /// Returns the state that would result from clearing. Config is preserved. Nothing is done to
+    /// the subprocess.
+    pub(crate) fn cleared_state(&self) -> ContextState {
+        ContextState::new(self.committed_state.config.clone())
     }
 
     pub fn reset_config(&mut self) {

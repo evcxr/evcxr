@@ -39,7 +39,7 @@ impl Segment {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
-pub(crate) struct Command {
+pub(crate) struct CommandCall {
     pub(crate) command: String,
     pub(crate) args: Option<String>,
     start_byte: usize,
@@ -68,7 +68,7 @@ pub(crate) enum CodeKind {
     /// file a bug report.
     OtherGeneratedCode,
     /// We had trouble determining what the error applied to.
-    Command(Command),
+    Command(CommandCall),
     Unknown,
 }
 
@@ -87,7 +87,7 @@ impl CodeKind {
     pub(crate) fn is_user_supplied(&self) -> bool {
         matches!(
             self,
-            CodeKind::OriginalUserCode(_) | CodeKind::OtherUserCode
+            CodeKind::OriginalUserCode(_) | CodeKind::OtherUserCode | CodeKind::Command(_)
         )
     }
 }
@@ -182,7 +182,7 @@ impl CodeBlock {
             // We only accept commands up until the first non-command.
             if let Some(captures) = COMMAND_RE.captures(line) {
                 code_block = code_block.with(
-                    CodeKind::Command(Command {
+                    CodeKind::Command(CommandCall {
                         command: captures[1].to_owned(),
                         args: captures.get(3).map(|m| m.as_str().to_owned()),
                         start_byte: line.as_ptr() as usize - user_code.as_ptr() as usize,
@@ -239,7 +239,7 @@ impl CodeBlock {
         user_code_offset: usize,
     ) -> Option<(&Segment, usize)> {
         self.segments.iter().find_map(|segment| {
-            if let CodeKind::Command(Command { start_byte, .. }) = &segment.kind {
+            if let CodeKind::Command(CommandCall { start_byte, .. }) = &segment.kind {
                 if user_code_offset >= *start_byte
                     && user_code_offset <= start_byte + segment.code.len()
                 {
