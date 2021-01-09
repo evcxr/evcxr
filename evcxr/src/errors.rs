@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::code_block::{CodeBlock, CodeKind};
+use crate::code_block::{CodeBlock, CodeKind, Segment};
 use json::{self, JsonValue};
 use regex::Regex;
 use std;
@@ -25,6 +25,7 @@ pub struct CompilationError {
     pub json: JsonValue,
     pub(crate) code_origins: Vec<CodeKind>,
     spanned_messages: Vec<SpannedMessage>,
+    level: String,
 }
 
 fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
@@ -114,9 +115,22 @@ impl CompilationError {
         Some(CompilationError {
             spanned_messages: build_spanned_messages(&json, code_block),
             message,
+            level: json["level"].as_str().unwrap_or("").to_owned(),
             json,
             code_origins: code_origins.into_iter().cloned().collect(),
         })
+    }
+
+    /// Returns a synthesized error that spans the entire segment. Currently only command segments
+    /// are supported.
+    pub(crate) fn from_segment(segment: &Segment, message: String) -> CompilationError {
+        CompilationError {
+            spanned_messages: vec![SpannedMessage::entire_segment(segment)],
+            message,
+            json: JsonValue::Null,
+            code_origins: vec![segment.kind.clone()],
+            level: "error".to_owned(),
+        }
     }
 
     /// Returns whether this error originated in code supplied by the user.
@@ -170,7 +184,7 @@ impl CompilationError {
     }
 
     pub fn level(&self) -> &str {
-        self.json["level"].as_str().unwrap_or("")
+        &self.level
     }
 
     pub fn help(&self) -> Vec<String> {
@@ -294,6 +308,24 @@ pub struct Span {
     pub output_end_column: usize,
 }
 
+impl Span {
+    fn entire_segment(segment: &Segment) -> Option<Span> {
+        if let CodeKind::Command(command) = &segment.kind {
+            let end_column = segment.code.chars().count();
+            Some(Span {
+                start_line: command.line_number,
+                start_column: 1,
+                end_line: command.line_number,
+                end_column,
+                output_start_column: 1,
+                output_end_column: end_column,
+            })
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct SpannedMessage {
     pub span: Option<Span>,
@@ -385,6 +417,15 @@ impl SpannedMessage {
                 .map(|s| s.to_owned())
                 .unwrap_or_else(String::new),
             is_primary: span_json["is_primary"].as_bool().unwrap_or(false),
+        }
+    }
+
+    fn entire_segment(segment: &Segment) -> SpannedMessage {
+        SpannedMessage {
+            span: Span::entire_segment(segment),
+            lines: segment.code.lines().map(|line| line.to_owned()).collect(),
+            label: String::new(),
+            is_primary: true,
         }
     }
 }

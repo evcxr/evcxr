@@ -43,6 +43,7 @@ pub(crate) struct Command {
     pub(crate) command: String,
     pub(crate) args: Option<String>,
     start_byte: usize,
+    pub(crate) line_number: usize,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -177,7 +178,7 @@ impl CodeBlock {
         let mut line_number = 1;
         let mut current_line = lines.next().unwrap_or(user_code);
 
-        for line in user_code.lines() {
+        for (command_line_offset, line) in user_code.lines().enumerate() {
             // We only accept commands up until the first non-command.
             if let Some(captures) = COMMAND_RE.captures(line) {
                 code_block = code_block.with(
@@ -185,6 +186,7 @@ impl CodeBlock {
                         command: captures[1].to_owned(),
                         args: captures.get(3).map(|m| m.as_str().to_owned()),
                         start_byte: line.as_ptr() as usize - user_code.as_ptr() as usize,
+                        line_number: command_line_offset + 1,
                     }),
                     line,
                 );

@@ -129,11 +129,14 @@ impl Module {
         )
     }
 
-    pub(crate) fn check(&mut self, code_block: &CodeBlock) -> Result<Vec<CompilationError>, Error> {
+    pub(crate) fn check(
+        &mut self,
+        code_block: &CodeBlock,
+        config: &Config,
+    ) -> Result<Vec<CompilationError>, Error> {
         self.write_code(code_block)?;
-        let output = self
-            .cargo_command()
-            .arg("check")
+        let output = config
+            .cargo_command("check")
             .arg("--message-format=json")
             .output();
 
@@ -150,13 +153,13 @@ impl Module {
         code_block: &CodeBlock,
         config: &Config,
     ) -> Result<SoFile, Error> {
-        let mut command = self.cargo_command();
-        if config.time_passes {
-            command.arg("+nightly");
+        let mut command = config.cargo_command("rustc");
+        if config.time_passes && config.toolchain != "nightly" {
+            bail!("time_passes option requires nightly compiler");
         }
-        command.arg("rustc").arg("--message-format=json");
 
         command
+            .arg("--message-format=json")
             .arg("--")
             .arg("-C")
             .arg("prefer-dynamic")
@@ -194,12 +197,6 @@ impl Module {
         Ok(SoFile {
             path: copied_so_file,
         })
-    }
-
-    fn cargo_command(&self) -> std::process::Command {
-        let mut command = std::process::Command::new("cargo");
-        command.current_dir(self.crate_dir());
-        command
     }
 
     fn write_code(&self, code_block: &CodeBlock) -> Result<(), Error> {

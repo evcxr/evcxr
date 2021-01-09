@@ -62,7 +62,13 @@ impl CommandContext {
 
     pub fn check(&mut self, code: &str) -> Result<Vec<CompilationError>, Error> {
         let (user_code, nodes) = CodeBlock::from_original_user_code(code);
-        let (non_command_code, state) = self.prepare_for_analysis(user_code);
+        let (non_command_code, state, errors) = self.prepare_for_analysis(user_code)?;
+        if !errors.is_empty() {
+            // If we've got errors while preparing, probably due to bad :dep commands, then there's
+            // no point running cargo check as it'd just give us additional follow-on errors which
+            // would be confusing.
+            return Ok(errors);
+        }
         self.eval_context.check(non_command_code, state, &nodes)
     }
 
@@ -163,26 +169,31 @@ Panic detected. Here's some useful information if you're filing a bug report.
         if let Some((segment, offset)) = user_code.command_containing_user_offset(position) {
             return self.command_completions(segment, offset, position);
         }
-        let (non_command_code, state) = self.prepare_for_analysis(user_code);
+        let (non_command_code, state, _errors) = self.prepare_for_analysis(user_code)?;
         self.eval_context
             .completions(non_command_code, state, &nodes, position)
     }
 
-    fn prepare_for_analysis(&self, user_code: CodeBlock) -> (CodeBlock, ContextState) {
+    fn prepare_for_analysis(
+        &self,
+        user_code: CodeBlock,
+    ) -> Result<(CodeBlock, ContextState, Vec<CompilationError>)> {
         let mut non_command_code = CodeBlock::new();
         let mut state = self.eval_context.state();
+        let mut errors = Vec::new();
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
                 if command.command == ":dep" {
-                    // Best-effort. If anything goes wrong here, just ignore it.
-                    let _ = self.process_dep_command(&mut state, &command.args);
-                    let _ = self.eval_context.write_cargo_toml(&state);
+                    if let Err(error) = self.process_dep_command(&mut state, &command.args) {
+                        errors.push(CompilationError::from_segment(&segment, error.to_string()));
+                    }
+                    self.eval_context.write_cargo_toml(&state)?;
                 }
             } else {
                 non_command_code = non_command_code.with_segment(segment);
             }
         }
-        (non_command_code, state)
+        Ok((non_command_code, state, errors))
     }
 
     fn command_completions(
@@ -355,6 +366,24 @@ Panic detected. Here's some useful information if you're filing a bug report.
                         state.error_format(),
                         state.error_format_trait()
                     ))
+                },
+            ),
+            Command::new(
+                ":toolchain",
+                "Set which toolchain to use (e.g. nightly)",
+                |_ctx, state, args| {
+                    if let Some(arg) = args {
+                        state.set_toolchain(&arg);
+                    }
+                    text_output(format!("Toolchain: {}", state.toolchain()))
+                },
+            ),
+            Command::new(
+                ":offline",
+                "Set offline mode when invoking cargo",
+                |_ctx, state, args| {
+                    state.set_offline_mode(args.as_ref().map(String::as_str) == Some("1"));
+                    text_output(format!("Offline mode: {}", state.offline_mode()))
                 },
             ),
             Command::new(

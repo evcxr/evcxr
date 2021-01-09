@@ -962,4 +962,16 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
         )),
         vec!["error 1:28-1:49"]
     );
+
+    // Check that errors adding crates are reported.
+    assert_eq!(
+        strs(&check(
+            &mut ctx,
+            "\
+            :dep this_crate_does_not_exist = \"12.34\"\n\
+            :dep foo = { path = \"/this/path/does/not/exist\" }\
+            "
+        )),
+        vec!["error 1:1-1:41", "error 2:1-2:50"]
+    );
 }

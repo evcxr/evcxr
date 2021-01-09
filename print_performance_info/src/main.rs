@@ -52,7 +52,9 @@ fn main() -> Result<(), evcxr::Error> {
     let (mut ctx, outputs) = EvalContext::new()?;
     send_output(outputs.stderr, io::stdout());
     ctx.set_time_passes(true);
-    ctx.eval("println!(\"41\");", ctx.state())?;
+    let mut state = ctx.state();
+    state.set_toolchain("nightly");
+    ctx.eval("println!(\"41\");", state)?;
     let start = Instant::now();
     let output = ctx.eval("println!(\"42\");", ctx.state())?;
     println!("Total eval time: {}ms", start.elapsed().as_millis());

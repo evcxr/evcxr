@@ -44,6 +44,7 @@ pub struct EvalContext {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Config {
+    pub(crate) crate_dir: PathBuf,
     pub(crate) debug_mode: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
@@ -65,29 +66,38 @@ pub(crate) struct Config {
     pub(crate) time_passes: bool,
     pub(crate) linker: String,
     pub(crate) sccache: Option<PathBuf>,
+    /// Whether to attempt to avoid network access.
+    pub(crate) offline_mode: bool,
+    pub(crate) toolchain: String,
 }
 
-fn create_initial_config() -> Config {
-    let linker = if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
-        "lld".to_owned()
-    } else {
-        "system".to_owned()
-    };
-    Config {
-        debug_mode: false,
-        preserve_vars_on_panic: false,
-        output_format: "{:?}".to_owned(),
-        display_final_expression: true,
-        expand_use_statements: true,
-        opt_level: "2".to_owned(),
-        error_fmt: &ERROR_FORMATS[0],
-        time_passes: false,
-        linker,
-        sccache: None,
+fn create_initial_config(crate_dir: PathBuf) -> Config {
+    let mut config = Config::new(crate_dir);
+    if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
+        config.linker = "lld".to_owned();
     }
+    config
 }
 
 impl Config {
+    pub fn new(crate_dir: PathBuf) -> Self {
+        Config {
+            crate_dir,
+            debug_mode: false,
+            preserve_vars_on_panic: false,
+            output_format: "{:?}".to_owned(),
+            display_final_expression: true,
+            expand_use_statements: true,
+            opt_level: "2".to_owned(),
+            error_fmt: &ERROR_FORMATS[0],
+            time_passes: false,
+            linker: "system".to_owned(),
+            sccache: None,
+            offline_mode: false,
+            toolchain: String::new(),
+        }
+    }
+
     pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
         if enabled {
             if let Ok(path) = which::which("sccache") {
@@ -103,6 +113,19 @@ impl Config {
 
     pub fn sccache(&self) -> bool {
         self.sccache.is_some()
+    }
+
+    pub(crate) fn cargo_command(&self, command_name: &str) -> std::process::Command {
+        let mut command = std::process::Command::new("cargo");
+        if !self.toolchain.is_empty() {
+            command.arg(format!("+{}", self.toolchain));
+        }
+        if self.offline_mode {
+            command.arg("--offline");
+        }
+        command.arg(command_name);
+        command.current_dir(&self.crate_dir);
+        command
     }
 }
 
@@ -209,8 +232,13 @@ impl EvalContext {
             .parent()
             .unwrap()
             .join("testing_runtime");
-        EvalContext::with_subprocess_command(std::process::Command::new(&testing_runtime_path))
-            .unwrap()
+        let (mut context, outputs) =
+            EvalContext::with_subprocess_command(std::process::Command::new(&testing_runtime_path))
+                .unwrap();
+        let mut state = context.state();
+        state.set_offline_mode(true);
+        context.commit_state(state);
+        (context, outputs)
     }
 
     pub fn with_subprocess_command(
@@ -234,9 +262,8 @@ impl EvalContext {
         let (stdout_sender, stdout_receiver) = mpsc::channel();
         let (stderr_sender, stderr_receiver) = mpsc::channel();
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
-        let initial_config = create_initial_config();
-        let initial_state =
-            ContextState::new(module.crate_dir().to_owned(), initial_config.clone());
+        let initial_config = create_initial_config(module.crate_dir().to_owned());
+        let initial_state = ContextState::new(initial_config.clone());
         let mut context = EvalContext {
             _tmpdir: opt_tmpdir,
             committed_state: initial_state,
@@ -284,7 +311,7 @@ impl EvalContext {
         state.config.expand_use_statements = false;
         let user_code = state.apply(user_code, nodes)?;
         let code = state.analysis_code(user_code);
-        self.module.check(&code)
+        self.module.check(&code, &state.config)
     }
 
     /// Evaluates the supplied Rust code.
@@ -404,7 +431,7 @@ impl EvalContext {
     // compiled. Config is preserved.
     pub fn clear(&mut self) -> Result<(), Error> {
         let config = self.committed_state.config.clone();
-        self.committed_state = ContextState::new(self.module.crate_dir().to_owned(), config);
+        self.committed_state = ContextState::new(config);
         self.restart_child_process()
     }
 
@@ -931,7 +958,6 @@ enum CompilationMode {
 /// succeeds, we keep the modified state, if it fails, we revert to the old state.
 #[derive(Clone, Debug)]
 pub struct ContextState {
-    crate_dir: PathBuf,
     items_by_name: HashMap<String, CodeBlock>,
     unnamed_items: Vec<CodeBlock>,
     pub(crate) external_deps: HashMap<String, ExternalCrate>,
@@ -952,9 +978,8 @@ pub struct ContextState {
 }
 
 impl ContextState {
-    fn new(crate_dir: PathBuf, config: Config) -> ContextState {
+    fn new(config: Config) -> ContextState {
         ContextState {
-            crate_dir,
             items_by_name: HashMap::new(),
             unnamed_items: vec![],
             external_deps: HashMap::new(),
@@ -974,6 +999,10 @@ impl ContextState {
 
     pub fn set_time_passes(&mut self, value: bool) {
         self.config.time_passes = value;
+    }
+
+    pub fn set_offline_mode(&mut self, value: bool) {
+        self.config.offline_mode = value;
     }
 
     pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
@@ -1021,6 +1050,10 @@ impl ContextState {
         self.config.preserve_vars_on_panic
     }
 
+    pub fn offline_mode(&mut self) -> bool {
+        self.config.offline_mode
+    }
+
     pub fn set_preserve_vars_on_panic(&mut self, value: bool) {
         self.config.preserve_vars_on_panic = value;
     }
@@ -1052,11 +1085,26 @@ impl ContextState {
         self.config.output_format = output_format;
     }
 
+    pub fn set_toolchain(&mut self, value: &str) {
+        self.config.toolchain = value.to_owned();
+    }
+
+    pub fn toolchain(&mut self) -> &str {
+        &self.config.toolchain
+    }
+
     /// Adds a crate dependency with the specified name and configuration.
-    pub fn add_dep(&mut self, name: &str, config: &str) -> Result<(), Error> {
+    pub fn add_dep(&mut self, dep: &str, dep_config: &str) -> Result<(), Error> {
+        // Avoid repeating dep validation once we're already added it.
+        if let Some(existing) = self.external_deps.get(dep) {
+            if existing.config == dep_config {
+                return Ok(());
+            }
+        }
+        crate::cargo_metadata::validate_dep(dep, dep_config, &self.config)?;
         self.external_deps.insert(
-            name.to_owned(),
-            ExternalCrate::new(name.to_owned(), config.to_owned())?,
+            dep.to_owned(),
+            ExternalCrate::new(dep.to_owned(), dep_config.to_owned())?,
         );
         Ok(())
     }
@@ -1064,7 +1112,7 @@ impl ContextState {
     /// Clears fields that aren't useful for inclusion in bug reports and which might give away
     /// things like usernames.
     pub(crate) fn clear_non_debug_relevant_fields(&mut self) {
-        self.crate_dir = PathBuf::from("redacted");
+        self.config.crate_dir = PathBuf::from("redacted");
         if self.config.sccache.is_some() {
             self.config.sccache = Some(PathBuf::from("redacted"));
         }
@@ -1524,7 +1572,7 @@ impl ContextState {
 
     fn dependency_lib_names(&self) -> Result<Vec<String>> {
         use crate::cargo_metadata;
-        cargo_metadata::get_library_names(&self.crate_dir)
+        cargo_metadata::get_library_names(&self.config)
     }
 
     fn record_new_locals(&mut self, pat: ast::Pat, opt_ty: Option<ast::Type>) {

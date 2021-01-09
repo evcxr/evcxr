@@ -14,20 +14,21 @@
 
 use anyhow::{bail, Context, Result};
 use json::{self, JsonValue};
+use regex::Regex;
 use std;
 use std::collections::HashMap;
-use std::path::Path;
+
+use crate::eval_context::Config;
 
 /// Returns the library names for the direct dependencies of the crate rooted at
 /// the specified path.
-pub(crate) fn get_library_names(crate_dir: &Path) -> Result<Vec<String>> {
-    let output = std::process::Command::new("cargo")
-        .arg("metadata")
+pub(crate) fn get_library_names(config: &Config) -> Result<Vec<String>> {
+    let output = config
+        .cargo_command("metadata")
         .arg("--format-version")
         .arg("1")
-        .current_dir(crate_dir)
         .output()
-        .with_context(|| format!("Error running cargo metadata '{:?}'", crate_dir))?;
+        .with_context(|| "Error running cargo metadata")?;
     if output.status.success() {
         library_names_from_metadata(std::str::from_utf8(&output.stdout)?)
     } else {
@@ -36,6 +37,50 @@ pub(crate) fn get_library_names(crate_dir: &Path) -> Result<Vec<String>> {
             std::str::from_utf8(&output.stdout)?,
             std::str::from_utf8(&output.stderr)?,
         )
+    }
+}
+
+pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Result<()> {
+    std::fs::write(
+        config.crate_dir.join("Cargo.toml"),
+        format!(
+            r#"
+    [package]
+    name = "evcxr_dummy_validate_dep"
+    version = "0.0.1"
+    edition = "2018"
+
+    [lib]
+    path = "lib.rs"
+
+    [dependencies]
+    {} = {}
+    "#,
+            dep, dep_config
+        ),
+    )?;
+    let mut cmd = config.cargo_command("metadata");
+    let output = cmd.arg("-q").arg("--format-version=1").output()?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        lazy_static! {
+            static ref IGNORED_LINES_PATTERN: Regex =
+                Regex::new("required by package `evcxr_dummy_validate_dep.*").unwrap();
+        }
+        lazy_static! {
+            static ref PRIMARY_ERROR_PATTERN: Regex =
+                Regex::new("(.*) as a dependency of package `[^`]*`").unwrap();
+        }
+        let mut message = Vec::new();
+        for line in String::from_utf8_lossy(&output.stderr).lines() {
+            if let Some(captures) = PRIMARY_ERROR_PATTERN.captures(line) {
+                message.push(captures[1].to_string());
+            } else if !IGNORED_LINES_PATTERN.is_match(line) {
+                message.push(line.to_owned());
+            }
+        }
+        bail!(message.join("\n"));
     }
 }
 
@@ -86,6 +131,8 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    use crate::eval_context::Config;
+
     use super::{get_library_names, library_names_from_metadata};
     use anyhow::Result;
     use std::path::Path;
@@ -137,7 +184,7 @@ mod tests {
             &format!(r#"crate1 = {{ path = "{}" }}"#, path_to_string(&crate1)),
         )?;
         assert_eq!(
-            get_library_names(&crate2).unwrap(),
+            get_library_names(&Config::new(crate2.to_owned())).unwrap(),
             vec!["crate1".to_owned()]
         );
         Ok(())
@@ -159,7 +206,7 @@ mod tests {
         )?;
         // Make sure that the problematic feature "no_such_feature" is mentioned
         // somewhere in the error message.
-        assert!(get_library_names(&crate2)
+        assert!(get_library_names(&Config::new(crate2.to_owned()))
             .unwrap_err()
             .to_string()
             .contains("no_such_feature"));
