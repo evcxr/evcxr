@@ -21,14 +21,6 @@ define([
 ], function (requireJs, Jupyter, CodeMirror, events) {
     "use strict";
 
-    function codeChanged(editor, change) {
-        window.editor1 = editor;
-        window.console.log(editor);
-        window.console.log(change);
-
-        let text = editor.getValue();
-    }
-
     function initCell(cell) {
         // It could be nice to show errors and warnings in the gutter as well.
         // We can enable that with the following line, however unfortunately
@@ -58,7 +50,6 @@ define([
                 code: text,
             });
             cargoCheckComm.on_msg(function (msg) {
-                window.console.log(msg);
                 let found = [];
                 for (let problem of msg.content.data.problems) {
                     found.push({
@@ -68,7 +59,6 @@ define([
                         message: problem.message,
                     });
                 }
-                window.console.log(found);
                 resolve(found);
             });
         });
