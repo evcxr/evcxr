@@ -953,4 +953,13 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
         strs(&check(&mut ctx, "use std::foo::Bar;")),
         vec!["error 1:10-1:13"]
     );
+
+    // Make sure that we can report errors resulting from macro expansions.
+    assert_eq!(
+        strs(&check(
+            &mut ctx,
+            r#"let mut s = String::new(); write!(&mut s, "foo").unwrap();"#
+        )),
+        vec!["error 1:28-1:49"]
+    );
 }

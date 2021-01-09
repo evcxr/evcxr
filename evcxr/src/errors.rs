@@ -349,6 +349,7 @@ impl SpannedMessage {
                     if let Some(label) = span_json["label"].as_str() {
                         message.label = label.to_owned();
                     }
+                    message.is_primary |= span_json["is_primary"].as_bool().unwrap_or(false);
                     return message;
                 }
             }
