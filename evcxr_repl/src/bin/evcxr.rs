@@ -105,6 +105,8 @@ impl Repl {
             if error.is_from_user_code() {
                 for spanned_message in error.spanned_messages() {
                     if let Some(span) = &spanned_message.span {
+                        let start_column;
+                        let end_column;
                         if source_lines.len() > 1 {
                             // for multi line source code, print the lines
                             if last_span_lines != &spanned_message.lines {
@@ -113,17 +115,21 @@ impl Repl {
                                 }
                             }
                             last_span_lines = &spanned_message.lines;
+                            start_column = span.output_start_column;
+                            end_column = span.output_end_column;
                         } else {
                             print!("{}", " ".repeat(PROMPT.len()));
+                            start_column = span.start_column;
+                            end_column = span.end_column;
                         }
-                        print!("{}", " ".repeat(span.start_column - 1));
+                        print!("{}", " ".repeat(start_column - 1));
 
-                        // considering spans can cover multile lines,
+                        // considering spans can cover multiple lines,
                         // it could be that end_column is less than start_column.
-                        let span_diff = if span.start_column < span.end_column {
-                            span.end_column - span.start_column
+                        let span_diff = if start_column < end_column {
+                            end_column - start_column
                         } else {
-                            span.start_column - span.end_column
+                            start_column - end_column
                         };
                         let carrots = "^".repeat(span_diff);
                         print!("{}", carrots.bright_red());

@@ -406,10 +406,10 @@ impl Server {
                             }
                             if let Some(span) = &spanned_message.span {
                                 let mut carrots = String::new();
-                                for _ in 1..span.start_column {
+                                for _ in 1..span.output_start_column {
                                     carrots.push(' ');
                                 }
-                                for _ in span.start_column..span.end_column {
+                                for _ in span.output_start_column..span.output_end_column {
                                     carrots.push('^');
                                 }
                                 traceback.push(format!(

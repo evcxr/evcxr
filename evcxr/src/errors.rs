@@ -267,17 +267,29 @@ fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<Spann
     output_spans
 }
 
+#[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct Span {
+    /// 1-based line number in the original user code on which the span starts.
     pub start_line: usize,
+    /// 1-based column number in the original user code on which the span starts.
     pub start_column: usize,
+    /// 1-based line number in the original user code on which the span ends (inclusive).
     pub end_line: usize,
+    /// 1-based column number in the original user code on which the span ends (inclusive).
     pub end_column: usize,
+
+    /// 1-based column number in the output code on which the span starts.
+    pub output_start_column: usize,
+    /// 1-based column number in the output code on which the span ends (inclusive).
+    pub output_end_column: usize,
 }
 
 #[derive(Debug, Clone)]
 pub struct SpannedMessage {
     pub span: Option<Span>,
+    /// Output lines relevant to the message. If using these together with column numbers, be sure
+    /// to use output_start_column and output_end_column.
     pub lines: Vec<String>,
     pub label: String,
     pub is_primary: bool,
@@ -328,6 +340,8 @@ impl SpannedMessage {
                             } else {
                                 0
                             }),
+                        output_start_column: start_column,
+                        output_end_column: end_column,
                     })
                 } else {
                     // Spans within generated code won't mean anything to the user, suppress
