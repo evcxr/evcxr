@@ -182,8 +182,14 @@ impl CompilationError {
         &self.spanned_messages[..]
     }
 
+    /// Returns the primary spanned message, or if there is no primary spanned message, perhaps
+    /// because it was reported in generated code, so go filtered out, then returns the first
+    /// spanned message, if any.
     pub fn primary_spanned_message(&self) -> Option<&SpannedMessage> {
-        self.spanned_messages.iter().find(|msg| msg.is_primary)
+        match self.spanned_messages.iter().find(|msg| msg.is_primary) {
+            Some(x) => Some(x),
+            None => self.spanned_messages().first(),
+        }
     }
 
     pub fn level(&self) -> &str {
