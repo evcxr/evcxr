@@ -1,7 +1,7 @@
 [package]
 name = "print_performance_info"
 version = "0.1.0"
-authors = ["David Lattimore <dml@google.com>"]
+authors = ["The Evcxr Authors"]
 edition = "2018"
 
 [dependencies]

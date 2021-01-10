@@ -5,10 +5,7 @@ license = "Apache-2.0"
 description = "A REPL for Rust"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
-authors = [
-    "David Lattimore <dvdlttmr@gmail.com>",
-    "Diogo Sousa <diogogsousa@gmail.com>",
-]
+authors = ["The Evcxr Authors"]
 edition = "2018"
 
 [dependencies]

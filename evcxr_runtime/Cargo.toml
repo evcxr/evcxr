@@ -5,10 +5,7 @@ license = "Apache-2.0"
 description = "Runtime core for the evcxr crate"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
-authors = [
-    "David Lattimore <dvdlttmr@gmail.com>",
-    "David Bernard <david.bernard.31@gmail.com>",
-]
+authors = ["The Evcxr Authors"]
 
 [dependencies]
 base64 = { version = "0.13.0", optional = true }
