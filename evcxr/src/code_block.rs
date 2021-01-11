@@ -42,6 +42,12 @@ impl Segment {
     }
 }
 
+/// Information about the code the user supplied.
+pub(crate) struct UserCodeInfo<'a> {
+    pub(crate) nodes: Vec<SyntaxNode>,
+    pub(crate) original_lines: Vec<&'a str>,
+}
+
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct CommandCall {
     pub(crate) command: String,
@@ -101,8 +107,10 @@ fn num_lines(code: &str) -> usize {
 }
 
 pub(crate) fn count_columns(code: &str) -> usize {
-    // Currently we use characters here, not graphemes because that seems to be what works for
-    // lint.js used by the Jupyter kernel.
+    // We use characters here, not graphemes because seems to be how columns are counted by the rust
+    // compiler, which we need to be consistent with. It also works well with the inline error
+    // reporting in Jupyter notebook. It doesn't work so well for the terminal, which needs
+    // graphemes, but that is handled by the REPL.
     code.chars().count()
 }
 
@@ -182,7 +190,7 @@ impl CodeBlock {
         self.with(CodeKind::OtherUserCode, user_code)
     }
 
-    pub(crate) fn from_original_user_code(user_code: &str) -> (CodeBlock, Vec<SyntaxNode>) {
+    pub(crate) fn from_original_user_code(user_code: &str) -> (CodeBlock, UserCodeInfo) {
         use regex::Regex;
         lazy_static! {
             static ref COMMAND_RE: Regex = Regex::new("^ *(:[^ ]*)( +(.*))?$").unwrap();
@@ -245,7 +253,13 @@ impl CodeBlock {
         for (index, segment) in code_block.segments.iter_mut().enumerate() {
             segment.sequence = Some(index);
         }
-        (code_block, nodes)
+        (
+            code_block,
+            UserCodeInfo {
+                nodes,
+                original_lines: user_code.lines().collect(),
+            },
+        )
     }
 
     pub(crate) fn command_containing_user_offset(
@@ -348,14 +362,6 @@ impl CodeBlock {
             current_line_number += segment.num_lines;
         }
         (&CodeKind::Unknown, 0)
-    }
-
-    pub(crate) fn get_lines(&self) -> Vec<String> {
-        let mut lines = Vec::new();
-        for segment in &self.segments {
-            lines.extend(segment.code.lines().map(str::to_owned));
-        }
-        lines
     }
 
     pub(crate) fn apply_fallback(&mut self, fallback: &CodeBlock) {

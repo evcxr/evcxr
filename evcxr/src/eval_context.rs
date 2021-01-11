@@ -12,13 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{bail, CompilationError, Error};
 use crate::evcxr_internal_runtime;
 use crate::item;
 use crate::module::{Module, SoFile};
 use crate::runtime;
 use crate::rust_analyzer::{Completions, RustAnalyzer, VariableInfo};
 use crate::{child_process::ChildProcess, use_trees::Import};
+use crate::{
+    code_block::UserCodeInfo,
+    errors::{bail, CompilationError, Error},
+};
 use crate::{
     code_block::{CodeBlock, CodeKind, Segment},
     errors::SpannedMessage,
@@ -300,21 +303,22 @@ impl EvalContext {
 
     /// Evaluates the supplied Rust code.
     pub fn eval(&mut self, code: &str, state: ContextState) -> Result<EvalOutputs, Error> {
-        let (user_code, nodes) = CodeBlock::from_original_user_code(code);
-        self.eval_with_callbacks(user_code, state, &nodes, &mut EvalCallbacks::default())
+        let (user_code, code_info) = CodeBlock::from_original_user_code(code);
+        self.eval_with_callbacks(user_code, state, &code_info, &mut EvalCallbacks::default())
     }
 
     pub(crate) fn check(
         &mut self,
         user_code: CodeBlock,
         mut state: ContextState,
-        nodes: &[SyntaxNode],
+        code_info: &UserCodeInfo,
     ) -> Result<Vec<CompilationError>, Error> {
         state.config.display_final_expression = false;
         state.config.expand_use_statements = false;
-        let user_code = state.apply(user_code, nodes)?;
+        let user_code = state.apply(user_code, &code_info.nodes)?;
         let code = state.analysis_code(user_code.clone());
-        Ok(state.apply_custom_errors(self.module.check(&code, &state.config)?, &user_code))
+        let errors = self.module.check(&code, &state.config)?;
+        Ok(state.apply_custom_errors(errors, &user_code, code_info))
     }
 
     /// Evaluates the supplied Rust code.
@@ -322,7 +326,7 @@ impl EvalContext {
         &mut self,
         user_code: CodeBlock,
         mut state: ContextState,
-        nodes: &[SyntaxNode],
+        code_info: &UserCodeInfo,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
         if user_code.is_empty()
@@ -334,7 +338,7 @@ impl EvalContext {
             return Ok(EvalOutputs::default());
         }
         let mut phases = PhaseDetailsBuilder::new();
-        let code_out = state.apply(user_code.clone(), nodes)?;
+        let code_out = state.apply(user_code.clone(), &code_info.nodes)?;
 
         let mut outputs = match self.run_statements(code_out, &mut state, &mut phases, callbacks) {
             error @ Err(Error::ChildProcessTerminated(_)) => {
@@ -342,7 +346,7 @@ impl EvalContext {
                 return error;
             }
             Err(Error::CompilationErrors(errors)) => {
-                let mut errors = state.apply_custom_errors(errors, &user_code);
+                let mut errors = state.apply_custom_errors(errors, &user_code, code_info);
                 // If we have any errors in user code then remove all errors that aren't from user
                 // code.
                 if errors.iter().any(|error| error.is_from_user_code()) {
@@ -1150,10 +1154,15 @@ impl ContextState {
         &self,
         errors: Vec<CompilationError>,
         user_code: &CodeBlock,
+        code_info: &UserCodeInfo,
     ) -> Vec<CompilationError> {
         errors
             .into_iter()
             .filter_map(|error| self.customize_error(error, user_code))
+            .map(|mut error| {
+                error.fill_lines(code_info);
+                error
+            })
             .collect()
     }
 

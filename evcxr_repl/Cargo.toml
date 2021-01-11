@@ -16,3 +16,4 @@ lazy_static = "1.4.0"
 regex = { version = "1.4.1", default-features = false, features = [ "std" ] }
 structopt = "0.3"
 unicode-xid = "0.2"
+unicode-segmentation = "1.7.1"

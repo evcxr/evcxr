@@ -569,6 +569,7 @@ dependencies = [
  "regex",
  "rustyline",
  "structopt",
+ "unicode-segmentation",
  "unicode-xid",
 ]
 

@@ -62,7 +62,7 @@ impl CommandContext {
     }
 
     pub fn check(&mut self, code: &str) -> Result<Vec<CompilationError>, Error> {
-        let (user_code, nodes) = CodeBlock::from_original_user_code(code);
+        let (user_code, code_info) = CodeBlock::from_original_user_code(code);
         let (non_command_code, state, errors) = self.prepare_for_analysis(user_code)?;
         if !errors.is_empty() {
             // If we've got errors while preparing, probably due to bad :dep commands, then there's
@@ -70,7 +70,7 @@ impl CommandContext {
             // would be confusing.
             return Ok(errors);
         }
-        self.eval_context.check(non_command_code, state, &nodes)
+        self.eval_context.check(non_command_code, state, &code_info)
     }
 
     pub fn variables_and_types(&self) -> impl Iterator<Item = (&str, &str)> {
@@ -121,7 +121,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
         let start = Instant::now();
         let mut state = self.eval_context.state();
         let mut non_command_code = CodeBlock::new();
-        let (user_code, nodes) = CodeBlock::from_original_user_code(to_run);
+        let (user_code, code_info) = CodeBlock::from_original_user_code(to_run);
         for segment in user_code.segments {
             if let CodeKind::Command(command) = &segment.kind {
                 eval_outputs.merge(self.execute_command(
@@ -136,7 +136,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
         }
         let result =
             self.eval_context
-                .eval_with_callbacks(non_command_code, state, &nodes, callbacks);
+                .eval_with_callbacks(non_command_code, state, &code_info, callbacks);
         let duration = start.elapsed();
         match result {
             Ok(m) => {
@@ -167,13 +167,13 @@ Panic detected. Here's some useful information if you're filing a bug report.
     /// completions. It also assumes exclusive access to those resources. However there should be
     /// any visible side effects.
     pub fn completions(&mut self, src: &str, position: usize) -> Result<Completions> {
-        let (user_code, nodes) = CodeBlock::from_original_user_code(src);
+        let (user_code, code_info) = CodeBlock::from_original_user_code(src);
         if let Some((segment, offset)) = user_code.command_containing_user_offset(position) {
             return self.command_completions(segment, offset, position);
         }
         let (non_command_code, state, _errors) = self.prepare_for_analysis(user_code)?;
         self.eval_context
-            .completions(non_command_code, state, &nodes, position)
+            .completions(non_command_code, state, &code_info.nodes, position)
     }
 
     fn prepare_for_analysis(

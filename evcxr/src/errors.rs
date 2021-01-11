@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::code_block::{count_columns, CodeBlock, CodeKind, CommandCall, Segment};
+use crate::code_block::{count_columns, CodeBlock, CodeKind, CommandCall, Segment, UserCodeInfo};
 use json::{self, JsonValue};
 use ra_ap_ide::{TextRange, TextSize};
 use regex::Regex;
@@ -120,6 +120,18 @@ impl CompilationError {
             json,
             code_origins: code_origins.into_iter().cloned().collect(),
         })
+    }
+
+    pub(crate) fn fill_lines(&mut self, code_info: &UserCodeInfo) {
+        for spanned_message in self.spanned_messages.iter_mut() {
+            if let Some(span) = &spanned_message.span {
+                spanned_message.lines.extend(
+                    code_info.original_lines[span.start_line - 1..span.end_line]
+                        .iter()
+                        .map(|line| (*line).to_owned()),
+                );
+            }
+        }
     }
 
     /// Returns a synthesized error that spans the specified portion of `segment`.
@@ -286,9 +298,8 @@ fn sanitize_message(message: &str) -> String {
 fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<SpannedMessage> {
     let mut output_spans = Vec::new();
     if let JsonValue::Array(spans) = &json["spans"] {
-        let all_lines = code_block.get_lines();
         for span_json in spans {
-            output_spans.push(SpannedMessage::from_json(span_json, &all_lines, code_block));
+            output_spans.push(SpannedMessage::from_json(span_json, code_block));
         }
     }
     if output_spans.iter().any(|s| s.span.is_some()) {
@@ -303,19 +314,16 @@ fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<Spann
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
 pub struct Span {
-    /// 1-based line number in the original user code on which the span starts.
+    /// 1-based line number in the original user code on which the span starts (inclusive).
     pub start_line: usize,
-    /// 1-based column number in the original user code on which the span starts.
+    /// 1-based column (character) number in the original user code on which the span starts
+    /// (inclusive).
     pub start_column: usize,
     /// 1-based line number in the original user code on which the span ends (inclusive).
     pub end_line: usize,
-    /// 1-based column number in the original user code on which the span ends (inclusive).
+    /// 1-based column (character) number in the original user code on which the span ends
+    /// (exclusive).
     pub end_column: usize,
-
-    /// 1-based column number in the output code on which the span starts.
-    pub output_start_column: usize,
-    /// 1-based column number in the output code on which the span ends (inclusive).
-    pub output_end_column: usize,
 }
 
 impl Span {
@@ -329,8 +337,6 @@ impl Span {
             start_column,
             end_line: command.line_number,
             end_column,
-            output_start_column: start_column,
-            output_end_column: end_column,
         }
     }
 
@@ -348,15 +354,11 @@ impl Span {
                 meta.column_offset,
                 meta.start_line,
             );
-            let (_, output_start_column) = line_and_column(&segment.code, range.start(), 0, 1);
-            let (_, output_end_column) = line_and_column(&segment.code, range.end(), 0, 1);
             Some(Span {
                 start_line,
                 start_column,
                 end_line,
                 end_column,
-                output_start_column,
-                output_end_column,
             })
         } else {
             None
@@ -389,37 +391,20 @@ fn line_and_column(
 #[derive(Debug, Clone)]
 pub struct SpannedMessage {
     pub span: Option<Span>,
-    /// Output lines relevant to the message. If using these together with column numbers, be sure
-    /// to use output_start_column and output_end_column.
+    /// Output lines relevant to the message.
     pub lines: Vec<String>,
     pub label: String,
     pub is_primary: bool,
 }
 
 impl SpannedMessage {
-    fn from_json(
-        span_json: &JsonValue,
-        all_lines: &[String],
-        code_block: &CodeBlock,
-    ) -> SpannedMessage {
-        let mut lines = Vec::new();
-        let span = if let (
-            Some(file_name),
-            Some(start_column),
-            Some(end_column),
-            Some(start_line),
-            Some(end_line),
-        ) = (
+    fn from_json(span_json: &JsonValue, code_block: &CodeBlock) -> SpannedMessage {
+        let span = if let (Some(file_name), Some(start_column), Some(end_column)) = (
             span_json["file_name"].as_str(),
             span_json["column_start"].as_usize(),
             span_json["column_end"].as_usize(),
-            span_json["line_start"].as_usize(),
-            span_json["line_end"].as_usize(),
         ) {
             if file_name.ends_with("lib.rs") {
-                if start_line >= 1 && end_line <= all_lines.len() {
-                    lines.extend(all_lines[start_line - 1..end_line].iter().cloned());
-                }
                 let origins = get_code_origins_for_span(span_json, code_block);
                 if let (
                     Some((CodeKind::OriginalUserCode(start), start_line_offset)),
@@ -441,8 +426,6 @@ impl SpannedMessage {
                             } else {
                                 0
                             }),
-                        output_start_column: start_column,
-                        output_end_column: end_column,
                     })
                 } else {
                     // Spans within generated code won't mean anything to the user, suppress
@@ -458,8 +441,7 @@ impl SpannedMessage {
         if span.is_none() {
             let expansion_span_json = &span_json["expansion"]["span"];
             if !expansion_span_json.is_empty() {
-                let mut message =
-                    SpannedMessage::from_json(expansion_span_json, all_lines, code_block);
+                let mut message = SpannedMessage::from_json(expansion_span_json, code_block);
                 if message.span.is_some() {
                     if let Some(label) = span_json["label"].as_str() {
                         message.label = label.to_owned();
@@ -471,7 +453,7 @@ impl SpannedMessage {
         }
         SpannedMessage {
             span,
-            lines,
+            lines: Vec::new(),
             label: span_json["label"]
                 .as_str()
                 .map(|s| s.to_owned())

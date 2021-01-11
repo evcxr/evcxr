@@ -21,6 +21,7 @@ use std::fs;
 use std::io;
 use std::sync::{mpsc, Arc, Mutex};
 use structopt::StructOpt;
+use unicode_segmentation;
 
 use evcxr_repl::EvcxrRustylineHelper;
 
@@ -105,8 +106,19 @@ impl Repl {
             if error.is_from_user_code() {
                 for spanned_message in error.spanned_messages() {
                     if let Some(span) = &spanned_message.span {
-                        let start_column;
-                        let end_column;
+                        let mut start_column = character_column_to_grapheme_number(
+                            span.start_column - 1,
+                            &spanned_message.lines[0],
+                        );
+                        let mut end_column = character_column_to_grapheme_number(
+                            span.end_column - 1,
+                            &spanned_message.lines.last().unwrap(),
+                        );
+                        // Considering spans can cover multiple lines, it could be that end_column
+                        // is less than start_column.
+                        if end_column < start_column {
+                            std::mem::swap(&mut start_column, &mut end_column);
+                        }
                         if source_lines.len() > 1 {
                             // for multi line source code, print the lines
                             if last_span_lines != &spanned_message.lines {
@@ -115,22 +127,14 @@ impl Repl {
                                 }
                             }
                             last_span_lines = &spanned_message.lines;
-                            start_column = span.output_start_column;
-                            end_column = span.output_end_column;
                         } else {
                             print!("{}", " ".repeat(PROMPT.len()));
-                            start_column = span.start_column;
-                            end_column = span.end_column;
                         }
-                        print!("{}", " ".repeat(start_column - 1));
+                        print!("{}", " ".repeat(start_column));
 
-                        // considering spans can cover multiple lines,
-                        // it could be that end_column is less than start_column.
-                        let span_diff = if start_column < end_column {
-                            end_column - start_column
-                        } else {
-                            start_column - end_column
-                        };
+                        // Guaranteed not to underflow since if they were out-of-order, we swapped
+                        // them above.
+                        let span_diff = end_column - start_column;
                         let carrots = "^".repeat(span_diff);
                         print!("{}", carrots.bright_red());
                         println!(" {}", spanned_message.label.bright_blue());
@@ -156,6 +160,23 @@ impl Repl {
             }
         }
     }
+}
+
+/// Returns a 0-based grapheme index corresponding to the supplied 0-based character column.
+fn character_column_to_grapheme_number(character_column: usize, line: &str) -> usize {
+    let mut characters_remaining = character_column;
+    let mut grapheme_index = 0;
+    for (_byte_offset, chars) in
+        unicode_segmentation::UnicodeSegmentation::grapheme_indices(line, true)
+    {
+        let num_chars = chars.chars().count();
+        if characters_remaining < num_chars {
+            break;
+        }
+        characters_remaining -= num_chars;
+        grapheme_index += 1;
+    }
+    grapheme_index
 }
 
 fn readline_direct(prompt: &str) -> rustyline::Result<String> {
@@ -274,4 +295,26 @@ fn parse_edit_mode(src: &str) -> Result<EditMode, &str> {
         _ => return Err("only 'vi' and 'emacs' are supported"),
     };
     Ok(mode)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::character_column_to_grapheme_number;
+
+    #[test]
+    fn test_character_column_to_grapheme_number() {
+        assert_eq!(character_column_to_grapheme_number(0, ""), 0);
+        assert_eq!(character_column_to_grapheme_number(0, "aaa"), 0);
+        assert_eq!(character_column_to_grapheme_number(1, "aaa"), 1);
+        assert_eq!(character_column_to_grapheme_number(2, "aaa"), 2);
+        assert_eq!(character_column_to_grapheme_number(3, "aaa"), 3);
+        assert_eq!(character_column_to_grapheme_number(0, "äää"), 0);
+        assert_eq!(character_column_to_grapheme_number(1, "äää"), 0);
+        assert_eq!(character_column_to_grapheme_number(2, "äää"), 1);
+        assert_eq!(character_column_to_grapheme_number(3, "äää"), 1);
+        assert_eq!(character_column_to_grapheme_number(4, "äää"), 2);
+        assert_eq!(character_column_to_grapheme_number(5, "äää"), 2);
+        assert_eq!(character_column_to_grapheme_number(6, "äää"), 3);
+        assert_eq!(character_column_to_grapheme_number(7, "äää"), 3);
+    }
 }

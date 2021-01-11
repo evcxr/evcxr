@@ -518,7 +518,7 @@ fn error_from_macro_expansion() {
             // There's only one line on which we should be reporting errors...
             assert_eq!(
                 lines.into_iter().collect::<Vec<_>>(),
-                vec!["s.push_str(format!(\"\"));"]
+                vec!["let mut s = String::new(); s.push_str(format!(\"\"));"]
             );
         }
         x => panic!("Unexpected result: {:?}", x),
