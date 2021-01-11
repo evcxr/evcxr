@@ -23,6 +23,9 @@ pub(crate) struct Segment {
     pub(crate) kind: CodeKind,
     pub(crate) code: String,
     num_lines: usize,
+    /// Only present for original user code. Provides ordering and identity to the segments that
+    /// came from the user.
+    pub(crate) sequence: Option<usize>,
 }
 
 impl Segment {
@@ -34,6 +37,7 @@ impl Segment {
             kind,
             num_lines: num_lines(&code),
             code,
+            sequence: None,
         }
     }
 }
@@ -96,6 +100,12 @@ fn num_lines(code: &str) -> usize {
     code.chars().filter(|ch| *ch == '\n').count()
 }
 
+pub(crate) fn count_columns(code: &str) -> usize {
+    // Currently we use characters here, not graphemes because that seems to be what works for
+    // lint.js used by the Jupyter kernel.
+    code.chars().count()
+}
+
 /// Information about some code that the user supplied.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) struct UserCodeMetadata {
@@ -142,6 +152,12 @@ impl CodeBlock {
 
     pub(crate) fn is_empty(&self) -> bool {
         self.segments.is_empty()
+    }
+
+    pub(crate) fn segment_with_index(&self, index: usize) -> Option<&Segment> {
+        self.segments
+            .iter()
+            .find(|segment| segment.sequence == Some(index))
     }
 
     pub(crate) fn with_segment(mut self, segment: Segment) -> Self {
@@ -211,12 +227,7 @@ impl CodeBlock {
                         current_line = lines.next().unwrap();
                     }
                     let byte_offset = code.as_ptr() as usize - current_line.as_ptr() as usize;
-                    let column_offset =
-                        unicode_segmentation::UnicodeSegmentation::grapheme_indices(
-                            &current_line[..byte_offset],
-                            true,
-                        )
-                        .count();
+                    let column_offset = count_columns(&current_line[..byte_offset]);
                     code_block = code_block.with(
                         CodeKind::OriginalUserCode(UserCodeMetadata {
                             start_byte: start_byte + non_command_start_byte,
@@ -230,6 +241,9 @@ impl CodeBlock {
                 }
                 break;
             }
+        }
+        for (index, segment) in code_block.segments.iter_mut().enumerate() {
+            segment.sequence = Some(index);
         }
         (code_block, nodes)
     }

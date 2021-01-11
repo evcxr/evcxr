@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::code_block::{CodeBlock, CodeKind};
-use crate::crate_config::ExternalCrate;
 use crate::errors::{bail, CompilationError, Error};
 use crate::evcxr_internal_runtime;
 use crate::item;
@@ -21,10 +19,15 @@ use crate::module::{Module, SoFile};
 use crate::runtime;
 use crate::rust_analyzer::{Completions, RustAnalyzer, VariableInfo};
 use crate::{child_process::ChildProcess, use_trees::Import};
+use crate::{
+    code_block::{CodeBlock, CodeKind, Segment},
+    errors::SpannedMessage,
+};
+use crate::{crate_config::ExternalCrate, errors::Span};
 use anyhow::Result;
+use ra_ap_ide::TextRange;
 use ra_ap_syntax::{ast, AstNode, SyntaxKind, SyntaxNode};
 use regex::Regex;
-use std;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
@@ -310,8 +313,8 @@ impl EvalContext {
         state.config.display_final_expression = false;
         state.config.expand_use_statements = false;
         let user_code = state.apply(user_code, nodes)?;
-        let code = state.analysis_code(user_code);
-        self.module.check(&code, &state.config)
+        let code = state.analysis_code(user_code.clone());
+        Ok(state.apply_custom_errors(self.module.check(&code, &state.config)?, &user_code))
     }
 
     /// Evaluates the supplied Rust code.
@@ -331,15 +334,23 @@ impl EvalContext {
             return Ok(EvalOutputs::default());
         }
         let mut phases = PhaseDetailsBuilder::new();
-        let code_out = state.apply(user_code, nodes)?;
+        let code_out = state.apply(user_code.clone(), nodes)?;
 
         let mut outputs = match self.run_statements(code_out, &mut state, &mut phases, callbacks) {
-            Err(error) => {
-                if let Error::ChildProcessTerminated(_) = error {
-                    self.restart_child_process()?;
-                }
-                return Err(error.without_non_reportable_errors());
+            error @ Err(Error::ChildProcessTerminated(_)) => {
+                self.restart_child_process()?;
+                return error;
             }
+            Err(Error::CompilationErrors(errors)) => {
+                let mut errors = state.apply_custom_errors(errors, &user_code);
+                // If we have any errors in user code then remove all errors that aren't from user
+                // code.
+                if errors.iter().any(|error| error.is_from_user_code()) {
+                    errors.retain(|error| error.is_from_user_code())
+                }
+                return Err(Error::CompilationErrors(errors));
+            }
+            error @ Err(_) => return error,
             Ok(x) => x,
         };
 
@@ -456,6 +467,10 @@ impl EvalContext {
     }
 
     fn commit_state(&mut self, mut state: ContextState) {
+        for variable_state in state.variable_states.values_mut() {
+            // This span only makes sense when the variable is first defined.
+            variable_state.definition_span = None;
+        }
         state.stored_variable_states = state.variable_states.clone();
         state.commit_old_user_code();
         self.committed_state = state;
@@ -608,6 +623,7 @@ impl EvalContext {
                     // If we're preserving copy types, then assume this variable
                     // is copy until we find out it's not.
                     is_copy_type: preserve_vars_on_panic,
+                    definition_span: None,
                 })
                 .type_name = type_name;
         }
@@ -935,6 +951,13 @@ struct VariableState {
     // them from within the catch_unwind block, otherwise any changes made to the variable within
     // the block will be lost.
     is_copy_type: bool,
+    definition_span: Option<UserCodeSpan>,
+}
+
+#[derive(Clone, Debug)]
+struct UserCodeSpan {
+    segment_index: usize,
+    range: TextRange,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -1123,6 +1146,75 @@ impl ContextState {
         }
     }
 
+    fn apply_custom_errors(
+        &self,
+        errors: Vec<CompilationError>,
+        user_code: &CodeBlock,
+    ) -> Vec<CompilationError> {
+        errors
+            .into_iter()
+            .filter_map(|error| self.customize_error(error, user_code))
+            .collect()
+    }
+
+    /// Customizes errors based on their origins.
+    fn customize_error(
+        &self,
+        error: CompilationError,
+        user_code: &CodeBlock,
+    ) -> Option<CompilationError> {
+        for origin in &error.code_origins {
+            if let CodeKind::PackVariable { variable_name } = origin {
+                if let Some(definition_span) = &self.variable_states[variable_name].definition_span
+                {
+                    if let Some(segment) =
+                        user_code.segment_with_index(definition_span.segment_index)
+                    {
+                        if let Some(span) = Span::from_segment(segment, definition_span.range) {
+                            return self.replacement_for_pack_variable_error(
+                                variable_name,
+                                span,
+                                segment,
+                                &error,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        Some(error)
+    }
+
+    fn replacement_for_pack_variable_error(
+        &self,
+        variable_name: &str,
+        variable_span: Span,
+        segment: &Segment,
+        error: &CompilationError,
+    ) -> Option<CompilationError> {
+        let message = match error.code().unwrap_or("") {
+            "E0382" | "E0505" => {
+                // Value used after move. When we go to execute the code, we'll detect this error and
+                // remove the variable so it doesn't get stored.
+                return None;
+            }
+            "E0597" => {
+                format!(
+                    "The variable `{}` contains a reference with a non-static lifetime so can't be persisted",
+                    variable_name
+                )
+            }
+            _ => {
+                return Some(error.clone());
+            }
+        };
+        Some(CompilationError::from_segment_span(
+            segment,
+            SpannedMessage::from_segment_span(segment, variable_span),
+            message,
+        ))
+    }
+
     /// Returns whether transitioning to `new_state` might cause compilation
     /// failures. e.g. if `new_state` has extra dependencies, then we must
     /// return true. If we return false, we're saying that the proposed state
@@ -1160,9 +1252,10 @@ impl ContextState {
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
             .add_all(self.items_code())
             .add_all(self.error_trait_code(true))
+            .generated("fn evcxr_variable_store<T: 'static>(_: T) {}")
             .generated("#[allow(unused_variables)]")
             .generated("fn evcxr_analysis_wrapper(");
-        for (var_name, state) in &self.variable_states {
+        for (var_name, state) in &self.stored_variable_states {
             code = code.generated(format!(
                 "{}{}: {},",
                 if state.is_mut { "mut " } else { "" },
@@ -1172,9 +1265,19 @@ impl ContextState {
         }
         code = code
             .generated(") -> Result<(), EvcxrUserCodeError> {")
-            .add_all(user_code)
-            .generated("Ok(())")
-            .generated("}");
+            .add_all(user_code);
+
+        // Pack variable statements in analysis mode are a lot simpler than in compiled mode. We
+        // just call a function that enforces that the variable doesn't contain any non-static
+        // lifetimes.
+        for (var_name, _var_state) in &self.variable_states {
+            code.pack_variable(
+                var_name.clone(),
+                format!("evcxr_variable_store({});", var_name),
+            );
+        }
+
+        code = code.generated("Ok(())").generated("}");
         code
     }
 
@@ -1442,7 +1545,7 @@ impl ContextState {
             };
             if let Some(let_stmt) = ast::LetStmt::cast(node.clone()) {
                 if let Some(pat) = let_stmt.pat() {
-                    self.record_new_locals(pat, let_stmt.ty());
+                    self.record_new_locals(pat, let_stmt.ty(), &segment, node.text_range());
                     code_out = code_out.with_segment(segment);
                 }
             } else if ast::Expr::can_cast(node.kind()) {
@@ -1580,33 +1683,45 @@ impl ContextState {
         cargo_metadata::get_library_names(&self.config)
     }
 
-    fn record_new_locals(&mut self, pat: ast::Pat, opt_ty: Option<ast::Type>) {
+    fn record_new_locals(
+        &mut self,
+        pat: ast::Pat,
+        opt_ty: Option<ast::Type>,
+        segment: &Segment,
+        let_stmt_range: TextRange,
+    ) {
         match pat {
-            ast::Pat::IdentPat(ident) => self.record_local(ident, opt_ty),
+            ast::Pat::IdentPat(ident) => self.record_local(ident, opt_ty, segment, let_stmt_range),
             ast::Pat::RecordPat(ref pat_struct) => {
                 if let Some(record_fields) = pat_struct.record_pat_field_list() {
                     for field in record_fields.fields() {
                         if let Some(pat) = field.pat() {
-                            self.record_new_locals(pat, None);
+                            self.record_new_locals(pat, None, segment, let_stmt_range);
                         }
                     }
                 }
             }
             ast::Pat::TuplePat(ref pat_tuple) => {
                 for pat in pat_tuple.fields() {
-                    self.record_new_locals(pat, None);
+                    self.record_new_locals(pat, None, segment, let_stmt_range);
                 }
             }
             ast::Pat::TupleStructPat(ref pat_tuple) => {
                 for pat in pat_tuple.fields() {
-                    self.record_new_locals(pat, None);
+                    self.record_new_locals(pat, None, segment, let_stmt_range);
                 }
             }
             _ => {}
         }
     }
 
-    fn record_local(&mut self, pat_ident: ast::IdentPat, opt_ty: Option<ast::Type>) {
+    fn record_local(
+        &mut self,
+        pat_ident: ast::IdentPat,
+        opt_ty: Option<ast::Type>,
+        segment: &Segment,
+        let_stmt_range: TextRange,
+    ) {
         // Default new variables to some type, say String. Assuming it isn't a
         // String, we'll get a compilation error when we try to move the
         // variable into our variable store, then we'll see what type the error
@@ -1630,6 +1745,13 @@ impl ContextState {
                     // If we're preserving copy types, then assume this variable
                     // is copy until we find out it's not.
                     is_copy_type: self.config.preserve_vars_on_panic,
+                    definition_span: segment.sequence.map(|segment_index| {
+                        let range = name.syntax().text_range() - let_stmt_range.start();
+                        UserCodeSpan {
+                            segment_index,
+                            range,
+                        }
+                    }),
                 },
             );
         }

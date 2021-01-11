@@ -930,7 +930,7 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
 }
 "#
         )),
-        vec!["error 3:29-4:6", "error 2:38-2:40"]
+        vec!["error 3:29-4:6", "error 2:41-2:43"]
     );
 
     // An unused variable not within a function shouldn't produce a warning.
@@ -983,4 +983,13 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
         strs(&check(&mut ctx, "std::mem::drop(42); std::mem::drop(")),
         vec!["error 1:35-1:36"]
     );
+
+    // Attempts to store a variable containing a non-static reference should report an error.
+    assert_eq!(
+        strs(&check(&mut ctx, "let s1 = String::new(); let v = &s1;")),
+        vec!["error 1:29-1:30"]
+    );
+
+    // Dropped variables shouldn't report errors.
+    assert_no_errors(&mut ctx, "let s1 = String::new(); std::mem::drop(s1);");
 }

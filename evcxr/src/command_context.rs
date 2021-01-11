@@ -15,9 +15,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    code_block::{CodeBlock, CodeKind, CommandCall, Segment},
+    code_block::{self, CodeBlock, CodeKind, CommandCall, Segment},
     crash_guard::CrashGuard,
-    errors::Span,
+    errors::{Span, SpannedMessage},
     eval_context::EvalCallbacks,
     rust_analyzer::{Completion, Completions},
     EvalContext, EvalContextOutputs, EvalOutputs,
@@ -270,31 +270,42 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 // arguments are found, span the command. We look for the first non-space character
                 // after a space is found.
                 let mut found_space = false;
-                let start_column = segment
+                let start_byte = segment
                     .code
-                    .chars()
+                    .bytes()
                     .enumerate()
-                    .find(|(_index, char)| {
-                        if *char == ' ' {
+                    .find(|(_index, byte)| {
+                        if *byte == b' ' {
                             found_space = true;
                             return false;
                         }
                         return found_space;
                     })
-                    .map(|(index, _char)| index + 1)
-                    .unwrap_or(1);
-                let end_column = segment.code.chars().count();
+                    .map(|(index, _char)| index)
+                    .unwrap_or(0);
+                let start_column = code_block::count_columns(&segment.code[..start_byte]) + 1;
+                let end_column = code_block::count_columns(&segment.code);
                 CompilationError::from_segment_span(
                     &segment,
+                    SpannedMessage::from_segment_span(
+                        segment,
+                        Span::from_command(command_call, start_column, end_column),
+                    ),
                     error.to_string(),
-                    Span::from_command(command_call, start_column, end_column),
                 )
             })
         } else {
             return Err(CompilationError::from_segment_span(
                 &segment,
+                SpannedMessage::from_segment_span(
+                    segment,
+                    Span::from_command(
+                        command_call,
+                        1,
+                        code_block::count_columns(&command_call.command) + 1,
+                    ),
+                ),
                 format!("Unrecognised command {}", command_call.command),
-                Span::from_command(command_call, 1, command_call.command.chars().count() + 1),
             ));
         }
     }

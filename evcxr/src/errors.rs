@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::code_block::{CodeBlock, CodeKind, CommandCall, Segment};
+use crate::code_block::{count_columns, CodeBlock, CodeKind, CommandCall, Segment};
 use json::{self, JsonValue};
+use ra_ap_ide::{TextRange, TextSize};
 use regex::Regex;
 use std;
 use std::fmt;
@@ -124,11 +125,11 @@ impl CompilationError {
     /// Returns a synthesized error that spans the specified portion of `segment`.
     pub(crate) fn from_segment_span(
         segment: &Segment,
+        spanned_message: SpannedMessage,
         message: String,
-        span: Span,
     ) -> CompilationError {
         CompilationError {
-            spanned_messages: vec![SpannedMessage::from_segment_span(segment, span)],
+            spanned_messages: vec![spanned_message],
             message,
             json: JsonValue::Null,
             code_origins: vec![segment.kind.clone()],
@@ -332,6 +333,57 @@ impl Span {
             output_end_column: end_column,
         }
     }
+
+    pub(crate) fn from_segment(segment: &Segment, range: TextRange) -> Option<Span> {
+        if let CodeKind::OriginalUserCode(meta) = &segment.kind {
+            let (start_line, start_column) = line_and_column(
+                &segment.code,
+                range.start(),
+                meta.column_offset,
+                meta.start_line,
+            );
+            let (end_line, end_column) = line_and_column(
+                &segment.code,
+                range.end(),
+                meta.column_offset,
+                meta.start_line,
+            );
+            let (_, output_start_column) = line_and_column(&segment.code, range.start(), 0, 1);
+            let (_, output_end_column) = line_and_column(&segment.code, range.end(), 0, 1);
+            Some(Span {
+                start_line,
+                start_column,
+                end_line,
+                end_column,
+                output_start_column,
+                output_end_column,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+/// Returns the line and column number of `position` within `text`. Line and column numbers are
+/// 1-based.
+fn line_and_column(
+    text: &str,
+    position: TextSize,
+    first_line_column_offset: usize,
+    start_line: usize,
+) -> (usize, usize) {
+    let text = &text[..usize::from(position)];
+    let line = text.lines().count();
+    let mut column = text
+        .lines()
+        .last()
+        .map(|line| count_columns(&line))
+        .unwrap_or(0)
+        + 1;
+    if line == 1 {
+        column += first_line_column_offset;
+    }
+    (start_line + line - 1, column)
 }
 
 #[derive(Debug, Clone)]
@@ -428,7 +480,7 @@ impl SpannedMessage {
         }
     }
 
-    fn from_segment_span(segment: &Segment, span: Span) -> SpannedMessage {
+    pub(crate) fn from_segment_span(segment: &Segment, span: Span) -> SpannedMessage {
         SpannedMessage {
             span: Some(span),
             lines: segment.code.lines().map(|line| line.to_owned()).collect(),
@@ -444,19 +496,6 @@ pub enum Error {
     TypeRedefinedVariablesLost(Vec<String>),
     Message(String),
     ChildProcessTerminated(String),
-}
-
-impl Error {
-    pub(crate) fn without_non_reportable_errors(mut self) -> Self {
-        if let Error::CompilationErrors(errors) = &mut self {
-            // If we have any errors in user code then remove all errors that aren't from user
-            // code.
-            if errors.iter().any(|error| error.is_from_user_code()) {
-                errors.retain(|error| error.is_from_user_code())
-            }
-        }
-        self
-    }
 }
 
 impl std::error::Error for Error {}
