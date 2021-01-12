@@ -283,13 +283,12 @@ impl EvalContext {
             stdout: stdout_receiver,
             stderr: stderr_receiver,
         };
-        if context.committed_state.linker() == "lld" && context.eval("42", context.state()).is_err()
-        {
+        if context.committed_state.linker() == "lld" && context.eval("42").is_err() {
             context.committed_state.set_linker("system".to_owned());
         } else {
             // We need to eval something anyway, otherwise rust-analyzer crashes when trying to get
             // completions. Not 100% sure. Just writing Cargo.toml isn't sufficient.
-            context.eval("42", context.state())?;
+            context.eval("42")?;
         }
         context.initial_config = context.committed_state.config.clone();
         Ok((context, outputs))
@@ -302,7 +301,15 @@ impl EvalContext {
     }
 
     /// Evaluates the supplied Rust code.
-    pub fn eval(&mut self, code: &str, state: ContextState) -> Result<EvalOutputs, Error> {
+    pub fn eval(&mut self, code: &str) -> Result<EvalOutputs, Error> {
+        self.eval_with_state(code, self.state())
+    }
+
+    pub fn eval_with_state(
+        &mut self,
+        code: &str,
+        state: ContextState,
+    ) -> Result<EvalOutputs, Error> {
         let (user_code, code_info) = CodeBlock::from_original_user_code(code);
         self.eval_with_callbacks(user_code, state, &code_info, &mut EvalCallbacks::default())
     }

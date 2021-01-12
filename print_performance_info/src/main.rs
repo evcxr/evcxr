@@ -54,9 +54,9 @@ fn main() -> Result<(), evcxr::Error> {
     ctx.set_time_passes(true);
     let mut state = ctx.state();
     state.set_toolchain("nightly");
-    ctx.eval("println!(\"41\");", state)?;
+    ctx.eval_with_state("println!(\"41\");", state)?;
     let start = Instant::now();
-    let output = ctx.eval("println!(\"42\");", ctx.state())?;
+    let output = ctx.eval_with_state("println!(\"42\");", ctx.state())?;
     println!("Total eval time: {}ms", start.elapsed().as_millis());
     for phase in output.phases {
         println!("  {}: {}ms", phase.name, phase.duration.as_millis());
