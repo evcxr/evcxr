@@ -1,4 +1,4 @@
-# Version 0.8.0 (UNRELEASED)
+# Version 0.8.0
 * Jupyter kernel now shows errors and warnings inline as you type by running cargo check on the
   backend. Running `evcxr\_jupyter --install` before starting jupyter notebook is recommended. It
   will auto-update when the evcxr jupyter kernel starts, however that update may not effect the
