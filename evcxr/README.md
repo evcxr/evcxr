@@ -10,10 +10,10 @@ context.
 
 ```rust
 let mut context = EvalContext::new();
-context.eval("let s = String::new();", context.state())?;
-context.eval(r#"s.push_str("Hello ");"#, context.state())?;
-context.eval(r#"s.push_str("World");"#, context.state())?;
-context.eval(r#"println!("{}", s);"#, context.state())?;
+context.eval("let s = String::new();")?;
+context.eval(r#"s.push_str("Hello ");"#)?;
+context.eval(r#"s.push_str("World");"#)?;
+context.eval(r#"println!("{}", s);"#)?;
 ```
 
 You must call ```evcxr::runtime_hook()``` at the top of main, otherwise the
