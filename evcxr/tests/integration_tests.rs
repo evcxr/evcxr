@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use evcxr::{CommandContext, Error, EvalContext, EvalContextOutputs};
-use lazy_static::lazy_static;
+use once_cell::sync::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::ops::{Deref, DerefMut};
 use std::sync::mpsc;
@@ -63,10 +63,8 @@ fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, m
     });
 }
 fn context_pool() -> &'static Mutex<Vec<CommandContext>> {
-    lazy_static! {
-        static ref CONTEXT_POOL: Mutex<Vec<CommandContext>> = Mutex::new(vec![]);
-    }
-    &CONTEXT_POOL
+    static CONTEXT_POOL: OnceCell<Mutex<Vec<CommandContext>>> = OnceCell::new();
+    CONTEXT_POOL.get_or_init(|| Mutex::new(vec![]))
 }
 
 struct ContextHolder {

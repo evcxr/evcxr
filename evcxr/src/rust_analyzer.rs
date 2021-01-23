@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use anyhow::{anyhow, bail, Context, Result};
+use once_cell::sync::OnceCell;
 use ra_ap_base_db::{FileId, SourceRoot};
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
@@ -245,10 +246,9 @@ impl RustAnalyzer {
         ) {
             for item in completion_items {
                 use regex::Regex;
-                lazy_static! {
-                    static ref ARG_PLACEHOLDER: Regex =
-                        Regex::new("\\$\\{[0-9]+:([^}]*)\\}").unwrap();
-                }
+                static ARG_PLACEHOLDER: OnceCell<Regex> = OnceCell::new();
+                let arg_placeholder =
+                    ARG_PLACEHOLDER.get_or_init(|| Regex::new("\\$\\{[0-9]+:([^}]*)\\}").unwrap());
                 let mut indels = item.text_edit().iter();
                 if let Some(indel) = indels.next() {
                     let text_to_delete = &self.current_source[indel.delete];
@@ -258,7 +258,7 @@ impl RustAnalyzer {
                         continue;
                     }
                     completions.push(Completion {
-                        code: ARG_PLACEHOLDER
+                        code: arg_placeholder
                             .replace_all(&indel.insert, "$1")
                             .replace("$0", ""),
                     });

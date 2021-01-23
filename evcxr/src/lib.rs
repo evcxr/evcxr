@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
-extern crate lazy_static;
-
 #[cfg(all(unix, not(target_os = "freebsd")))]
 #[macro_use]
 extern crate sig;

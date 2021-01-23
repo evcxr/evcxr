@@ -27,6 +27,7 @@ use crate::{
     eval_context::ContextState,
 };
 use anyhow::Result;
+use once_cell::sync::OnceCell;
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
@@ -311,14 +312,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
     }
 
     fn commands_by_name() -> &'static HashMap<&'static str, AvailableCommand> {
-        lazy_static! {
-            static ref COMMANDS_BY_NAME: HashMap<&'static str, AvailableCommand> =
-                CommandContext::create_commands()
-                    .into_iter()
-                    .map(|command| (command.name, command))
-                    .collect();
-        }
-        &COMMANDS_BY_NAME
+        static COMMANDS_BY_NAME: OnceCell<HashMap<&'static str, AvailableCommand>> =
+            OnceCell::new();
+        COMMANDS_BY_NAME.get_or_init(|| {
+            CommandContext::create_commands()
+                .into_iter()
+                .map(|command| (command.name, command))
+                .collect()
+        })
     }
 
     fn create_commands() -> Vec<AvailableCommand> {
@@ -578,10 +579,9 @@ fn process_dep_command(
     } else {
         bail!(":dep requires arguments")
     };
-    lazy_static! {
-        static ref DEP_RE: Regex = Regex::new("^([^= ]+) *(= *(.+))?$").unwrap();
-    }
-    if let Some(captures) = DEP_RE.captures(args) {
+    static DEP_RE: OnceCell<Regex> = OnceCell::new();
+    let dep_re = DEP_RE.get_or_init(|| Regex::new("^([^= ]+) *(= *(.+))?$").unwrap());
+    if let Some(captures) = dep_re.captures(args) {
         state.add_dep(
             &captures[1],
             &captures.get(3).map_or("\"*\"", |m| m.as_str()),
@@ -597,23 +597,25 @@ struct AvailableCommand {
     short_description: &'static str,
     callback: Box<
         dyn Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
+            &mut CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
             + 'static
-            + Sync,
+            + Sync
+            + Send,
     >,
     /// If `Some`, this callback will be run when preparing for analysis instead of `callback`.
     analysis_callback: Option<
         Box<
             dyn Fn(
-                    &CommandContext,
-                    &mut ContextState,
-                    &Option<String>,
-                ) -> Result<EvalOutputs, Error>
+                &CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
                 + 'static
-                + Sync,
+                + Sync
+                + Send,
         >,
     >,
 }
@@ -623,12 +625,13 @@ impl AvailableCommand {
         name: &'static str,
         short_description: &'static str,
         callback: impl Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
+            &mut CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
             + 'static
-            + Sync,
+            + Sync
+            + Send,
     ) -> AvailableCommand {
         AvailableCommand {
             name,
@@ -640,9 +643,14 @@ impl AvailableCommand {
 
     fn with_analysis_callback(
         mut self,
-        callback: impl Fn(&CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>
+        callback: impl Fn(
+            &CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
             + 'static
-            + Sync,
+            + Sync
+            + Send,
     ) -> Self {
         self.analysis_callback = Some(Box::new(callback));
         self

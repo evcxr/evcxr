@@ -14,6 +14,7 @@
 
 use crate::errors::{bail, Error};
 use libloading;
+use once_cell::sync::OnceCell;
 use regex::Regex;
 use std::marker::PhantomData;
 use std::rc::Rc;
@@ -67,10 +68,10 @@ impl Runtime {
 
     fn handle_line(&mut self, line: &io::Result<String>) -> Result<(), Error> {
         let line = line.as_ref()?;
-        lazy_static! {
-            static ref LOAD_AND_RUN: Regex = Regex::new("LOAD_AND_RUN ([^ ]+) ([^ ]+)").unwrap();
-        }
-        if let Some(captures) = LOAD_AND_RUN.captures(&line) {
+        static LOAD_AND_RUN: OnceCell<Regex> = OnceCell::new();
+        let load_and_run =
+            LOAD_AND_RUN.get_or_init(|| Regex::new("LOAD_AND_RUN ([^ ]+) ([^ ]+)").unwrap());
+        if let Some(captures) = load_and_run.captures(&line) {
             self.load_and_run(&captures[1], &captures[2])
         } else {
             bail!("Unrecognised line: {}", line);

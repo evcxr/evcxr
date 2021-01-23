@@ -14,6 +14,7 @@
 
 use anyhow::{bail, Context, Result};
 use json::{self, JsonValue};
+use once_cell::sync::OnceCell;
 use regex::Regex;
 use std;
 use std::collections::HashMap;
@@ -64,19 +65,17 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
     if output.status.success() {
         Ok(())
     } else {
-        lazy_static! {
-            static ref IGNORED_LINES_PATTERN: Regex =
-                Regex::new("required by package `evcxr_dummy_validate_dep.*").unwrap();
-        }
-        lazy_static! {
-            static ref PRIMARY_ERROR_PATTERN: Regex =
-                Regex::new("(.*) as a dependency of package `[^`]*`").unwrap();
-        }
+        static IGNORED_LINES_PATTERN: OnceCell<Regex> = OnceCell::new();
+        let ignored_lines_pattern = IGNORED_LINES_PATTERN
+            .get_or_init(|| Regex::new("required by package `evcxr_dummy_validate_dep.*").unwrap());
+        static PRIMARY_ERROR_PATTERN: OnceCell<Regex> = OnceCell::new();
+        let primary_error_pattern = PRIMARY_ERROR_PATTERN
+            .get_or_init(|| Regex::new("(.*) as a dependency of package `[^`]*`").unwrap());
         let mut message = Vec::new();
         for line in String::from_utf8_lossy(&output.stderr).lines() {
-            if let Some(captures) = PRIMARY_ERROR_PATTERN.captures(line) {
+            if let Some(captures) = primary_error_pattern.captures(line) {
                 message.push(captures[1].to_string());
-            } else if !IGNORED_LINES_PATTERN.is_match(line) {
+            } else if !ignored_lines_pattern.is_match(line) {
                 message.push(line.to_owned());
             }
         }

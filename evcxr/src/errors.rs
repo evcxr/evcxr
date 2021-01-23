@@ -14,6 +14,7 @@
 
 use crate::code_block::{count_columns, CodeBlock, CodeKind, CommandCall, Segment, UserCodeInfo};
 use json::{self, JsonValue};
+use once_cell::sync::OnceCell;
 use ra_ap_ide::{TextRange, TextSize};
 use regex::Regex;
 use std;
@@ -255,29 +256,27 @@ impl CompilationError {
         //   message.spans[].label
         //     "expected struct `std::string::String`, found integer"
         //     "expected struct `std::string::String`, found `i32`"
-        lazy_static! {
-            static ref TYPE_ERROR_RE: Regex =
-                Regex::new(" *expected (?s:.)*found.* `(.*)`").unwrap();
-        }
+        static TYPE_ERROR_RE: OnceCell<Regex> = OnceCell::new();
+        let type_error_re =
+            TYPE_ERROR_RE.get_or_init(|| Regex::new(" *expected (?s:.)*found.* `(.*)`").unwrap());
         if let JsonValue::Array(children) = &self.json["children"] {
             for child in children {
                 if let Some(message) = child["message"].as_str() {
-                    if let Some(captures) = TYPE_ERROR_RE.captures(message) {
+                    if let Some(captures) = type_error_re.captures(message) {
                         return Some(captures[1].to_owned());
                     }
                 }
             }
         }
-        lazy_static! {
-            static ref TYPE_ERROR_RE2: Regex =
-                Regex::new("expected .* found (integer|float)").unwrap();
-        }
+        static TYPE_ERROR_RE2: OnceCell<Regex> = OnceCell::new();
+        let type_error_re2 =
+            TYPE_ERROR_RE2.get_or_init(|| Regex::new("expected .* found (integer|float)").unwrap());
         if let JsonValue::Array(spans) = &self.json["spans"] {
             for span in spans {
                 if let Some(label) = span["label"].as_str() {
-                    if let Some(captures) = TYPE_ERROR_RE.captures(label) {
+                    if let Some(captures) = type_error_re.captures(label) {
                         return Some(captures[1].to_owned());
-                    } else if let Some(captures) = TYPE_ERROR_RE2.captures(label) {
+                    } else if let Some(captures) = type_error_re2.captures(label) {
                         return Some(captures[1].to_owned());
                     }
                 }

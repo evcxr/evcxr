@@ -28,6 +28,7 @@ use crate::{
 };
 use crate::{crate_config::ExternalCrate, errors::Span};
 use anyhow::Result;
+use once_cell::sync::OnceCell;
 use ra_ap_ide::TextRange;
 use ra_ap_syntax::{ast, AstNode, SyntaxKind, SyntaxNode};
 use regex::Regex;
@@ -662,9 +663,9 @@ impl EvalContext {
 
         let mut got_panic = false;
         let mut lost_variables = Vec::new();
-        lazy_static! {
-            static ref MIME_OUTPUT: Regex = Regex::new("EVCXR_BEGIN_CONTENT ([^ ]+)").unwrap();
-        }
+        static MIME_OUTPUT: OnceCell<Regex> = OnceCell::new();
+        let mime_output =
+            MIME_OUTPUT.get_or_init(|| Regex::new("EVCXR_BEGIN_CONTENT ([^ ]+)").unwrap());
         loop {
             let line = self.child_process.recv_line()?;
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
@@ -690,7 +691,7 @@ impl EvalContext {
             } else if line.starts_with(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE) {
                 let variable_name = &line[evcxr_internal_runtime::VARIABLE_CHANGED_TYPE.len()..];
                 lost_variables.push(variable_name.to_owned());
-            } else if let Some(captures) = MIME_OUTPUT.captures(&line) {
+            } else if let Some(captures) = mime_output.captures(&line) {
                 let mime_type = captures[1].to_owned();
                 let mut content = String::new();
                 loop {
@@ -749,9 +750,9 @@ impl EvalContext {
         state: &mut ContextState,
         fixed_errors: &mut HashSet<&'static str>,
     ) -> Result<(), Error> {
-        lazy_static! {
-            static ref DISALLOWED_TYPES: Regex = Regex::new("(impl .*|[.*@])").unwrap();
-        }
+        static DISALLOWED_TYPES: OnceCell<Regex> = OnceCell::new();
+        let disallowed_types =
+            DISALLOWED_TYPES.get_or_init(|| Regex::new("(impl .*|[.*@])").unwrap());
         for code_origin in &error.code_origins {
             match code_origin {
                 CodeKind::PackVariable { variable_name } => {
@@ -771,7 +772,7 @@ impl EvalContext {
                             } else if actual_type == "float" {
                                 actual_type = "f64".to_string();
                             }
-                            if DISALLOWED_TYPES.is_match(&actual_type) {
+                            if disallowed_types.is_match(&actual_type) {
                                 bail!(
                                     "Sorry, the type {} cannot currently be persisted",
                                     actual_type
@@ -1775,10 +1776,11 @@ impl ContextState {
 }
 
 fn replace_reserved_words_in_type(ty: &str) -> String {
-    lazy_static! {
-        static ref RESERVED_WORDS: Regex = Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap();
-    }
-    RESERVED_WORDS.replace_all(ty, "${1}r#${2}${3}").to_string()
+    static RESERVED_WORDS: OnceCell<Regex> = OnceCell::new();
+    RESERVED_WORDS
+        .get_or_init(|| Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap())
+        .replace_all(ty, "${1}r#${2}${3}")
+        .to_string()
 }
 
 #[cfg(test)]

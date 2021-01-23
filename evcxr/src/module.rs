@@ -18,6 +18,7 @@ use crate::{
     eval_context::Config,
 };
 use json;
+use once_cell::sync::OnceCell;
 use regex::Regex;
 use std;
 use std::fs;
@@ -293,10 +294,9 @@ fn errors_from_cargo_output(
     // Our compiler errors should all be in JSON format, but for errors from
     // Cargo errors, we need to add explicit matching for those errors that we
     // expect we might see.
-    lazy_static! {
-        static ref KNOWN_NON_JSON_ERRORS: Regex =
-            Regex::new("(error: no matching package named)").unwrap();
-    }
+    static KNOWN_NON_JSON_ERRORS: OnceCell<Regex> = OnceCell::new();
+    let known_non_json_errrors = KNOWN_NON_JSON_ERRORS
+        .get_or_init(|| Regex::new("(error: no matching package named)").unwrap());
 
     let stderr = String::from_utf8_lossy(&cargo_output.stderr);
     let stdout = String::from_utf8_lossy(&cargo_output.stdout);
@@ -309,7 +309,7 @@ fn errors_from_cargo_output(
                 .ok()
                 .and_then(|json| CompilationError::opt_new(json, code_block))
                 .or_else(|| {
-                    if KNOWN_NON_JSON_ERRORS.is_match(line) {
+                    if known_non_json_errrors.is_match(line) {
                         non_json_error = Some(line.to_owned());
                     }
                     None
