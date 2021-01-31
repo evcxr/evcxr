@@ -295,7 +295,7 @@ fn errors_from_cargo_output(
     // Cargo errors, we need to add explicit matching for those errors that we
     // expect we might see.
     static KNOWN_NON_JSON_ERRORS: OnceCell<Regex> = OnceCell::new();
-    let known_non_json_errrors = KNOWN_NON_JSON_ERRORS
+    let known_non_json_errors = KNOWN_NON_JSON_ERRORS
         .get_or_init(|| Regex::new("(error: no matching package named)").unwrap());
 
     let stderr = String::from_utf8_lossy(&cargo_output.stderr);
@@ -309,7 +309,7 @@ fn errors_from_cargo_output(
                 .ok()
                 .and_then(|json| CompilationError::opt_new(json, code_block))
                 .or_else(|| {
-                    if known_non_json_errrors.is_match(line) {
+                    if known_non_json_errors.is_match(line) {
                         non_json_error = Some(line.to_owned());
                     }
                     None
