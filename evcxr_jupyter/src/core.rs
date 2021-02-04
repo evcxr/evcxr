@@ -229,14 +229,14 @@ impl Server {
                             .send(&mut *self.iopub.lock().unwrap())?;
                     }
                     execution_reply_sender.send(message.new_reply().with_content(object! {
-                        "status" => "error",
+                        "status" => "ok",
                         "execution_count" => execution_count,
                     }))?;
                 }
                 Err(errors) => {
                     self.emit_errors(&errors, &message)?;
                     execution_reply_sender.send(message.new_reply().with_content(object! {
-                        "status" => "ok",
+                        "status" => "error",
                         "execution_count" => execution_count
                     }))?;
                 }
