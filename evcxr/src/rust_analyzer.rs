@@ -17,6 +17,7 @@ use once_cell::sync::OnceCell;
 use ra_ap_base_db::{FileId, SourceRoot};
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
+use ra_ap_ide_db::helpers::{insert_use::InsertUseConfig, SnippetCap};
 use ra_ap_paths::AbsPathBuf;
 use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace};
 use ra_ap_syntax::ast::{self, AstNode};
@@ -163,7 +164,7 @@ impl RustAnalyzer {
             no_sysroot: !self.with_sysroot,
             ..CargoConfig::default()
         };
-        let workspace = ProjectWorkspace::load(manifest, &config)?;
+        let workspace = ProjectWorkspace::load(manifest, &config, &|_| {})?;
         let load = workspace
             .to_roots()
             .iter()
@@ -216,7 +217,7 @@ impl RustAnalyzer {
                 .map(|file_set| SourceRoot::new_local(file_set))
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(None, None, &mut |path| {
+        change.set_crate_graph(workspace.to_crate_graph(None, &mut |path| {
             self.vfs.file_id(&path.to_path_buf().into())
         }));
         Ok(())
@@ -229,14 +230,17 @@ impl RustAnalyzer {
     pub(crate) fn completions(&self, position: usize) -> Result<Completions> {
         let mut completions = Vec::new();
         let mut range = None;
-        let mut config = ra_ide::CompletionConfig {
+        let config = ra_ide::CompletionConfig {
             enable_postfix_completions: true,
             add_call_parenthesis: true,
             add_call_argument_snippets: true,
-            snippet_cap: None,
-            ..ra_ide::CompletionConfig::default()
+            snippet_cap: SnippetCap::new(true),
+            enable_imports_on_the_fly: false,
+            insert_use: InsertUseConfig {
+                merge: None,
+                prefix_kind: ra_hir::PrefixKind::ByCrate,
+            },
         };
-        config.allow_snippets(true);
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
             ra_ide::FilePosition {

@@ -1,4 +1,4 @@
-use ra_ap_syntax::{ast, SmolStr};
+use ra_ap_syntax::ast;
 
 // Copyright 2020 The Evcxr Authors.
 //
@@ -25,10 +25,10 @@ pub(crate) enum Import {
 }
 
 impl Import {
-    fn format(name: &SmolStr, path: &[SmolStr]) -> Import {
+    fn format(name: &str, path: &[String]) -> Import {
         let code;
         let joined_path = path.join("::");
-        if path.last() == Some(name) {
+        if path.last().map(String::as_str) == Some(name) {
             code = format!("use {};", joined_path);
         } else {
             code = format!("use {} as {};", joined_path, name);
@@ -45,7 +45,7 @@ impl Import {
 }
 
 pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Import)) {
-    fn process_use_tree(use_tree: &ast::UseTree, prefix: &[SmolStr], out: &mut impl FnMut(Import)) {
+    fn process_use_tree(use_tree: &ast::UseTree, prefix: &[String], out: &mut impl FnMut(Import)) {
         if let Some(path) = use_tree.path() {
             // If we get ::self, ignore it and use what we've got so far.
             if path.segment().and_then(|segment| segment.kind())
@@ -63,9 +63,9 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
             loop {
                 if let Some(segment) = path.segment() {
                     if let Some(name_ref) = segment.name_ref() {
-                        path_parts.push(name_ref.text().clone());
+                        path_parts.push(name_ref.text().to_owned());
                     } else if let Some(token) = segment.crate_token() {
-                        path_parts.push(token.text().clone());
+                        path_parts.push(token.text().to_owned());
                     }
                     if let Some(qualifier) = path.qualifier() {
                         path = qualifier;
@@ -93,7 +93,7 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
                     out(Import::format(underscore.text(), &new_prefix));
                 }
             } else if let Some(star_token) = use_tree.star_token() {
-                new_prefix.push(star_token.text().clone());
+                new_prefix.push(star_token.text().to_owned());
                 out(Import::format(star_token.text(), &new_prefix));
             } else if let Some(ident) = new_prefix.last() {
                 out(Import::format(ident, &new_prefix));

@@ -410,7 +410,11 @@ impl EvalContext {
         completions.completions = completions
             .completions
             .into_iter()
-            .filter(|c| c.code != "evcxr_variable_store" && c.code != "evcxr_internal_runtime")
+            .filter(|c| {
+                c.code != "evcxr_variable_store"
+                    && c.code != "evcxr_internal_runtime"
+                    && c.code != "evcxr_analysis_wrapper"
+            })
             .collect();
         Ok(completions)
     }
