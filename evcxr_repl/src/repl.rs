@@ -38,7 +38,9 @@ impl EvcxrRustylineHelper {
 
 // Have to implement a bunch of traits as mostly noop...
 
-impl Hinter for EvcxrRustylineHelper {}
+impl Hinter for EvcxrRustylineHelper {
+    type Hint = String;
+}
 
 impl Completer for EvcxrRustylineHelper {
     type Candidate = String;

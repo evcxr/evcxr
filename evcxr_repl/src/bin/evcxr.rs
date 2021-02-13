@@ -16,7 +16,9 @@ use evcxr;
 
 use colored::*;
 use evcxr::{CommandContext, CompilationError, Error};
-use rustyline::{error::ReadlineError, At, Cmd, EditMode, Editor, KeyPress, Movement, Word};
+use rustyline::{
+    error::ReadlineError, At, Cmd, EditMode, Editor, KeyCode, KeyEvent, Modifiers, Movement, Word,
+};
 use std::fs;
 use std::io;
 use std::sync::{mpsc, Arc, Mutex};
@@ -246,11 +248,11 @@ fn main() {
     };
     let mut editor = Editor::<EvcxrRustylineHelper>::with_config(config);
     editor.bind_sequence(
-        KeyPress::ControlLeft,
+        KeyEvent(KeyCode::Left, Modifiers::CTRL),
         Cmd::Move(Movement::BackwardWord(1, Word::Big)),
     );
     editor.bind_sequence(
-        KeyPress::ControlRight,
+        KeyEvent(KeyCode::Right, Modifiers::CTRL),
         Cmd::Move(Movement::ForwardWord(1, At::AfterEnd, Word::Big)),
     );
     editor.set_helper(Some(EvcxrRustylineHelper::new(Arc::clone(
