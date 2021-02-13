@@ -80,7 +80,7 @@ impl Runtime {
 
     fn load_and_run(&mut self, so_path: &str, fn_name: &str) -> Result<(), Error> {
         use std::os::raw::c_void;
-        let shared_object = libloading::Library::new(so_path)?;
+        let shared_object = unsafe { libloading::Library::new(so_path) }?;
         unsafe {
             let user_fn = shared_object
                 .get::<extern "C" fn(*mut c_void) -> *mut c_void>(fn_name.as_bytes())?;

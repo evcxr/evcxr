@@ -552,6 +552,12 @@ impl<'a> From<anyhow::Error> for Error {
     }
 }
 
+impl<'a> From<libloading::Error> for Error {
+    fn from(error: libloading::Error) -> Self {
+        Error::Message(error.to_string())
+    }
+}
+
 macro_rules! _err {
     ($e:expr) => {$crate::Error::from($e)};
     ($fmt:expr, $($arg:tt)+) => {$crate::errors::Error::from(format!($fmt, $($arg)+))}
