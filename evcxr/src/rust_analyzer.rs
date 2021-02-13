@@ -166,7 +166,7 @@ impl RustAnalyzer {
         };
         let workspace = ProjectWorkspace::load(manifest, &config, &|_| {})?;
         let load = workspace
-            .to_roots()
+            .to_roots(None)
             .iter()
             .map(|root| {
                 ra_vfs::loader::Entry::Directories(ra_vfs::loader::Directories {
@@ -217,7 +217,7 @@ impl RustAnalyzer {
                 .map(|file_set| SourceRoot::new_local(file_set))
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(None, &mut |path| {
+        change.set_crate_graph(workspace.to_crate_graph(None, None, &mut |path| {
             self.vfs.file_id(&path.to_path_buf().into())
         }));
         Ok(())
