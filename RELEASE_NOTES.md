@@ -1,3 +1,7 @@
+# Version 0.8.1
+* Fixed bug that was affecting HTML export from Jupyter. #153
+* Updated rust-analyzer.
+
 # Version 0.8.0
 * Jupyter kernel now shows errors and warnings inline as you type by running cargo check on the
   backend. Running `evcxr\_jupyter --install` before starting jupyter notebook is recommended. It
