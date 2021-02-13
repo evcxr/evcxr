@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use anyhow::Result;
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, NewMac};
 use sha2::Sha256;
 use zmq;
 

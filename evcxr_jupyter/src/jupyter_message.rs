@@ -66,7 +66,7 @@ impl RawMessage {
         let hmac = if let Some(mac_template) = &connection.mac {
             let mut mac = mac_template.clone();
             self.digest(&mut mac);
-            hex::encode(mac.result().code().as_slice())
+            hex::encode(mac.finalize().into_bytes().as_slice())
         } else {
             String::new()
         };
@@ -86,7 +86,7 @@ impl RawMessage {
     fn digest(&self, mac: &mut HmacSha256) {
         use hmac::Mac;
         for part in &self.jparts {
-            mac.input(&part);
+            mac.update(&part);
         }
     }
 }

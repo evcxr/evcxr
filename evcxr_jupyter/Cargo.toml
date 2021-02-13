@@ -14,8 +14,8 @@ json = "0.12.4"
 anyhow = "1.0.33"
 zmq = { version = "0.9.1", default-features = false }
 uuid = { version = "0.8.1", features = [ "v4" ] }
-hmac = "0.7.1"
-sha2 = "0.8.0"
+hmac = "0.10.1"
+sha2 = "0.9.3"
 hex = "0.4.2"
 colored = "2.0.0"
 dirs = "3.0.1"
