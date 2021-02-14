@@ -1,6 +1,6 @@
 [package]
 name = "evcxr_repl"
-version = "0.8.0"
+version = "0.8.1"
 license = "Apache-2.0"
 description = "A REPL for Rust"
 repository = "https://github.com/google/evcxr"
@@ -9,7 +9,7 @@ authors = ["The Evcxr Authors"]
 edition = "2018"
 
 [dependencies]
-evcxr = { version = "=0.8.0", path = "../evcxr" }
+evcxr = { version = "=0.8.1", path = "../evcxr" }
 rustyline = "7.1.0"
 colored = "2.0.0"
 once_cell = "1.5.2"
