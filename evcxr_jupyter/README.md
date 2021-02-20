@@ -13,7 +13,7 @@ instructions](https://www.rust-lang.org/tools/install).
 
 ```sh
 rustup component add rust-src
-sudo apt install jupyter-notebook cmake
+sudo apt install jupyter-notebook cmake build-essential
 cargo install evcxr_jupyter
 evcxr_jupyter --install
 ```
