@@ -179,13 +179,18 @@ impl RustAnalyzer {
         // Note, set_config is what triggers loading and calling the callback that we registered when we created self.loader.
         use ra_vfs::loader::Handle;
         self.loader.set_config(ra_vfs::loader::Config {
+            version: 1,
             load,
             watch: vec![],
         });
 
         for message in &self.message_receiver {
             match message {
-                ra_vfs::loader::Message::Progress { n_total, n_done } => {
+                ra_vfs::loader::Message::Progress {
+                    n_total,
+                    n_done,
+                    config_version: _,
+                } => {
                     if n_total == n_done {
                         break;
                     }
@@ -239,6 +244,7 @@ impl RustAnalyzer {
             insert_use: InsertUseConfig {
                 merge: None,
                 prefix_kind: ra_hir::PrefixKind::ByCrate,
+                group: false,
             },
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
