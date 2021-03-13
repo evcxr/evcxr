@@ -597,10 +597,10 @@ struct AvailableCommand {
     short_description: &'static str,
     callback: Box<
         dyn Fn(
-            &mut CommandContext,
-            &mut ContextState,
-            &Option<String>,
-        ) -> Result<EvalOutputs, Error>
+                &mut CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
             + 'static
             + Sync
             + Send,
@@ -609,10 +609,10 @@ struct AvailableCommand {
     analysis_callback: Option<
         Box<
             dyn Fn(
-                &CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
+                    &CommandContext,
+                    &mut ContextState,
+                    &Option<String>,
+                ) -> Result<EvalOutputs, Error>
                 + 'static
                 + Sync
                 + Send,
@@ -625,10 +625,10 @@ impl AvailableCommand {
         name: &'static str,
         short_description: &'static str,
         callback: impl Fn(
-            &mut CommandContext,
-            &mut ContextState,
-            &Option<String>,
-        ) -> Result<EvalOutputs, Error>
+                &mut CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
             + 'static
             + Sync
             + Send,
@@ -643,11 +643,7 @@ impl AvailableCommand {
 
     fn with_analysis_callback(
         mut self,
-        callback: impl Fn(
-            &CommandContext,
-            &mut ContextState,
-            &Option<String>,
-        ) -> Result<EvalOutputs, Error>
+        callback: impl Fn(&CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>
             + 'static
             + Sync
             + Send,
