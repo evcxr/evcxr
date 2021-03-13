@@ -572,7 +572,9 @@ fn abort_and_restart() {
     if let Err(Error::ChildProcessTerminated(message)) = result {
         #[cfg(not(windows))]
         {
-            assert_eq!(message, "Child process terminated with status: signal: 6");
+            if message != "Child process terminated with status: signal: 6 (core dumped)" {
+                assert_eq!(message, "Child process terminated with status: signal: 6");
+            }
         }
         #[cfg(windows)]
         {
@@ -934,11 +936,12 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
     // An unused variable not within a function shouldn't produce a warning.
     assert_no_errors(&mut ctx, "let mut s = String::new();");
 
-    // An unused variable within a function should produce a warning.
-    assert_eq!(
-        strs(&check(&mut ctx, "fn foo() {let mut s = String::new();}")),
-        vec!["warning 1:15-1:20"]
-    );
+    // An unused variable within a function should produce a warning. Older versions of rustc have
+    // the warning span on `mut s`, while newer ones have it just one `s`.
+    let unused_var_warnings = check(&mut ctx, "fn foo() {let mut s = String::new();}");
+    if strs(&unused_var_warnings) != vec!["warning 1:19-1:20"] {
+        assert_eq!(strs(&unused_var_warnings), vec!["warning 1:15-1:20"]);
+    }
 
     // Make sure we don't get errors about duplicate use statements after we've
     // executed some code.
