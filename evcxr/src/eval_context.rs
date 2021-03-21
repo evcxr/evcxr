@@ -1584,11 +1584,11 @@ impl ContextState {
                             CodeBlock::new()
                                 .generated(SEND_TEXT_PLAIN_DEF)
                                 .generated(&format!(
-                                    "evcxr_send_text_plain(&format!(\"{}\",\n",
+                                    "evcxr_send_text_plain(&format!(\"{}\",&(\n",
                                     self.config.output_format
                                 ))
                                 .with_segment(segment)
-                                .generated("));"),
+                                .generated(")));"),
                         );
                     } else {
                         code_out = code_out
