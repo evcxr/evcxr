@@ -90,7 +90,9 @@ pub(crate) fn uninstall() -> Result<()> {
 
 // https://jupyter-client.readthedocs.io/en/latest/kernels.html
 fn get_kernel_dir() -> Result<PathBuf> {
-    let jupyter_dir = if let Some(dir) = get_user_kernel_dir() {
+    let jupyter_dir = if let Ok(dir) = env::var("JUPYTER_PATH") {
+        PathBuf::from(dir)
+    } else if let Some(dir) = get_user_kernel_dir() {
         dir
     } else {
         bail!("Couldn't get XDG data directory");
