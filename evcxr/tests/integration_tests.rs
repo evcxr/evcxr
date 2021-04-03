@@ -608,6 +608,18 @@ fn int_array() {
     eval!(e, assert_eq!(v[4], 42));
 }
 
+#[test]
+fn const_generics_with_explicit_type() {
+    let mut e = new_context();
+    eval!(e,
+        struct Foo<const I: usize> {
+            data: [u8; I],
+        }
+        let foo: Foo<3> = Foo::<3> { data: [41, 42, 43] };
+    );
+    eval!(e, assert_eq!(foo.data[1], 42));
+}
+
 // Make sure that a type name containing a reserved word (e.g. async) doesn't
 // cause a compilation error.
 #[test]

@@ -1147,10 +1147,7 @@ impl ContextState {
         }
         let external = ExternalCrate::new(dep.to_owned(), dep_config.to_owned())?;
         crate::cargo_metadata::validate_dep(&external.name, &external.config, &self.config)?;
-        self.external_deps.insert(
-            dep.to_owned(),
-            external
-        );
+        self.external_deps.insert(dep.to_owned(), external);
         Ok(())
     }
 

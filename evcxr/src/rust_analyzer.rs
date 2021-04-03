@@ -133,19 +133,19 @@ impl RustAnalyzer {
                             if let Some(pat) = let_stmt.pat() {
                                 if let ast::Pat::IdentPat(ident_pat) = pat.clone() {
                                     if let Some(name) = ident_pat.name() {
-                                        use ra_hir::HirDisplay;
-                                        if let Some(ty) = sema.type_of_pat(&pat) {
-                                            if let Ok(type_name) =
-                                                ty.display_source_code(sema.db, module.into())
-                                            {
-                                                result.insert(
-                                                    name.text().to_string(),
-                                                    VariableInfo {
-                                                        type_name,
-                                                        is_mutable: ident_pat.mut_token().is_some(),
-                                                    },
-                                                );
-                                            }
+                                        if let Some(type_name) = get_type_name(
+                                            let_stmt.ty(),
+                                            sema.type_of_pat(&pat),
+                                            &sema,
+                                            module,
+                                        ) {
+                                            result.insert(
+                                                name.text().to_string(),
+                                                VariableInfo {
+                                                    type_name,
+                                                    is_mutable: ident_pat.mut_token().is_some(),
+                                                },
+                                            );
                                         }
                                     }
                                 }
@@ -293,6 +293,22 @@ impl RustAnalyzer {
     }
 }
 
+fn get_type_name(
+    explicit_type: Option<ast::Type>,
+    inferred_type: Option<ra_hir::Type>,
+    sema: &ra_hir::Semantics<ra_ide::RootDatabase>,
+    module: ra_hir::Module,
+) -> Option<String> {
+    use ra_hir::HirDisplay;
+    if let Some(explicit_type) = explicit_type {
+        let type_name = explicit_type.syntax().text().to_string();
+        if is_type_valid(&type_name) {
+            return Some(type_name);
+        }
+    }
+    inferred_type.and_then(|ty| ty.display_source_code(sema.db, module.into()).ok())
+}
+
 /// Completions found in a particular context.
 #[derive(Default)]
 pub struct Completions {
@@ -313,9 +329,10 @@ pub struct Completion {
 /// types, produces invalid code. In particular, fixed sized arrays come out without a size. e.g.
 /// instead of `[i32, 5]`, we get `[i32, _]`.
 pub(crate) fn is_type_valid(type_name: &str) -> bool {
+    use ra_ap_syntax::SyntaxKind;
     if let Ok(ty) = ast::Type::parse(&type_name) {
         for node in ty.syntax().descendants() {
-            if node.kind() == ra_ap_syntax::SyntaxKind::ERROR {
+            if node.kind() == SyntaxKind::ERROR || node.kind() == SyntaxKind::INFER_TYPE {
                 return false;
             }
         }
@@ -348,10 +365,12 @@ mod test {
 
         ra.set_source(
             r#"
+            struct Foo<const I: usize> {}
             fn foo() {
                 let v1 = true;
                 let mut v1 = 42i32;
                 let v2 = &[false];
+                let v3: Foo<10> = Foo::<10> {};
                 {
                     let v2 = false;
                     let v100 = true;
@@ -367,6 +386,7 @@ mod test {
         assert!(var_types["v1"].is_mutable);
         assert_eq!(var_types["v2"].type_name, "&[bool; _]");
         assert!(!var_types["v2"].is_mutable);
+        assert_eq!(&var_types["v3"].type_name, "Foo<10>");
         assert!(var_types.get("v100").is_none());
 
         ra.set_source(
@@ -388,5 +408,7 @@ mod test {
         assert!(is_type_valid("Vec<String>"));
         assert!(is_type_valid("&[i32]"));
         assert!(!is_type_valid("[i32, _]"));
+        assert!(!is_type_valid("Vec<_>"));
+        assert!(is_type_valid("Foo<42>"));
     }
 }
