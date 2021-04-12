@@ -4,7 +4,7 @@ env: RUST_BACKTRACE=1
 matrix:
   include:
     - os: linux
-      rust: 1.46.0
+      rust: 1.51.0
       env: TARGET=x86_64-unknown-linux-gnu EXTRA_ARGS=""
     - os: linux
       rust: nightly
