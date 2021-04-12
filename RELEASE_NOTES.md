@@ -1,3 +1,12 @@
+# Version 0.9.0
+* Fix relative paths in deps. Thanks Max Göttlicher!
+* Use explicit types for variables when supplied. This is currently required for variables that use
+  const generics.
+* Minimum rust version is now 1.51 (since upstream crates are already using const generics).
+* Don't misuse JUPYTER_CONFIG_DIR.
+* Make `a = 10` (no semicolon or let) report an error.
+* Updated rust-analyzer
+
 # Version 0.8.1
 * Fixed bug that was affecting HTML export from Jupyter. #153
 * Updated rust-analyzer.
