@@ -30,6 +30,9 @@ ra_ap_hir = "=0.0.45"
 ra_ap_base_db = "=0.0.45"
 ra_ap_syntax = "=0.0.45"
 unicode-segmentation = "1.7.1"
+# TODO: Remove the following. It's just here to prevent a build failure that occurs in ra_ap_syntax
+# when we get pre.5.
+rowan = "=0.13.0-pre.3"
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
 sig = "1.0.0"
