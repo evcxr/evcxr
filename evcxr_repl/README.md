@@ -4,7 +4,7 @@
 [![Downloads](https://img.shields.io/crates/d/evcxr_repl)](https://crates.io/crates/evcxr_repl)
 [![License](https://img.shields.io/crates/l/evcxr_repl)](https://crates.io/crates/evcxr_repl)
 
-A Rust REPL (Read-Eval-Print loop) built using the [`evcxr`](https://github.com/google/evcxr/blob/master/evcxr/README.md) evaluation context.
+A Rust REPL (Read-Eval-Print loop) built using the [`evcxr`](https://github.com/google/evcxr/blob/main/evcxr/README.md) evaluation context.
 
 ## Installation and Usage
 
@@ -28,7 +28,7 @@ Welcome to evcxr. For help, type :help
 ## Usage information
 
 Evcxr is both a REPL and a Jupyter kernel. See [Evcxr common
-usage](https://github.com/google/evcxr/blob/master/COMMON.md) for usage information that is
+usage](https://github.com/google/evcxr/blob/main/COMMON.md) for usage information that is
 common to both.
 
 ## Manual Installation
