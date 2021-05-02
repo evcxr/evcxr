@@ -248,7 +248,7 @@ fn eat_string(iter: &mut Peekable<CharIndices<'_>>, kind: StrKind) -> bool {
 ///
 /// Consumes the entire comment, including the `\n`.
 fn eat_comment_line<I: Iterator<Item = (usize, char)>>(iter: &mut I) {
-    while let Some((_, c)) = iter.next() {
+    for (_, c) in iter {
         if c == '\n' {
             break;
         }
@@ -393,7 +393,7 @@ fn eat_char(input: &mut Peekable<CharIndices<'_>>) -> Option<EatCharRes> {
 }
 
 #[derive(Copy, Clone, PartialEq)]
-enum Bracket {
+pub(crate) enum Bracket {
     Round,
     Square,
     Curly,
