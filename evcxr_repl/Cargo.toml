@@ -13,7 +13,15 @@ evcxr = { version = "=0.9.0", path = "../evcxr" }
 rustyline = "7.1.0"
 colored = "2.0.0"
 once_cell = "1.5.2"
-regex = { version = "1.4.1", default-features = false, features = [ "std" ] }
+regex = { version = "1.4.1", default-features = false, features = ["std"] }
+lazy_static = "1.3.0"
+failure = { version = "0.1.5", default-features = false, features = ["std"] }
 structopt = "0.3"
 unicode-xid = "0.2"
 unicode-segmentation = "1.7.1"
+# Only really needs to update when there's a parsing issue. The high version
+# number is because it's autopublished from rust-lang/rust. It's used by r-a,
+#
+# But long term it would be nice to replace our use of it with something from
+# r-a -- this seems a bit tricky, though.
+rustc_lexer = { version = "717.0.0", package = "rustc-ap-rustc_lexer" }

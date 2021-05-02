@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+pub(crate) mod highlight;
 mod repl;
-mod scan;
+pub(crate) mod scan;
 
 pub use repl::EvcxrRustylineHelper;

@@ -70,9 +70,19 @@ impl Highlighter for EvcxrRustylineHelper {
     fn highlight_prompt<'b, 's: 'b, 'p: 'b>(
         &'s self,
         prompt: &'p str,
-        _default: bool,
+        default: bool,
     ) -> Cow<'b, str> {
-        prompt.yellow().to_string().into()
+        if default {
+            prompt.yellow().to_string().into()
+        } else {
+            prompt.into()
+        }
+    }
+    fn highlight_char(&self, _line: &str, _pos: usize) -> bool {
+        true
+    }
+    fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
+        crate::highlight::highlight(line, Some(pos)).into()
     }
 }
 
@@ -83,7 +93,10 @@ impl Validator for EvcxrRustylineHelper {
         // rustc. This is an escape hatch for the case where *we* know (well,
         // think) the source is incomplete, but the user doesn't. It also makes
         // bugs in our code less disasterous.
-        if input.ends_with("\n\n") {
+        //
+        // (Note that 3 may seem like a lot, but `\n\n` just means there's a
+        // single line of whitespace between the items)
+        if input.ends_with("\n\n\n") {
             return Ok(ValidationResult::Valid(None));
         }
         match validate_source_fragment(input) {
