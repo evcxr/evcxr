@@ -8,6 +8,9 @@ readme = "README.md"
 authors = ["The Evcxr Authors"]
 edition = "2018"
 
+[features]
+default = ["mimalloc"]
+
 [dependencies]
 evcxr = { version = "=0.9.0", path = "../evcxr" }
 rustyline = "7.1.0"
@@ -17,3 +20,4 @@ regex = { version = "1.4.1", default-features = false, features = [ "std" ] }
 structopt = "0.3"
 unicode-xid = "0.2"
 unicode-segmentation = "1.7.1"
+mimalloc = { version = "0.1", default-features = false, optional = true }

@@ -21,7 +21,8 @@ colored = "2.0.0"
 dirs = "3.0.1"
 chrono = "0.4.19"
 unicode-segmentation = "1.7.1"
+mimalloc = { version = "0.1", default-features = false, optional = true }
 
 [features]
-default = ["vendored-zmq"]
+default = ["vendored-zmq", "mimalloc"]
 vendored-zmq = ["zmq/vendored"]
