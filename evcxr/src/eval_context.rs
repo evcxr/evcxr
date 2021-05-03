@@ -851,6 +851,10 @@ impl EvalContext {
                         state.async_mode = true;
                         if !state.external_deps.contains_key("tokio") {
                             state.add_dep("tokio", "\"0.2\"")?;
+                            // Rewrite Cargo.toml, since the dependency will probably have been
+                            // validated in the process of being added, which will have overwritten
+                            // Cargo.toml
+                            self.write_cargo_toml(state)?;
                         }
                         fixed_errors.insert("Enabled async mode");
                     } else if error.code() == Some("E0277") && !state.allow_question_mark {
