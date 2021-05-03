@@ -78,9 +78,31 @@ impl Highlighter for EvcxrRustylineHelper {
             prompt.into()
         }
     }
+
+    fn highlight_hint<'h>(&self, hint: &'h str) -> Cow<'h, str> {
+        format!("\x1b[2m{}\x1b[m", hint).into()
+        // Borrowed(hint)
+    }
+    // fn highlight_candidate<'c>(
+    //     &self,
+    //     candidate: &'c str,
+    //     _completion: rustyline::CompletionType,
+    // ) -> Cow<'c, str> {
+    //     format!("\x1b[2m{}\x1b[m", candidate).into()
+    // }
+
     fn highlight_char(&self, _line: &str, _pos: usize) -> bool {
+        // note: the semantics of this are a bit odd — we should return true if
+        // given a cursor on the char beginning at byte `_pos`, the line `line`
+        // should be highlighted — at all. It's a bit of a niche optimization,
+        // and is mostly for cases like highlighters that do matching brackets
+        // and thats all.
+        //
+        // It's hard for us to know what we want here
+        // !line.chars().all(|c| c.is_ascii_whitespace())
         true
     }
+
     fn highlight<'l>(&self, line: &'l str, pos: usize) -> Cow<'l, str> {
         crate::highlight::highlight(line, Some(pos)).into()
     }
@@ -116,7 +138,7 @@ impl Validator for EvcxrRustylineHelper {
     // it is without the ability to e.g. highlight the mismatched bracket or
     // whatever.
     fn validate_while_typing(&self) -> bool {
-        false
+        true
     }
 }
 
