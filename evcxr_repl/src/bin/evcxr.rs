@@ -299,6 +299,10 @@ fn parse_edit_mode(src: &str) -> Result<EditMode, &str> {
     Ok(mode)
 }
 
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static MIMALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 #[cfg(test)]
 mod tests {
     use super::character_column_to_grapheme_number;

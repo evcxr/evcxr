@@ -558,6 +558,7 @@ dependencies = [
  "hex",
  "hmac",
  "json",
+ "mimalloc",
  "sha2",
  "unicode-segmentation",
  "uuid",
@@ -570,6 +571,7 @@ version = "0.9.0"
 dependencies = [
  "colored",
  "evcxr",
+ "mimalloc",
  "once_cell",
  "regex",
  "rustyline",
@@ -850,6 +852,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2396cf99d2f58611cd69f0efeee4af3d2e2c7b61bed433515029163aa567e65c"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "lock_api"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -916,6 +927,15 @@ dependencies = [
  "error-chain",
  "pkg-config",
  "toml",
+]
+
+[[package]]
+name = "mimalloc"
+version = "0.1.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e7c6b11afd1e5e689ac96b6d18b1fc763398fe3d7eed99e8773426bc2033dfb"
+dependencies = [
+ "libmimalloc-sys",
 ]
 
 [[package]]
