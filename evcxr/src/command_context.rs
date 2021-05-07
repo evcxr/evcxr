@@ -219,12 +219,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
         Ok(completions)
     }
 
-    fn load_config(&mut self) -> Result<EvalOutputs, Error> {
+    fn load_config(&mut self, quiet: bool) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
         if let Some(config_dir) = crate::config_dir() {
             let config_file = config_dir.join("init.evcxr");
             if config_file.exists() {
-                println!("Loading startup commands from {:?}", config_file);
+                if !quiet {
+                    println!("Loading startup commands from {:?}", config_file);
+                }
                 let contents = std::fs::read_to_string(config_file)?;
                 for line in contents.lines() {
                     outputs.merge(self.execute(line)?);
@@ -234,7 +236,9 @@ Panic detected. Here's some useful information if you're filing a bug report.
             // any other state changed by :commands) specified in the init file.
             let prelude_file = config_dir.join("prelude.rs");
             if prelude_file.exists() {
-                println!("Executing prelude from {:?}", prelude_file);
+                if !quiet {
+                    println!("Executing prelude from {:?}", prelude_file);
+                }
                 let prelude = std::fs::read_to_string(prelude_file)?;
                 outputs.merge(self.execute(&prelude)?);
             }
@@ -335,9 +339,10 @@ Panic detected. Here's some useful information if you're filing a bug report.
             ),
             AvailableCommand::new(
                 ":load_config",
-                "Reloads startup configuration files",
-                |ctx, state, _args| {
-                    let result = ctx.load_config();
+                "Reloads startup configuration files. Accepts optional flag `--quiet` to suppress logging.",
+                |ctx, state, args| {
+                    let quiet = args.as_ref().map(String::as_str) == Some("--quiet");
+                    let result = ctx.load_config(quiet);
                     *state = ctx.eval_context.state();
                     result
                 },

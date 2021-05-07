@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use super::scan::{validate_source_fragment, FragmentValidity};
+use crate::bginit::BgInitMutex;
 use colored::*;
 use evcxr::{CommandContext, Completions};
 use rustyline::{
@@ -24,14 +25,14 @@ use rustyline::{
     Context, Helper,
 };
 use std::borrow::Cow;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct EvcxrRustylineHelper {
-    command_context: Arc<Mutex<CommandContext>>,
+    command_context: Arc<BgInitMutex<CommandContext>>,
 }
 
 impl EvcxrRustylineHelper {
-    pub fn new(command_context: Arc<Mutex<CommandContext>>) -> Self {
+    pub fn new(command_context: Arc<BgInitMutex<CommandContext>>) -> Self {
         Self { command_context }
     }
 }
@@ -54,7 +55,6 @@ impl Completer for EvcxrRustylineHelper {
         let completions = self
             .command_context
             .lock()
-            .unwrap()
             .completions(line, pos)
             .unwrap_or_else(|_| Completions::default());
         let res: Vec<String> = completions

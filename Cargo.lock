@@ -572,6 +572,7 @@ dependencies = [
  "evcxr",
  "mimalloc",
  "once_cell",
+ "parking_lot",
  "regex",
  "rustyline",
  "structopt",
