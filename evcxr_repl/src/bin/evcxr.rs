@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evcxr;
-
 use colored::*;
 use evcxr::{CommandContext, CompilationError, Error};
 use rustyline::{
@@ -21,16 +19,16 @@ use rustyline::{
 };
 use std::fs;
 use std::io;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use structopt::StructOpt;
 use unicode_segmentation;
 
-use evcxr_repl::EvcxrRustylineHelper;
+use evcxr_repl::{BgInitMutex, EvcxrRustylineHelper};
 
 const PROMPT: &str = ">> ";
 
 struct Repl {
-    command_context: Arc<Mutex<CommandContext>>,
+    command_context: Arc<BgInitMutex<CommandContext>>,
     ide_mode: bool,
 }
 
@@ -54,20 +52,33 @@ fn send_output<T: io::Write + Send + 'static>(
 }
 
 impl Repl {
-    fn new(ide_mode: bool) -> Result<Repl, Error> {
-        let (command_context, outputs) = CommandContext::new()?;
-        send_output(outputs.stdout, io::stdout(), None);
-        send_output(outputs.stderr, io::stderr(), Some(Color::BrightRed));
-        let mut repl = Repl {
-            command_context: Arc::new(Mutex::new(command_context)),
-            ide_mode,
-        };
-        repl.execute(":load_config");
-        Ok(repl)
-    }
+    fn new(ide_mode: bool, opt: String) -> Repl {
+        let initialize = move || -> Result<CommandContext, Error> {
+            let (mut command_context, outputs) = CommandContext::new()?;
 
+            send_output(outputs.stdout, io::stdout(), None);
+            send_output(outputs.stderr, io::stderr(), Some(Color::BrightRed));
+            command_context.execute(":load_config --quiet")?;
+            if opt != "" {
+                // Ignore failure
+                command_context.set_opt_level(&opt).ok();
+            }
+            Ok(command_context)
+        };
+        let command_context = Arc::new(BgInitMutex::new(move || {
+            initialize().unwrap_or_else(|e| {
+                // Note: Start with a `\n` to move off of the line the user may be typing.
+                eprintln!("\nInitialization failed: {}", e);
+                std::process::exit(-1);
+            })
+        }));
+        Repl {
+            command_context,
+            ide_mode,
+        }
+    }
     fn execute(&mut self, to_run: &str) {
-        let execution_result = self.command_context.lock().unwrap().execute(to_run);
+        let execution_result = self.command_context.lock().execute(to_run);
         let success = match execution_result {
             Ok(output) => {
                 if let Some(text) = output.get("text/plain") {
@@ -226,19 +237,19 @@ fn main() {
     colored::control::set_virtual_terminal(true).ok();
 
     println!("Welcome to evcxr. For help, type :help");
-    let mut repl = match Repl::new(options.ide_mode) {
-        Ok(c) => c,
-        Err(error) => {
-            eprintln!("{}", error);
-            return;
+    // Print this now, because we silence `:load_config` (writing to stdout
+    // interfers with rustyline somewhat).
+    if let Some(cfg) = evcxr::config_dir() {
+        let init = cfg.join("init.evcxr");
+        if init.exists() {
+            println!("Startup commands will be loaded from {}", init.display());
         }
-    };
-
-    repl.command_context
-        .lock()
-        .unwrap()
-        .set_opt_level(&options.opt)
-        .ok();
+        let prelude = cfg.join("prelude.rs");
+        if prelude.exists() {
+            println!("Prelude will be loaded from {}", prelude.display());
+        }
+    }
+    let mut repl = Repl::new(options.ide_mode, options.opt.clone());
     let config = match options.edit_mode {
         EditMode::Vi => rustyline::Config::builder()
             .edit_mode(EditMode::Vi)

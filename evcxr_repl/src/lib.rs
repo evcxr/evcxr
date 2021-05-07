@@ -12,7 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod bginit;
 mod repl;
 mod scan;
 
+pub use bginit::{BgInitMutex, BgInitMutexGuard};
 pub use repl::EvcxrRustylineHelper;
