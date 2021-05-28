@@ -17,6 +17,7 @@ use once_cell::sync::OnceCell;
 use ra_ap_base_db::{FileId, SourceRoot};
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
+use ra_ap_ide_db::helpers::insert_use::ImportGranularity;
 use ra_ap_ide_db::helpers::{insert_use::InsertUseConfig, SnippetCap};
 use ra_ap_paths::AbsPathBuf;
 use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace};
@@ -249,9 +250,10 @@ impl RustAnalyzer {
             snippet_cap: SnippetCap::new(true),
             enable_imports_on_the_fly: false,
             insert_use: InsertUseConfig {
-                merge: None,
                 prefix_kind: ra_hir::PrefixKind::ByCrate,
                 group: false,
+                granularity: ImportGranularity::Item,
+                enforce_granularity: false,
             },
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
@@ -424,7 +426,7 @@ mod test {
         let var_types = ra.top_level_variables("foo");
         assert_eq!(var_types["v1"].type_name, "i32");
         assert!(var_types["v1"].is_mutable);
-        assert_eq!(var_types["v2"].type_name, "&[bool; _]");
+        assert_eq!(var_types["v2"].type_name, "&[bool; 1]");
         assert!(!var_types["v2"].is_mutable);
         assert_eq!(&var_types["v3"].type_name, "Foo<10>");
         assert!(var_types.get("v100").is_none());
