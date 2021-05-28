@@ -1,3 +1,6 @@
+# Unreleased
+* Use rust-analyzer for infering types for let destructurings.
+
 # Version 0.9.0
 * Fix relative paths in deps. Thanks Max Göttlicher!
 * Use explicit types for variables when supplied. This is currently required for variables that use
