@@ -1,5 +1,9 @@
 # Unreleased
+* Use mimalloc. This reduces startup time, at least one Mac. Thanks thomcc.
+* Initialize CommandContext in the background. Reduces startup time. Thanks thomcc.
+* Updated rustyline. Thanks thomcc
 * Use rust-analyzer for infering types for let destructurings.
+* Update rust-analyzer. Fixes evcxr on nightly, beta (and next stable release).
 
 # Version 0.9.0
 * Fix relative paths in deps. Thanks Max Göttlicher!
