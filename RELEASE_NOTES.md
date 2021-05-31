@@ -4,6 +4,7 @@
 * Updated rustyline. Thanks thomcc
 * Use rust-analyzer for infering types for let destructurings.
 * Update rust-analyzer. Fixes evcxr on nightly, beta (and next stable release).
+* Minimum supported rust version now 1.52 (required for latest rust-analyzer).
 
 # Version 0.9.0
 * Fix relative paths in deps. Thanks Max Göttlicher!
