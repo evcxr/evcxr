@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.10.0
 * Use mimalloc. This reduces startup time, at least one Mac. Thanks thomcc.
 * Initialize CommandContext in the background. Reduces startup time. Thanks thomcc.
 * Updated rustyline. Thanks thomcc
