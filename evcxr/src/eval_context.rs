@@ -1019,6 +1019,7 @@ pub struct ContextState {
     /// code was executed. Doesn't include newly defined variables until after
     /// execution completes.
     stored_variable_states: HashMap<String, VariableState>,
+    attributes: HashMap<String, CodeBlock>,
     async_mode: bool,
     allow_question_mark: bool,
     build_num: i32,
@@ -1034,6 +1035,7 @@ impl ContextState {
             extern_crate_stmts: HashMap::new(),
             variable_states: HashMap::new(),
             stored_variable_states: HashMap::new(),
+            attributes: HashMap::new(),
             async_mode: false,
             allow_question_mark: false,
             build_num: 0,
@@ -1273,6 +1275,7 @@ impl ContextState {
     fn analysis_code(&self, user_code: CodeBlock) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
+            .add_all(self.attributes_code())
             .add_all(self.items_code())
             .add_all(self.error_trait_code(true))
             .generated("fn evcxr_variable_store<T: 'static>(_: T) {}")
@@ -1311,6 +1314,7 @@ impl ContextState {
     ) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
+            .add_all(self.attributes_code())
             .add_all(self.items_code());
         let has_user_code = !user_code.is_empty();
         if has_user_code {
@@ -1332,6 +1336,14 @@ impl ContextState {
         let mut code = CodeBlock::new().add_all(self.get_imports());
         for item in self.items_by_name.values().chain(self.unnamed_items.iter()) {
             code = code.add_all(item.clone());
+        }
+        code
+    }
+
+    fn attributes_code(&self) -> CodeBlock {
+        let mut code = CodeBlock::new();
+        for attrib in self.attributes.values() {
+            code = code.add_all(attrib.clone());
         }
         code
     }
@@ -1571,6 +1583,11 @@ impl ContextState {
                     self.record_new_locals(pat, let_stmt.ty(), &segment, node.text_range());
                     code_out = code_out.with_segment(segment);
                 }
+            } else if ast::Attr::can_cast(node.kind()) {
+                self.attributes.insert(
+                    node.text().to_string(),
+                    CodeBlock::new().with_segment(segment),
+                );
             } else if ast::Expr::can_cast(node.kind()) {
                 if statement_index == num_statements - 1 {
                     if self.config.display_final_expression {
@@ -1791,6 +1808,11 @@ fn replace_reserved_words_in_type(ty: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use ra_ap_syntax::ast::AttrsOwner;
+    use ra_ap_syntax::SourceFile;
+
+    use super::*;
+
     #[test]
     fn test_replace_reserved_words_in_type() {
         use super::replace_reserved_words_in_type as repl;
@@ -1800,5 +1822,37 @@ mod tests {
         assert_eq!(repl("foo::async::bar"), "foo::r#async::bar");
         assert_eq!(repl("foo::async::async::bar"), "foo::r#async::r#async::bar");
         assert_eq!(repl("Bar<async::foo::Baz>"), "Bar<r#async::foo::Baz>");
+    }
+
+    fn create_state() -> ContextState {
+        let config = Config::new(PathBuf::from("/dummy_path"));
+        ContextState::new(config)
+    }
+
+    #[test]
+    fn test_attributes() {
+        let mut state = create_state();
+        let (user_code, code_info) = CodeBlock::from_original_user_code(stringify!(
+            #![feature(box_syntax)]
+            #![feature(some_other_feature)]
+            fn foo() {}
+            let x = box 10;
+        ));
+        let user_code = state.apply(user_code, &code_info.nodes).unwrap();
+        let final_code = state.code_to_compile(user_code, CompilationMode::NoCatch);
+        let source_file = SourceFile::parse(&final_code.code_string()).ok().unwrap();
+        let mut attrs: Vec<String> = source_file
+            .attrs()
+            .map(|attr| attr.syntax().text().to_string().replace(" ", ""))
+            .collect();
+        attrs.sort();
+        assert_eq!(
+            attrs,
+            vec![
+                "#![allow(unused_imports,unused_mut,dead_code)]".to_owned(),
+                "#![feature(box_syntax)]".to_owned(),
+                "#![feature(some_other_feature)]".to_owned(),
+            ]
+        );
     }
 }
