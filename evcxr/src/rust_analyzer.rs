@@ -174,7 +174,7 @@ impl RustAnalyzer {
         };
         let workspace = ProjectWorkspace::load(manifest, &config, &|_| {})?;
         let load = workspace
-            .to_roots(None)
+            .to_roots()
             .iter()
             .map(|root| {
                 ra_vfs::loader::Entry::Directories(ra_vfs::loader::Directories {
@@ -230,7 +230,7 @@ impl RustAnalyzer {
                 .map(|file_set| SourceRoot::new_local(file_set))
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(None, None, &mut |path| {
+        change.set_crate_graph(workspace.to_crate_graph(None, &mut |path| {
             self.vfs.file_id(&path.to_path_buf().into())
         }));
         Ok(())
@@ -249,11 +249,13 @@ impl RustAnalyzer {
             add_call_argument_snippets: true,
             snippet_cap: SnippetCap::new(true),
             enable_imports_on_the_fly: false,
+            enable_self_on_the_fly: true,
             insert_use: InsertUseConfig {
                 prefix_kind: ra_hir::PrefixKind::ByCrate,
                 group: false,
                 granularity: ImportGranularity::Item,
                 enforce_granularity: false,
+                skip_glob_imports: false,
             },
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
