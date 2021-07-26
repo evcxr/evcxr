@@ -1,3 +1,8 @@
+# Version 0.11.0
+* Update rust-analyzer - fixes a compilation failure.
+* Support for crate-level attributes - e.g. `#![feature(...)]`
+* Minimum supported rust version is now 1.53 due to changes in rust-analyzer.
+
 # Version 0.10.0
 * Use mimalloc. This reduces startup time, at least one Mac. Thanks thomcc.
 * Initialize CommandContext in the background. Reduces startup time. Thanks thomcc.
