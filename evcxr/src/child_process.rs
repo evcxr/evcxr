@@ -14,7 +14,6 @@
 
 use crate::errors::{bail, Error};
 use crate::runtime;
-use std;
 use std::io::BufReader;
 use std::process;
 use std::sync::mpsc;
@@ -115,10 +114,10 @@ impl ChildProcess {
     }
 
     fn get_termination_error(&mut self) -> Error {
-        // Wait until the stderr handling thread has released its lock on
-        // stderr_sender, which it will do when there's nothing more to read
-        // from stderr.
-        let _ = self.stderr_sender.lock().unwrap();
+        // Wait until the stderr handling thread has released its lock on stderr_sender, which it
+        // will do when there's nothing more to read from stderr. We don't need to keep the lock,
+        // just wait until we can aquire it, then drop it straight away.
+        std::mem::drop(self.stderr_sender.lock().unwrap());
         let mut content = String::new();
         while let Some(Ok(line)) = self.stdout.next() {
             content.push_str(&line);

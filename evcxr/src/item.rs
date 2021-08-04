@@ -33,6 +33,6 @@ fn item_ident(item: &ast::Item) -> Option<ast::Name> {
         ast::Item::Trait(i) => ast::NameOwner::name(i),
         ast::Item::TypeAlias(i) => ast::NameOwner::name(i),
         ast::Item::Union(i) => ast::NameOwner::name(i),
-        _ => return None,
+        _ => None,
     }
 }

@@ -248,7 +248,7 @@ fn eat_string(iter: &mut Peekable<CharIndices<'_>>, kind: StrKind) -> bool {
 ///
 /// Consumes the entire comment, including the `\n`.
 fn eat_comment_line<I: Iterator<Item = (usize, char)>>(iter: &mut I) {
-    while let Some((_, c)) = iter.next() {
+    for (_, c) in iter {
         if c == '\n' {
             break;
         }
@@ -334,7 +334,7 @@ fn do_eat_char(input: &mut Peekable<CharIndices<'_>>) -> Option<EatCharRes> {
         // Hope for the best, and read until we see a closing quote or something
         // that definitely doesn't belong. This should probably be made smarter,
         // since the actual syntax for the escape sequences is not that bad.
-        while let Some((_, c)) = input.next() {
+        for (_, c) in input {
             if c == '\'' {
                 return Some(EatCharRes::AteChar);
             }

@@ -17,10 +17,8 @@ use crate::{
     errors::{bail, CompilationError, Error},
     eval_context::Config,
 };
-use json;
 use once_cell::sync::OnceCell;
 use regex::Regex;
-use std;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -272,7 +270,7 @@ fn run_cargo(
         let (errors, non_json_error) = errors_from_cargo_output(&cargo_output, code_block);
         if errors.is_empty() {
             if let Some(error) = non_json_error {
-                bail!(Error::Message(error.to_owned()));
+                bail!(Error::Message(error));
             } else {
                 bail!(Error::Message(format!(
                     "Compilation failed, but no parsable errors were found. STDERR:\n\
@@ -305,7 +303,7 @@ fn errors_from_cargo_output(
         .lines()
         .chain(stdout.lines())
         .filter_map(|line| {
-            json::parse(&line)
+            json::parse(line)
                 .ok()
                 .and_then(|json| CompilationError::opt_new(json, code_block))
                 .or_else(|| {

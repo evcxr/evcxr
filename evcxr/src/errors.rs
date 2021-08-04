@@ -17,7 +17,6 @@ use json::{self, JsonValue};
 use once_cell::sync::OnceCell;
 use ra_ap_ide::{TextRange, TextSize};
 use regex::Regex;
-use std;
 use std::fmt;
 use std::io;
 
@@ -236,10 +235,7 @@ impl CompilationError {
     }
 
     pub fn rendered(&self) -> String {
-        self.json["rendered"]
-            .as_str()
-            .unwrap_or_else(|| "")
-            .to_owned()
+        self.json["rendered"].as_str().unwrap_or("").to_owned()
     }
 
     /// Returns the actual type indicated by the error message or None if this isn't a type error.
@@ -378,7 +374,7 @@ fn line_and_column(
     let mut column = text
         .lines()
         .last()
-        .map(|line| count_columns(&line))
+        .map(|line| count_columns(line))
         .unwrap_or(0)
         + 1;
     if line == 1 {

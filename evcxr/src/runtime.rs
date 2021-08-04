@@ -13,7 +13,6 @@
 // limitations under the License.
 
 use crate::errors::{bail, Error};
-use libloading;
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use std::marker::PhantomData;
@@ -71,7 +70,7 @@ impl Runtime {
         static LOAD_AND_RUN: OnceCell<Regex> = OnceCell::new();
         let load_and_run =
             LOAD_AND_RUN.get_or_init(|| Regex::new("LOAD_AND_RUN ([^ ]+) ([^ ]+)").unwrap());
-        if let Some(captures) = load_and_run.captures(&line) {
+        if let Some(captures) = load_and_run.captures(line) {
             self.load_and_run(&captures[1], &captures[2])
         } else {
             bail!("Unrecognised line: {}", line);

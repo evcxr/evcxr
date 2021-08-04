@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use anyhow::{anyhow, bail, Result};
-use dirs;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
 use std::{env, fs};
 
@@ -72,7 +72,7 @@ pub(crate) fn update_if_necessary() -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn install_resource(dir: &PathBuf, filename: &str, bytes: &'static [u8]) -> Result<()> {
+pub(crate) fn install_resource(dir: &Path, filename: &str, bytes: &'static [u8]) -> Result<()> {
     let res_path = dir.join(filename);
     println!("Writing {}", res_path.to_string_lossy());
     let mut file = fs::File::create(res_path)?;

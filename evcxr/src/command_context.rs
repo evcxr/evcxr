@@ -206,9 +206,11 @@ Panic detected. Here's some useful information if you're filing a bug report.
         full_position: usize,
     ) -> Result<Completions> {
         let existing = &segment.code[0..offset];
-        let mut completions = Completions::default();
-        completions.start_offset = full_position - offset;
-        completions.end_offset = full_position;
+        let mut completions = Completions {
+            start_offset: full_position - offset,
+            end_offset: full_position,
+            ..Completions::default()
+        };
         for cmd in Self::commands_by_name().keys() {
             if cmd.starts_with(existing) {
                 completions.completions.push(Completion {
@@ -284,14 +286,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
                             found_space = true;
                             return false;
                         }
-                        return found_space;
+                        found_space
                     })
                     .map(|(index, _char)| index)
                     .unwrap_or(0);
                 let start_column = code_block::count_columns(&segment.code[..start_byte]) + 1;
                 let end_column = code_block::count_columns(&segment.code);
                 CompilationError::from_segment_span(
-                    &segment,
+                    segment,
                     SpannedMessage::from_segment_span(
                         segment,
                         Span::from_command(command_call, start_column, end_column),
@@ -301,7 +303,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             })
         } else {
             return Err(CompilationError::from_segment_span(
-                &segment,
+                segment,
                 SpannedMessage::from_segment_span(
                     segment,
                     Span::from_command(
@@ -442,7 +444,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "Set which toolchain to use (e.g. nightly)",
                 |_ctx, state, args| {
                     if let Some(arg) = args {
-                        state.set_toolchain(&arg);
+                        state.set_toolchain(arg);
                     }
                     text_output(format!("Toolchain: {}", state.toolchain()))
                 },
@@ -554,7 +556,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             out.push_str(var);
             out.push_str(": ");
             out.push_str(ty);
-            out.push_str("\n");
+            out.push('\n');
         }
         out
     }
@@ -589,7 +591,7 @@ fn process_dep_command(
     if let Some(captures) = dep_re.captures(args) {
         state.add_dep(
             &captures[1],
-            &captures.get(3).map_or("\"*\"", |m| m.as_str()),
+            captures.get(3).map_or("\"*\"", |m| m.as_str()),
         )?;
         Ok(EvalOutputs::new())
     } else {
@@ -597,32 +599,17 @@ fn process_dep_command(
     }
 }
 
+type CallbackFn = dyn Fn(&mut CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>
+    + 'static
+    + Sync
+    + Send;
+
 struct AvailableCommand {
     name: &'static str,
     short_description: &'static str,
-    callback: Box<
-        dyn Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
-            + 'static
-            + Sync
-            + Send,
-    >,
+    callback: Box<CallbackFn>,
     /// If `Some`, this callback will be run when preparing for analysis instead of `callback`.
-    analysis_callback: Option<
-        Box<
-            dyn Fn(
-                    &CommandContext,
-                    &mut ContextState,
-                    &Option<String>,
-                ) -> Result<EvalOutputs, Error>
-                + 'static
-                + Sync
-                + Send,
-        >,
-    >,
+    analysis_callback: Option<Box<CallbackFn>>,
 }
 
 impl AvailableCommand {
@@ -648,7 +635,11 @@ impl AvailableCommand {
 
     fn with_analysis_callback(
         mut self,
-        callback: impl Fn(&CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>
+        callback: impl Fn(
+                &mut CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
             + 'static
             + Sync
             + Send,

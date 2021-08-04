@@ -15,7 +15,6 @@
 use crate::connection::{Connection, HmacSha256};
 use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
-use hex;
 use json::{self, JsonValue};
 use std::{self, fmt};
 use uuid::Uuid;
@@ -86,7 +85,7 @@ impl RawMessage {
     fn digest(&self, mac: &mut HmacSha256) {
         use hmac::Mac;
         for part in &self.jparts {
-            mac.update(&part);
+            mac.update(part);
         }
     }
 }

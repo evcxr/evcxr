@@ -14,6 +14,7 @@
 
 use colored::*;
 use evcxr::{CommandContext, CompilationError, Error};
+use evcxr_repl::{BgInitMutex, EvcxrRustylineHelper};
 use rustyline::{
     error::ReadlineError, At, Cmd, EditMode, Editor, KeyCode, KeyEvent, Modifiers, Movement, Word,
 };
@@ -21,9 +22,6 @@ use std::fs;
 use std::io;
 use std::sync::{mpsc, Arc};
 use structopt::StructOpt;
-use unicode_segmentation;
-
-use evcxr_repl::{BgInitMutex, EvcxrRustylineHelper};
 
 const PROMPT: &str = ">> ";
 
@@ -59,7 +57,7 @@ impl Repl {
             send_output(outputs.stdout, io::stdout(), None);
             send_output(outputs.stderr, io::stderr(), Some(Color::BrightRed));
             command_context.execute(":load_config --quiet")?;
-            if opt != "" {
+            if !opt.is_empty() {
                 // Ignore failure
                 command_context.set_opt_level(&opt).ok();
             }
@@ -113,7 +111,6 @@ impl Repl {
     }
 
     fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
-        let source_lines: Vec<&str> = source.lines().collect();
         let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
             if error.is_from_user_code() {
@@ -125,14 +122,14 @@ impl Repl {
                         );
                         let mut end_column = character_column_to_grapheme_number(
                             span.end_column - 1,
-                            &spanned_message.lines.last().unwrap(),
+                            spanned_message.lines.last().unwrap(),
                         );
                         // Considering spans can cover multiple lines, it could be that end_column
                         // is less than start_column.
                         if end_column < start_column {
                             std::mem::swap(&mut start_column, &mut end_column);
                         }
-                        if source_lines.len() > 1 {
+                        if source.lines().count() > 1 {
                             // for multi line source code, print the lines
                             if last_span_lines != &spanned_message.lines {
                                 for line in &spanned_message.lines {

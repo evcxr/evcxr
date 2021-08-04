@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evcxr;
-
 fn main() {
     evcxr::runtime_hook();
     eprintln!("This binary is intended to be use only from tests");

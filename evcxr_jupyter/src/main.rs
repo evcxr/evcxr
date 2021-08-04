@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evcxr;
 #[macro_use]
 extern crate json;
 
@@ -25,7 +24,7 @@ mod install;
 mod jupyter_message;
 
 fn run(control_file_name: &str) -> Result<()> {
-    let config = control_file::Control::parse_file(&control_file_name)?;
+    let config = control_file::Control::parse_file(control_file_name)?;
     let server = core::Server::start(&config)?;
     server.wait_for_shutdown();
     Ok(())

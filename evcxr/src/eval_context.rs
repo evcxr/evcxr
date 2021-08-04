@@ -36,7 +36,6 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
-use tempfile;
 
 pub struct EvalContext {
     // Our tmpdir if EVCXR_TMPDIR wasn't set - Drop causes tmpdir to be cleaned up.
@@ -679,7 +678,7 @@ impl EvalContext {
                 got_panic = true;
             } else if line.starts_with(evcxr_input::GET_CMD) {
                 let is_password = line.starts_with(evcxr_input::GET_CMD_PASSWORD);
-                let prompt = line.split(':').skip(1).next().unwrap_or_default();
+                let prompt = line.split(':').nth(1).unwrap_or_default();
                 self.child_process
                     .send(&(callbacks.input_reader)(prompt, is_password))?;
             } else if line == evcxr_internal_runtime::USER_ERROR_OCCURRED {
@@ -692,8 +691,9 @@ impl EvalContext {
                     .retain(|_variable_name, variable_state| {
                         variable_state.move_state != VariableMoveState::MovedIntoCatchUnwind
                     });
-            } else if line.starts_with(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE) {
-                let variable_name = &line[evcxr_internal_runtime::VARIABLE_CHANGED_TYPE.len()..];
+            } else if let Some(variable_name) =
+                line.strip_prefix(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE)
+            {
                 lost_variables.push(variable_name.to_owned());
             } else if let Some(captures) = mime_output.captures(&line) {
                 let mime_type = captures[1].to_owned();
@@ -1296,7 +1296,7 @@ impl ContextState {
         // Pack variable statements in analysis mode are a lot simpler than in compiled mode. We
         // just call a function that enforces that the variable doesn't contain any non-static
         // lifetimes.
-        for (var_name, _var_state) in &self.variable_states {
+        for var_name in self.variable_states.keys() {
             code.pack_variable(
                 var_name.clone(),
                 format!("evcxr_variable_store({});", var_name),

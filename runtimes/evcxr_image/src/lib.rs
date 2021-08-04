@@ -14,9 +14,6 @@
 
 use std::ops::Deref;
 
-use evcxr_runtime;
-use image;
-
 pub trait ImageDisplay {
     fn evcxr_display(&self);
 }

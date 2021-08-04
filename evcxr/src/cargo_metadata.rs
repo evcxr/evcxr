@@ -16,7 +16,6 @@ use anyhow::{bail, Context, Result};
 use json::{self, JsonValue};
 use once_cell::sync::OnceCell;
 use regex::Regex;
-use std;
 use std::collections::HashMap;
 
 use crate::eval_context::Config;

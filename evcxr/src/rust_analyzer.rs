@@ -65,7 +65,7 @@ impl RustAnalyzer {
         // Pre-allocate an ID for our main source file.
         let vfs_source_file: ra_vfs::VfsPath = source_file.clone().into();
         vfs.set_file_contents(vfs_source_file.clone(), Some(vec![]));
-        let source_file_id = vfs.file_id(&vfs_source_file.clone()).unwrap();
+        let source_file_id = vfs.file_id(&vfs_source_file).unwrap();
         Ok(RustAnalyzer {
             with_sysroot: true,
             root_directory,
@@ -128,7 +128,7 @@ impl RustAnalyzer {
                     } else {
                         continue;
                     };
-                    let module = sema.scope(&function.syntax()).module().unwrap();
+                    let module = sema.scope(function.syntax()).module().unwrap();
                     for statement in body.statements() {
                         if let ast::Stmt::LetStmt(let_stmt) = statement {
                             if let Some(pat) = let_stmt.pat() {
@@ -217,7 +217,7 @@ impl RustAnalyzer {
             let new_contents = if changed_file.exists() {
                 String::from_utf8(self.vfs.file_contents(changed_file.file_id).to_owned())
                     .ok()
-                    .map(|contents| Arc::new(contents))
+                    .map(Arc::new)
             } else {
                 None
             };
@@ -227,7 +227,7 @@ impl RustAnalyzer {
             ra_vfs::file_set::FileSetConfig::default()
                 .partition(&self.vfs)
                 .into_iter()
-                .map(|file_set| SourceRoot::new_local(file_set))
+                .map(SourceRoot::new_local)
                 .collect(),
         );
         change.set_crate_graph(workspace.to_crate_graph(None, &mut |path| {
@@ -317,7 +317,7 @@ fn add_variable_for_pattern(
     if let ast::Pat::IdentPat(ident_pat) = pat {
         if let Some(name) = ident_pat.name() {
             if let Some(type_name) =
-                get_type_name(explicit_type, sema.type_of_pat(pat), &sema, module)
+                get_type_name(explicit_type, sema.type_of_pat(pat), sema, module)
             {
                 result.insert(
                     name.text().to_string(),
@@ -370,7 +370,7 @@ pub struct Completion {
 /// instead of `[i32, 5]`, we get `[i32, _]`.
 pub(crate) fn is_type_valid(type_name: &str) -> bool {
     use ra_ap_syntax::SyntaxKind;
-    if let Ok(ty) = ast::Type::parse(&type_name) {
+    if let Ok(ty) = ast::Type::parse(type_name) {
         for node in ty.syntax().descendants() {
             if node.kind() == SyntaxKind::ERROR || node.kind() == SyntaxKind::INFER_TYPE {
                 return false;

@@ -18,7 +18,6 @@
 // and we've dropped support for old version for rustc prior to the fix.
 
 use anyhow::{anyhow, Result};
-use json;
 use std::fs;
 
 #[derive(Debug, Clone)]

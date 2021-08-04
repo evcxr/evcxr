@@ -18,7 +18,6 @@ use once_cell::sync::OnceCell;
 use ra_ap_syntax::SyntaxNode;
 use regex::Regex;
 use statement_splitter::OriginalUserCode;
-use std;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Segment {
@@ -147,7 +146,7 @@ impl CodeBlock {
     /// value of `f` once done. This is a convenience for when we only have a
     /// &mut, not an owned value.
     pub(crate) fn modify<F: FnOnce(CodeBlock) -> CodeBlock>(&mut self, f: F) {
-        let mut block = std::mem::replace(self, CodeBlock::new());
+        let mut block = std::mem::take(self);
         block = f(block);
         *self = block;
     }
@@ -366,7 +365,7 @@ impl CodeBlock {
 
     pub(crate) fn apply_fallback(&mut self, fallback: &CodeBlock) {
         let mut replacement_segments = Vec::new();
-        for segment in std::mem::replace(&mut self.segments, Vec::new()) {
+        for segment in std::mem::take(&mut self.segments) {
             if segment.kind.equals_fallback(fallback) {
                 replacement_segments.extend(fallback.segments.clone());
             } else {

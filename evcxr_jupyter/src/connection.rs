@@ -15,7 +15,6 @@
 use anyhow::Result;
 use hmac::{Hmac, NewMac};
 use sha2::Sha256;
-use zmq;
 
 pub(crate) type HmacSha256 = Hmac<Sha256>;
 

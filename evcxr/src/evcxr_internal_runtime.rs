@@ -75,7 +75,7 @@ impl VariableStore {
             .or_insert_with(|| Box::new(std::sync::Arc::new(create())))
             .downcast_mut()
         {
-            std::sync::Arc::clone(&value)
+            std::sync::Arc::clone(value)
         } else {
             panic!("lazy_arc {} changed type", name);
         }

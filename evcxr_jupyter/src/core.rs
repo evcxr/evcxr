@@ -17,15 +17,12 @@ use crate::control_file;
 use crate::jupyter_message::JupyterMessage;
 use anyhow::{bail, Result};
 use colored::*;
-use evcxr;
 use evcxr::CommandContext;
-use json;
 use json::JsonValue;
 use std::collections::HashMap;
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time;
-use zmq;
 
 // Note, to avoid potential deadlocks, each thread should lock at most one mutex at a time.
 #[derive(Clone)]
@@ -167,13 +164,12 @@ impl Server {
                     "execution_count" => execution_count,
                     "code" => src
                 })
-                .send(&mut *self.iopub.lock().unwrap())?;
+                .send(&*self.iopub.lock().unwrap())?;
             let mut callbacks = evcxr::EvalCallbacks {
                 input_reader: &|prompt, is_password| {
                     self.request_input(&message, prompt, is_password)
                         .unwrap_or_default()
                 },
-                ..evcxr::EvalCallbacks::default()
             };
             match context
                 .lock()
@@ -206,7 +202,7 @@ impl Server {
                                 "data" => data,
                                 "metadata" => object!(),
                             })
-                            .send(&mut *self.iopub.lock().unwrap())?;
+                            .send(&*self.iopub.lock().unwrap())?;
                     }
                     if let Some(duration) = output.timing {
                         // TODO replace by duration.as_millis() when stable
@@ -226,7 +222,7 @@ impl Server {
                                 "data" => data,
                                 "metadata" => object!(),
                             })
-                            .send(&mut *self.iopub.lock().unwrap())?;
+                            .send(&*self.iopub.lock().unwrap())?;
                     }
                     execution_reply_sender.send(message.new_reply().with_content(object! {
                         "status" => "ok",
@@ -253,7 +249,7 @@ impl Server {
         if current_request.get_content()["allow_stdin"].as_bool() != Some(true) {
             return None;
         }
-        let mut stdin = self.stdin.lock().unwrap();
+        let stdin = self.stdin.lock().unwrap();
         let stdin_request = current_request
             .new_reply()
             .with_message_type("input_request")
@@ -261,9 +257,9 @@ impl Server {
                 "prompt" => prompt,
                 "password" => password,
             });
-        stdin_request.send(&mut *stdin).ok()?;
+        stdin_request.send(&*stdin).ok()?;
 
-        let input_response = JupyterMessage::read(&mut *stdin).ok()?;
+        let input_response = JupyterMessage::read(&*stdin).ok()?;
         input_response.get_content()["value"]
             .as_str()
             .map(|value| value.to_owned())
@@ -302,7 +298,7 @@ impl Server {
         message
             .new_message("status")
             .with_content(object! {"execution_state" => "busy"})
-            .send(&mut *self.iopub.lock().unwrap())?;
+            .send(&*self.iopub.lock().unwrap())?;
         let idle = message
             .new_message("status")
             .with_content(object! {"execution_state" => "idle"});
@@ -310,23 +306,24 @@ impl Server {
             message
                 .new_reply()
                 .with_content(kernel_info())
-                .send(&connection)?;
+                .send(connection)?;
         } else if message.message_type() == "is_complete_request" {
             message
                 .new_reply()
                 .with_content(object! {"status" => "complete"})
-                .send(&connection)?;
+                .send(connection)?;
         } else if message.message_type() == "execute_request" {
             execution_channel.send(message)?;
-            execution_reply_receiver.recv()?.send(&connection)?;
+            execution_reply_receiver.recv()?.send(connection)?;
         } else if message.message_type() == "comm_open" {
             comm_open(message, context, Arc::clone(&self.iopub))?;
-        } else if message.message_type() == "comm_msg" {
-        } else if message.message_type() == "comm_info_request" {
+        } else if message.message_type() == "comm_msg"
+            || message.message_type() == "comm_info_request"
+        {
             // We don't handle this yet.
         } else if message.message_type() == "complete_request" {
             let reply = message.new_reply().with_content(
-                match handle_completion_request(&context, message) {
+                match handle_completion_request(context, message) {
                     Ok(response_content) => response_content,
                     Err(error) => object! {
                         "status" => "error",
@@ -335,24 +332,24 @@ impl Server {
                     },
                 },
             );
-            reply.send(&connection)?;
+            reply.send(connection)?;
         } else {
             eprintln!(
                 "Got unrecognized message type on shell channel: {}",
                 message.message_type()
             );
         }
-        idle.send(&mut *self.iopub.lock().unwrap())?;
+        idle.send(&*self.iopub.lock().unwrap())?;
         Ok(())
     }
 
-    fn handle_control(self, mut connection: Connection) -> Result<()> {
+    fn handle_control(self, connection: Connection) -> Result<()> {
         loop {
-            let message = JupyterMessage::read(&mut connection)?;
+            let message = JupyterMessage::read(&connection)?;
             match message.message_type() {
                 "shutdown_request" => self.signal_shutdown(),
                 "interrupt_request" => {
-                    message.new_reply().send(&mut connection)?;
+                    message.new_reply().send(&connection)?;
                     eprintln!(
                         "Rust doesn't support interrupting execution. Perhaps restart kernel?"
                     );
@@ -384,7 +381,7 @@ impl Server {
                             "name" => output_name,
                             "text" => format!("{}\n", line),
                         })
-                        .send(&mut *self.iopub.lock().unwrap())
+                        .send(&*self.iopub.lock().unwrap())
                     {
                         eprintln!("{}", error);
                     }
@@ -432,7 +429,7 @@ impl Server {
                                 "evalue" => error.message(),
                                 "traceback" => traceback,
                             })
-                            .send(&mut *self.iopub.lock().unwrap())?;
+                            .send(&*self.iopub.lock().unwrap())?;
                     } else {
                         parent_message
                             .new_message("error")
@@ -443,7 +440,7 @@ impl Server {
                                     message
                                 ],
                             })
-                            .send(&mut *self.iopub.lock().unwrap())?;
+                            .send(&*self.iopub.lock().unwrap())?;
                     }
                 }
             }
@@ -456,7 +453,7 @@ impl Server {
                         "evalue" => displayed_error.clone(),
                         "traceback" => array![displayed_error],
                     })
-                    .send(&mut *self.iopub.lock().unwrap())?;
+                    .send(&*self.iopub.lock().unwrap())?;
             }
         }
         Ok(())
@@ -537,7 +534,7 @@ fn bind_socket(
 ) -> Result<Connection> {
     let endpoint = format!("{}://{}:{}", config.transport, config.ip, port);
     socket.bind(&endpoint)?;
-    Ok(Connection::new(socket, &config.key)?)
+    Connection::new(socket, &config.key)
 }
 
 /// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)
@@ -595,8 +592,7 @@ fn handle_completion_request(
 /// grapheme will return the end position of the input.
 fn grapheme_offset_to_byte_offset(code: &str, grapheme_offset: usize) -> usize {
     unicode_segmentation::UnicodeSegmentation::grapheme_indices(code, true)
-        .skip(grapheme_offset)
-        .next()
+        .nth(grapheme_offset)
         .map(|(byte_offset, _)| byte_offset)
         .unwrap_or_else(|| code.len())
 }
