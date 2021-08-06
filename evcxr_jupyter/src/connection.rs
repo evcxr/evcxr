@@ -29,7 +29,7 @@ impl Connection {
         let mac = if key.is_empty() {
             None
         } else {
-            Some(HmacSha256::new_varkey(key.as_bytes()).expect("Shouldn't fail with HMAC"))
+            Some(HmacSha256::new_from_slice(key.as_bytes()).expect("Shouldn't fail with HMAC"))
         };
         Ok(Connection { socket, mac })
     }
