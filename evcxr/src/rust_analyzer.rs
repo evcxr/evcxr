@@ -316,9 +316,12 @@ fn add_variable_for_pattern(
     use ra_ap_syntax::ast::NameOwner;
     if let ast::Pat::IdentPat(ident_pat) = pat {
         if let Some(name) = ident_pat.name() {
-            if let Some(type_name) =
-                get_type_name(explicit_type, sema.type_of_pat(pat), sema, module)
-            {
+            if let Some(type_name) = get_type_name(
+                explicit_type,
+                sema.type_of_pat(pat).map(|info| info.original()),
+                sema,
+                module,
+            ) {
                 result.insert(
                     name.text().to_string(),
                     VariableInfo {
