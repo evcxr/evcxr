@@ -13,7 +13,7 @@ if ! grep "# Version $VERSION" RELEASE_NOTES.md >/dev/null; then
   echo "Please add release notes first" >&2
   exit 1
 fi
-MIN_RUST_VER=$(sed -n -e '/rust: 1/ s/.*: *//p' .travis.yml)
+MIN_RUST_VER=$(grep MSRV .github/workflows/ci.yml | awk '{print $2}')
 if [ -z "$MIN_RUST_VER" ]; then
   echo "Failed to determine minimum rust version" >&2
   exit 1
