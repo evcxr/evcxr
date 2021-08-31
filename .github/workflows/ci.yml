@@ -9,7 +9,7 @@ on:
 name: Continuous integration
 
 jobs:
-  ci:
+  ci-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -46,3 +46,53 @@ jobs:
         with:
           command: clippy
           args: -- -D warnings
+
+
+  ci-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+
+  ci-mac:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
