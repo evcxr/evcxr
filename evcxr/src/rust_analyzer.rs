@@ -230,7 +230,7 @@ impl RustAnalyzer {
                 .map(SourceRoot::new_local)
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(None, &mut |path| {
+        change.set_crate_graph(workspace.to_crate_graph(&mut |_| Vec::new(), &mut |path| {
             self.vfs.file_id(&path.to_path_buf().into())
         }));
         Ok(())
