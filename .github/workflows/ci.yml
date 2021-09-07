@@ -8,6 +8,9 @@ on:
 
 name: Continuous integration
 
+env:
+  CARGO_INCREMENTAL: 0
+
 jobs:
   ci-linux:
     runs-on: ubuntu-latest
