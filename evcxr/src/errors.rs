@@ -374,7 +374,7 @@ fn line_and_column(
     let mut column = text
         .lines()
         .last()
-        .map(|line| count_columns(line))
+        .map(count_columns)
         .unwrap_or(0)
         + 1;
     if line == 1 {
