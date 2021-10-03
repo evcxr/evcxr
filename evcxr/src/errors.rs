@@ -371,12 +371,7 @@ fn line_and_column(
 ) -> (usize, usize) {
     let text = &text[..usize::from(position)];
     let line = text.lines().count();
-    let mut column = text
-        .lines()
-        .last()
-        .map(count_columns)
-        .unwrap_or(0)
-        + 1;
+    let mut column = text.lines().last().map(count_columns).unwrap_or(0) + 1;
     if line == 1 {
         column += first_line_column_offset;
     }
