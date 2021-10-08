@@ -28,15 +28,17 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
     let prelude = "fn f(){";
     let parsed_file = SourceFile::parse(&(prelude.to_owned() + code + "}"));
     let mut start_byte = 0;
-    if let Some(block) = parsed_file
+    if let Some(stmt_list) = parsed_file
         .syntax_node()
         .children()
         .next()
         .and_then(ast::Fn::cast)
         .as_ref()
         .and_then(ast::Fn::body)
+        .as_ref()
+        .and_then(ast::BlockExpr::stmt_list)
     {
-        let mut children = block.syntax().children().peekable();
+        let mut children = stmt_list.syntax().children().peekable();
         while let (Some(child), next) = (children.next(), children.peek()) {
             // With the possible exception of the first node, We want to include
             // whitespace after nodes rather than before, so our end is the
