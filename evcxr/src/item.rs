@@ -22,17 +22,17 @@ pub(crate) fn item_name(item: &ast::Item) -> Option<String> {
 /// Returns the ident of an item if it has one.
 fn item_ident(item: &ast::Item) -> Option<ast::Name> {
     match item {
-        ast::Item::Const(i) => ast::NameOwner::name(i),
-        ast::Item::Enum(i) => ast::NameOwner::name(i),
-        ast::Item::Fn(i) => ast::NameOwner::name(i),
-        ast::Item::MacroRules(i) => ast::NameOwner::name(i),
-        ast::Item::MacroDef(i) => ast::NameOwner::name(i),
-        ast::Item::Module(i) => ast::NameOwner::name(i),
-        ast::Item::Static(i) => ast::NameOwner::name(i),
-        ast::Item::Struct(i) => ast::NameOwner::name(i),
-        ast::Item::Trait(i) => ast::NameOwner::name(i),
-        ast::Item::TypeAlias(i) => ast::NameOwner::name(i),
-        ast::Item::Union(i) => ast::NameOwner::name(i),
+        ast::Item::Const(i) => ast::HasName::name(i),
+        ast::Item::Enum(i) => ast::HasName::name(i),
+        ast::Item::Fn(i) => ast::HasName::name(i),
+        ast::Item::MacroRules(i) => ast::HasName::name(i),
+        ast::Item::MacroDef(i) => ast::HasName::name(i),
+        ast::Item::Module(i) => ast::HasName::name(i),
+        ast::Item::Static(i) => ast::HasName::name(i),
+        ast::Item::Struct(i) => ast::HasName::name(i),
+        ast::Item::Trait(i) => ast::HasName::name(i),
+        ast::Item::TypeAlias(i) => ast::HasName::name(i),
+        ast::Item::Union(i) => ast::HasName::name(i),
         _ => None,
     }
 }

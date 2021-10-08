@@ -112,7 +112,7 @@ impl RustAnalyzer {
 
     /// Returns top-level variable names and their types in the specified function.
     pub(crate) fn top_level_variables(&self, function_name: &str) -> HashMap<String, VariableInfo> {
-        use ra_ap_syntax::ast::{ModuleItemOwner, NameOwner};
+        use ra_ap_syntax::ast::{HasModuleItem, HasName};
         let mut result = HashMap::new();
         let sema = ra_ide::Semantics::new(self.analysis_host.raw_database());
         let source_file = sema.parse(self.source_file_id);
@@ -313,7 +313,7 @@ fn add_variable_for_pattern(
     module: ra_hir::Module,
     result: &mut HashMap<String, VariableInfo>,
 ) -> bool {
-    use ra_ap_syntax::ast::NameOwner;
+    use ra_ap_syntax::ast::HasName;
     if let ast::Pat::IdentPat(ident_pat) = pat {
         if let Some(name) = ident_pat.name() {
             if let Some(type_name) = get_type_name(

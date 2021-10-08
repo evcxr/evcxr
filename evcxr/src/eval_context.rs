@@ -1639,7 +1639,7 @@ impl ContextState {
                         }
                     }
                     ast::Item::MacroRules(macro_rules) => {
-                        if let Some(name) = ast::NameOwner::name(&macro_rules) {
+                        if let Some(name) = ast::HasName::name(&macro_rules) {
                             let item_block = CodeBlock::new().with_segment(segment);
                             self.items_by_name
                                 .insert(name.text().to_string(), item_block);
@@ -1773,7 +1773,7 @@ impl ContextState {
             Some(ty) if type_is_fully_specified(&ty) => format!("{}", AstNode::syntax(&ty).text()),
             _ => "String".to_owned(),
         };
-        if let Some(name) = ast::NameOwner::name(&pat_ident) {
+        if let Some(name) = ast::HasName::name(&pat_ident) {
             self.variable_states.insert(
                 name.text().to_string(),
                 VariableState {
@@ -1808,7 +1808,7 @@ fn replace_reserved_words_in_type(ty: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use ra_ap_syntax::ast::AttrsOwner;
+    use ra_ap_syntax::ast::HasAttrs;
     use ra_ap_syntax::SourceFile;
 
     use super::*;
