@@ -20,6 +20,8 @@ backtrace = "0.3.35"
 dirs = "3.0.1"
 which = "4.0.2"
 evcxr_input = "1.0.0"
+unicode-segmentation = "1.7.1"
+
 ra_ap_ide = "=0.0.72"
 ra_ap_ide_db = "=0.0.72"
 ra_ap_project_model = "=0.0.72"
@@ -29,7 +31,11 @@ ra_ap_vfs-notify = "=0.0.72"
 ra_ap_hir = "=0.0.72"
 ra_ap_base_db = "=0.0.72"
 ra_ap_syntax = "=0.0.72"
-unicode-segmentation = "1.7.1"
+
+# Rust-analyzer depends on pre-release versions of salsa which make breaking changes without a
+# semver bump. So we pin salsa to an exact version and update as needed together with the ra_ap_*
+# packages.
+salsa = "=0.17.0-pre.1"
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
 sig = "1.0.0"

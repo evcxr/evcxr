@@ -1,3 +1,6 @@
+# Version 0.12.0 (unreleased)
+* Fix compilation due to a non-semver breaking change in an upstream crate.
+
 # Version 0.11.0
 * Update rust-analyzer - fixes a compilation failure.
 * Support for crate-level attributes - e.g. `#![feature(...)]`
