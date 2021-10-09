@@ -1,4 +1,4 @@
-# Version 0.12.0 (unreleased)
+# Version 0.12.0
 * Fix compilation due to a non-semver breaking change in an upstream crate.
 * Update to latest rust-analyzer.
 * Minimum supported rust version is now 1.55 due to changes in rust-analyzer.
