@@ -9,6 +9,11 @@ A [Jupyter](https://jupyter.org/) Kernel for the Rust programming language.
 If you don't already have Rust installed, [follow these
 instructions](https://www.rust-lang.org/tools/install).
 
+Make sure you've got a recent version of rust installed. Evcxr's dependencies
+often make use of new Rust features shortly after they're stabilized, so it's
+not uncommon that the latest release of Evcxr will end up requiring the latest
+version of rustc.
+
 ### Linux (Debian/Ubuntu)
 
 ```sh

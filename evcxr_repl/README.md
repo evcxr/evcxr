@@ -8,6 +8,11 @@ A Rust REPL (Read-Eval-Print loop) built using the [`evcxr`](https://github.com/
 
 ## Installation and Usage
 
+Make sure you've got a recent version of rust installed. Evcxr's dependencies
+often make use of new Rust features shortly after they're stabilized, so it's
+not uncommon that the latest release of Evcxr will end up requiring the latest
+version of rustc.
+
 Before you install the REPL, you must download a local copy of Rust's source code:
 ```sh
 $ rustup component add rust-src
