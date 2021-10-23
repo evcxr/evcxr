@@ -99,9 +99,8 @@ impl ChildProcess {
 
     pub(crate) fn send(&mut self, command: &str) -> Result<(), Error> {
         use std::io::Write;
-        if writeln!(self.stdin.as_mut().unwrap(), "{}", command).is_err() {
-            return Err(self.get_termination_error());
-        }
+        writeln!(self.stdin.as_mut().unwrap(), "{}", command)
+            .map_err(|_| self.get_termination_error())?;
         self.stdin.as_mut().unwrap().flush()?;
         Ok(())
     }
