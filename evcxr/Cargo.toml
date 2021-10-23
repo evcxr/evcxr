@@ -6,7 +6,8 @@ description = "An Evaluation Context for Rust"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
-edition = "2018"
+edition = "2021"
+rust-version = "1.56"
 
 [dependencies]
 anyhow = "1.0.33"

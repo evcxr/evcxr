@@ -2,7 +2,7 @@
 name = "print_performance_info"
 version = "0.1.0"
 authors = ["The Evcxr Authors"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 evcxr = { path = "../evcxr" }

@@ -229,7 +229,7 @@ impl Module {
 [package]
 name = "{}"
 version = "1.0.0"
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]

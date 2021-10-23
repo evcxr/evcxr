@@ -5,6 +5,6 @@ license = "Apache-2.0"
 description = "Support for reading input from the user in Evcxr"
 repository = "https://github.com/google/evcxr"
 authors = ["The Evcxr Authors"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]

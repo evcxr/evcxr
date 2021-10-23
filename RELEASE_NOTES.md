@@ -1,4 +1,6 @@
 # Version 0.13.0 (unreleased)
+* Now uses Rust edition 2021.
+* MSRV is now 1.56.
 * Update to latest rust-analyzer.
 
 # Version 0.12.0

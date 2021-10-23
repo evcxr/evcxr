@@ -48,7 +48,7 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
     [package]
     name = "evcxr_dummy_validate_dep"
     version = "0.0.1"
-    edition = "2018"
+    edition = "2021"
 
     [lib]
     path = "lib.rs"
@@ -154,7 +154,7 @@ mod tests {
             [package]
             name = "{}"
             version = "0.0.1"
-            edition = "2018"
+            edition = "2021"
 
             [dependencies]
             {}
