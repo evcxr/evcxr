@@ -250,6 +250,7 @@ impl RustAnalyzer {
             snippet_cap: SnippetCap::new(true),
             enable_imports_on_the_fly: false,
             enable_self_on_the_fly: true,
+            snippets: vec![],
             insert_use: InsertUseConfig {
                 prefix_kind: ra_hir::PrefixKind::ByCrate,
                 group: false,

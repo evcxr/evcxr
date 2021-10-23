@@ -1,3 +1,6 @@
+# Version 0.13.0 (unreleased)
+* Update to latest rust-analyzer.
+
 # Version 0.12.0
 * Fix compilation due to a non-semver breaking change in an upstream crate.
 * Update to latest rust-analyzer.
