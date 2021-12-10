@@ -121,7 +121,7 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
     let mut library_names = Vec::new();
     for dep_name in direct_dependencies {
         if let Some(lib_name) = crate_to_library_names.get(dep_name) {
-            library_names.push(lib_name.replace("-", "_"));
+            library_names.push(lib_name.replace('-', "_"));
         }
     }
     Ok(library_names)

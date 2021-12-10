@@ -406,7 +406,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "Set optimization level (0/1/2)",
                 |_ctx, state, args| {
                     let new_level = if let Some(n) = args {
-                        &n
+                        n
                     } else if state.opt_level() == "2" {
                         "0"
                     } else {
