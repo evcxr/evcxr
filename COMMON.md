@@ -187,7 +187,7 @@ Here is a complete list of the configuration options you can set to customize yo
 * `:fmt [format]`     Set output formatter (default: `{:?}`). 
 * `:efmt [format]`    Set the formatter for errors returned by `?`
 * `:sccache [0|1]`    Set whether to use sccache.
-* `:linker [linker]`  Set/print linker. Supported: `system`, `lld`
+* `:linker [linker]`  Set/print linker. Supported: `system`, `lld`, `mold`
 * `:timing`           Toggle printing of how long evaluations take
 * `:time_passes`      Toggle printing of rustc pass times (requires nightly)
 * `:internal_debug`   Toggle internal code debugging output

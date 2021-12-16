@@ -163,7 +163,7 @@ impl Module {
             .arg("-C")
             .arg("prefer-dynamic")
             .env("CARGO_TARGET_DIR", "target");
-        if config.linker != "system" {
+        if config.linker == "lld" {
             command
                 .arg("-C")
                 .arg(format!("link-arg=-fuse-ld={}", config.linker));
