@@ -34,6 +34,7 @@ use ra_ap_syntax::{ast, AstNode, SyntaxKind, SyntaxNode};
 use regex::Regex;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
@@ -121,8 +122,15 @@ impl Config {
         self.sccache.is_some()
     }
 
-    pub(crate) fn cargo_command(&self, command_name: &str) -> std::process::Command {
-        let mut command = std::process::Command::new("cargo");
+    pub(crate) fn cargo_command(&self, command_name: &str) -> Command {
+        let mut command = if self.linker == "mold" {
+            Command::new("mold")
+        } else {
+            Command::new("cargo")
+        };
+        if self.linker == "mold" {
+            command.arg("-run").arg("cargo");
+        }
         if !self.toolchain.is_empty() {
             command.arg(format!("+{}", self.toolchain));
         }
