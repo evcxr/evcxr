@@ -80,7 +80,12 @@ pub(crate) struct Config {
 
 fn create_initial_config(crate_dir: PathBuf) -> Config {
     let mut config = Config::new(crate_dir);
-    if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
+    // default the linker to mold, then lld, first checking if either are installed
+    // neither linkers support macos, so fallback to system (aka default)
+    // https://github.com/rui314/mold/issues/132
+    if !cfg!(target_os = "macos") && which::which("mold").is_ok() {
+        config.linker = "mold".to_owned();
+    } else if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
         config.linker = "lld".to_owned();
     }
     config
