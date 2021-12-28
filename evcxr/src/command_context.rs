@@ -656,6 +656,7 @@ impl AvailableCommand {
 fn html_escape(input: &str, out: &mut String) {
     for ch in input.chars() {
         match ch {
+            '&' => out.push_str("&amp;"),
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
             x => out.push(x),
