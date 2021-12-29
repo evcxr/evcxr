@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use anyhow::Result;
-use hmac::{Hmac, NewMac};
+use hmac::digest::KeyInit;
+use hmac::Hmac;
 use sha2::Sha256;
 
 pub(crate) type HmacSha256 = Hmac<Sha256>;

@@ -15,6 +15,7 @@
 use crate::connection::{Connection, HmacSha256};
 use anyhow::{anyhow, bail, Result};
 use chrono::Utc;
+use generic_array::GenericArray;
 use json::{self, JsonValue};
 use std::{self, fmt};
 use uuid::Uuid;
@@ -52,7 +53,7 @@ impl RawMessage {
             let mut mac = mac_template.clone();
             raw_message.digest(&mut mac);
             use hmac::Mac;
-            if let Err(error) = mac.verify(&hex::decode(&hmac)?) {
+            if let Err(error) = mac.verify(GenericArray::from_slice(&hex::decode(&hmac)?)) {
                 bail!("{}", error);
             }
         }
