@@ -2,7 +2,7 @@
 name = "evcxr_jupyter"
 version = "0.12.0"
 license = "Apache-2.0"
-description = "An Jupyter Kernel for Rust"
+description = "A Jupyter Kernel for Rust"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
