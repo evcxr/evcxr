@@ -230,9 +230,11 @@ impl RustAnalyzer {
                 .map(SourceRoot::new_local)
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(&mut |_| Vec::new(), &mut |path| {
-            self.vfs.file_id(&path.to_path_buf().into())
-        }));
+        change.set_crate_graph(workspace.to_crate_graph(
+            &Default::default(),
+            &mut |_, _| Vec::new(),
+            &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
+        ));
         Ok(())
     }
 
@@ -374,15 +376,17 @@ pub struct Completion {
 /// instead of `[i32, 5]`, we get `[i32, _]`.
 pub(crate) fn is_type_valid(type_name: &str) -> bool {
     use ra_ap_syntax::SyntaxKind;
-    if let Ok(ty) = ast::Type::parse(type_name) {
-        for node in ty.syntax().descendants() {
-            if node.kind() == SyntaxKind::ERROR || node.kind() == SyntaxKind::INFER_TYPE {
-                return false;
-            }
-        }
-        return true;
+    let wrapped_source = format!("const _: {} = foo();", type_name);
+    let parsed = ast::SourceFile::parse(&wrapped_source);
+    if !parsed.errors().is_empty() {
+        return false;
     }
-    false
+    for node in parsed.syntax_node().descendants() {
+        if node.kind() == SyntaxKind::ERROR || node.kind() == SyntaxKind::INFER_TYPE {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
