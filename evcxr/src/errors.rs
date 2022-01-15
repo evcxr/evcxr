@@ -467,7 +467,7 @@ pub enum Error {
     CompilationErrors(Vec<CompilationError>),
     TypeRedefinedVariablesLost(Vec<String>),
     Message(String),
-    ChildProcessTerminated(String),
+    SubprocessTerminated(String),
 }
 
 impl std::error::Error for Error {}
@@ -487,7 +487,7 @@ impl fmt::Display for Error {
                     variables.join(", ")
                 )?;
             }
-            Error::Message(message) | Error::ChildProcessTerminated(message) => {
+            Error::Message(message) | Error::SubprocessTerminated(message) => {
                 write!(f, "{}", message)?
             }
         }

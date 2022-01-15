@@ -122,13 +122,13 @@ impl ChildProcess {
             content.push_str(&line);
             content.push('\n');
         }
-        Error::ChildProcessTerminated(match self.process.wait() {
+        Error::SubprocessTerminated(match self.process.wait() {
             Ok(exit_status) => {
                 #[cfg(target_os = "macos")]
                 {
                     use std::os::unix::process::ExitStatusExt;
                     if Some(9) == exit_status.signal() {
-                        return Error::ChildProcessTerminated(
+                        return Error::SubprocessTerminated(
                             "Subprocess terminated with signal 9. This is known \
                             to happen when evcxr is installed via a Homebrew shell \
                             under emulation. Try installing rustup and evcxr without \
@@ -138,21 +138,21 @@ impl ChildProcess {
                     }
                 }
                 format!(
-                    "{}Child process terminated with status: {}",
+                    "{}Subprocess terminated with status: {}",
                     content, exit_status
                 )
             }
-            Err(wait_error) => format!("Child process didn't start: {}", wait_error),
+            Err(wait_error) => format!("Subprocess didn't start: {}", wait_error),
         })
     }
 }
 
 impl Drop for ChildProcess {
     fn drop(&mut self) {
-        // Drop child_stdin before we wait. Our child process uses stdin being
+        // Drop child_stdin before we wait. Our subprocess uses stdin being
         // closed to know that it's time to terminate.
         self.stdin.take();
-        // Wait for our child process to terminate. Otherwise we'll be left with
+        // Wait for our subprocess to terminate. Otherwise we'll be left with
         // zombie processes.
         let _ = self.process.wait();
     }

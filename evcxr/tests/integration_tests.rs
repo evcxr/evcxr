@@ -305,8 +305,8 @@ fn function_panics_without_variable_preserving() {
     "#,
     );
     let result = e.execute(stringify!(panic!("Intentional panic {}", b);));
-    if let Err(Error::ChildProcessTerminated(message)) = result {
-        assert!(message.contains("Child process terminated"));
+    if let Err(Error::SubprocessTerminated(message)) = result {
+        assert!(message.contains("Subprocess terminated"));
     } else {
         panic!("Unexpected result: {:?}", result);
     }
@@ -569,18 +569,18 @@ fn abort_and_restart() {
         let a = 42i32;
     );
     let result = e.execute(stringify!(std::process::abort();));
-    if let Err(Error::ChildProcessTerminated(message)) = result {
+    if let Err(Error::SubprocessTerminated(message)) = result {
         #[cfg(not(windows))]
         {
-            if message != "Child process terminated with status: signal: 6 (core dumped)" {
-                assert_eq!(message, "Child process terminated with status: signal: 6");
+            if message != "Subprocess terminated with status: signal: 6 (core dumped)" {
+                assert_eq!(message, "Subprocess terminated with status: signal: 6");
             }
         }
         #[cfg(windows)]
         {
             assert_eq!(
                 message,
-                "Child process terminated with status: exit code: 0xc0000409"
+                "Subprocess terminated with status: exit code: 0xc0000409"
             );
         }
     } else {

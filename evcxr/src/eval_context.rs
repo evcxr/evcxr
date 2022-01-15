@@ -361,7 +361,7 @@ impl EvalContext {
         let code_out = state.apply(user_code.clone(), &code_info.nodes)?;
 
         let mut outputs = match self.run_statements(code_out, &mut state, &mut phases, callbacks) {
-            error @ Err(Error::ChildProcessTerminated(_)) => {
+            error @ Err(Error::SubprocessTerminated(_)) => {
                 self.restart_child_process()?;
                 return error;
             }
