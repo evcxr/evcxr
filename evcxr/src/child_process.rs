@@ -123,10 +123,25 @@ impl ChildProcess {
             content.push('\n');
         }
         Error::ChildProcessTerminated(match self.process.wait() {
-            Ok(exit_status) => format!(
-                "{}Child process terminated with status: {}",
-                content, exit_status
-            ),
+            Ok(exit_status) => {
+                #[cfg(target_os = "macos")]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    if Some(9) == exit_status.signal() {
+                        return Error::ChildProcessTerminated(
+                            "Subprocess terminated with signal 9. This is known \
+                            to happen when evcxr is installed via a Homebrew shell \
+                            under emulation. Try installing rustup and evcxr without \
+                            using Homebrew and see if that helps."
+                                .to_owned(),
+                        );
+                    }
+                }
+                format!(
+                    "{}Child process terminated with status: {}",
+                    content, exit_status
+                )
+            }
             Err(wait_error) => format!("Child process didn't start: {}", wait_error),
         })
     }
