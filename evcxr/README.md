@@ -24,6 +24,13 @@ really to provide functionality to evcxr\_jupyter and evcxr\_repl. If you'd like
 to try using this crate for something else, drop me an email, or file an issue
 on the repository and we can figure out your use case.
 
+## MSRV
+
+See .github/workflows/ci.yml for the current minimum supported rust version.
+Generally rare that we support much older versions than the latest stable, since
+- mostly because our upstream dependencies make use of new rust features pretty
+quickly after they stabalize.
+
 ## How it works
 
 See [how it works](HOW_IT_WORKS.md)
