@@ -21,6 +21,7 @@ use once_cell::sync::OnceCell;
 use regex::Regex;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     if cfg!(target_os = "macos") {
@@ -81,6 +82,7 @@ fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
 pub(crate) struct Module {
     pub(crate) tmpdir: PathBuf,
     build_num: i32,
+    target: String,
 }
 
 const CRATE_NAME: &str = "ctx";
@@ -90,6 +92,7 @@ impl Module {
         let module = Module {
             tmpdir,
             build_num: 0,
+            target: get_host_target()?,
         };
         Ok(module)
     }
@@ -99,7 +102,7 @@ impl Module {
     }
 
     fn target_dir(&self) -> PathBuf {
-        self.tmpdir.join("target")
+        self.tmpdir.join("target").join(&self.target)
     }
 
     fn so_path(&self) -> PathBuf {
@@ -158,6 +161,8 @@ impl Module {
         }
 
         command
+            .arg("--target")
+            .arg(&self.target)
             .arg("--message-format=json")
             .arg("--")
             .arg("-C")
@@ -319,4 +324,23 @@ fn errors_from_cargo_output(
 
 pub(crate) struct SoFile {
     pub(crate) path: PathBuf,
+}
+
+fn get_host_target() -> Result<String, Error> {
+    let output = match Command::new("rustc").arg("-Vv").output() {
+        Ok(o) => o,
+        Err(error) => bail!("Failed to run rustc: {}", error),
+    };
+    let stdout = std::str::from_utf8(&output.stdout)?;
+    let stderr = std::str::from_utf8(&output.stderr)?;
+    for line in stdout.lines() {
+        if let Some(host) = line.strip_prefix("host: ") {
+            return Ok(host.to_owned());
+        }
+    }
+    bail!(
+        "rustc -Vv didn't output a host line.\n{}\n{}",
+        stdout,
+        stderr
+    );
 }
