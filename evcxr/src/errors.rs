@@ -223,7 +223,7 @@ impl CompilationError {
                             child["spans"][0]["suggested_replacement"].as_str()
                         {
                             use std::fmt::Write;
-                            write!(&mut message, "\n\n{}", replacement.trim_end()).unwrap();
+                            write!(message, "\n\n{}", replacement.trim_end()).unwrap();
                         }
                         message
                     })

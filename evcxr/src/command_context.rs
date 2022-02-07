@@ -523,7 +523,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     let mut errors_out = String::new();
                     for error in &ctx.last_errors {
                         use std::fmt::Write;
-                        write!(&mut errors_out, "{}", error.json)?;
+                        write!(errors_out, "{}", error.json)?;
                         errors_out.push('\n');
                     }
                     bail!(errors_out);
@@ -533,18 +533,18 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 use std::fmt::Write;
                 let mut text = String::new();
                 let mut html = String::new();
-                writeln!(&mut html, "<table>")?;
+                writeln!(html, "<table>")?;
                 let mut commands = CommandContext::create_commands();
                 commands.sort_by(|a, b| a.name.cmp(b.name));
                 for cmd in commands {
-                    writeln!(&mut text, "{:<17} {}", cmd.name, cmd.short_description).unwrap();
+                    writeln!(text, "{:<17} {}", cmd.name, cmd.short_description).unwrap();
                     writeln!(
-                        &mut html,
+                        html,
                         "<tr><td>{}</td><td>{}</td></tr>",
                         cmd.name, cmd.short_description
                     )?;
                 }
-                writeln!(&mut html, "</table>")?;
+                writeln!(html, "</table>")?;
                 Ok(EvalOutputs::text_html(text, html))
             }),
         ]

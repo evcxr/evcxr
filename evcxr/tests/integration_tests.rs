@@ -971,9 +971,9 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
     assert_eq!(
         strs(&check(
             &mut ctx,
-            r#"let mut s = String::new(); write!(&mut s, "foo").unwrap();"#
+            r#"let mut s = String::new(); write!(s, "foo").unwrap();"#
         )),
-        vec!["error 1:28-1:49"]
+        vec!["error 1:28-1:44"]
     );
 
     // Check that errors adding crates are reported.

@@ -507,7 +507,7 @@ fn cargo_check(code: &str, context: &Mutex<CommandContext>) -> JsonValue {
                     }
                     message.push_str(&problem.message());
                     for help in problem.help() {
-                        write!(&mut message, "\nhelp: {}", help).unwrap();
+                        write!(message, "\nhelp: {}", help).unwrap();
                     }
                     return Some(object! {
                         "message" => message,
