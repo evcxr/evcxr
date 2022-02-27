@@ -247,13 +247,18 @@ fn main() {
         }
     }
     let mut repl = Repl::new(options.ide_mode, options.opt.clone());
-    let config = match options.edit_mode {
-        EditMode::Vi => rustyline::Config::builder()
-            .edit_mode(EditMode::Vi)
-            .keyseq_timeout(0) // https://github.com/kkawakam/rustyline/issues/371
-            .build(),
-        _ => rustyline::Config::default(), // default edit_mode is emacs
+    let mut config_builder = match options.edit_mode {
+        EditMode::Vi => {
+            rustyline::Config::builder()
+                .edit_mode(EditMode::Vi)
+                .keyseq_timeout(0) // https://github.com/kkawakam/rustyline/issues/371
+        }
+        _ => rustyline::Config::builder(), // default edit_mode is emacs
     };
+    if std::env::var("EVCXR_COMPLETION_TYPE").as_deref() != Ok("circular") {
+        config_builder = config_builder.completion_type(rustyline::CompletionType::List);
+    }
+    let config = config_builder.build();
     let mut editor = Editor::<EvcxrRustylineHelper>::with_config(config);
     editor.bind_sequence(
         KeyEvent(KeyCode::Left, Modifiers::CTRL),

@@ -30,6 +30,18 @@ Welcome to evcxr. For help, type :help
 >> 
 ```
 
+## Completion Type
+
+Evcxr supports two modes of tab completion:
+
+* List: When you press tab, it will complete any common prefix shared by all
+  available completions. Pressing tab twice will then list all available
+  completions. This mode is the default.
+* Circular: When you press tab, it will show the first completion. Pressing tab
+  again will cycle through all the available completions, then return to the
+  start. To select this mode, set the environment variable
+  EVCXR_COMPLETION_TYPE=circular.
+
 ## Usage information
 
 Evcxr is both a REPL and a Jupyter kernel. See [Evcxr common
