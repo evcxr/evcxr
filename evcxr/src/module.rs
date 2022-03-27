@@ -182,8 +182,8 @@ impl Module {
         self.write_code(code_block)?;
         let cargo_output = run_cargo(command, code_block)?;
         if config.time_passes {
-            let stdout = String::from_utf8_lossy(&cargo_output.stdout);
-            eprintln!("{}", stdout);
+            let output = String::from_utf8_lossy(&cargo_output.stderr);
+            eprintln!("{}", output);
         }
         self.build_num += 1;
         let copied_so_file = self
