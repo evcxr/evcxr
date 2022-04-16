@@ -13,14 +13,25 @@
 // limitations under the License.
 
 use colored::*;
-use evcxr::{CommandContext, CompilationError, Error};
-use evcxr_repl::{BgInitMutex, EvcxrRustylineHelper};
-use rustyline::{
-    error::ReadlineError, At, Cmd, EditMode, Editor, KeyCode, KeyEvent, Modifiers, Movement, Word,
-};
+use evcxr::CommandContext;
+use evcxr::CompilationError;
+use evcxr::Error;
+use evcxr_repl::BgInitMutex;
+use evcxr_repl::EvcxrRustylineHelper;
+use rustyline::error::ReadlineError;
+use rustyline::At;
+use rustyline::Cmd;
+use rustyline::EditMode;
+use rustyline::Editor;
+use rustyline::KeyCode;
+use rustyline::KeyEvent;
+use rustyline::Modifiers;
+use rustyline::Movement;
+use rustyline::Word;
 use std::fs;
 use std::io;
-use std::sync::{mpsc, Arc};
+use std::sync::mpsc;
+use std::sync::Arc;
 use structopt::StructOpt;
 
 const PROMPT: &str = ">> ";

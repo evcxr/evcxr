@@ -12,12 +12,18 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evcxr::{CommandContext, Error, EvalContext, EvalContextOutputs};
+use evcxr::CommandContext;
+use evcxr::Error;
+use evcxr::EvalContext;
+use evcxr::EvalContextOutputs;
 use once_cell::sync::OnceCell;
-use std::collections::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::io;
+use std::ops::Deref;
+use std::ops::DerefMut;
 use std::sync::mpsc;
-use std::{io, sync::Mutex};
+use std::sync::Mutex;
 use tempfile;
 
 #[track_caller]

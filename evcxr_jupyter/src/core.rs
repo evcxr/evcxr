@@ -15,12 +15,15 @@
 use crate::connection::Connection;
 use crate::control_file;
 use crate::jupyter_message::JupyterMessage;
-use anyhow::{bail, Result};
+use anyhow::bail;
+use anyhow::Result;
 use colored::*;
 use evcxr::CommandContext;
 use json::JsonValue;
 use std::collections::HashMap;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::thread;
 use std::time;
 

@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{bail, Error};
+use crate::errors::bail;
+use crate::errors::Error;
 use once_cell::sync::OnceCell;
 use regex::Regex;
+use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::{self, io};
+use std::{self};
 
 pub(crate) const EVCXR_IS_RUNTIME_VAR: &str = "EVCXR_IS_RUNTIME";
 pub(crate) const EVCXR_EXECUTION_COMPLETE: &str = "EVCXR_EXECUTION_COMPLETE";

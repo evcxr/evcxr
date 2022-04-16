@@ -12,18 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use super::scan::{validate_source_fragment, FragmentValidity};
+use super::scan::validate_source_fragment;
+use super::scan::FragmentValidity;
 use crate::bginit::BgInitMutex;
 use colored::*;
-use evcxr::{CommandContext, Completions};
-use rustyline::{
-    completion::Completer,
-    error::ReadlineError,
-    highlight::Highlighter,
-    hint::Hinter,
-    validate::{ValidationContext, ValidationResult, Validator},
-    Context, Helper,
-};
+use evcxr::CommandContext;
+use evcxr::Completions;
+use rustyline::completion::Completer;
+use rustyline::error::ReadlineError;
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::validate::ValidationContext;
+use rustyline::validate::ValidationResult;
+use rustyline::validate::Validator;
+use rustyline::Context;
+use rustyline::Helper;
 use std::borrow::Cow;
 use std::sync::Arc;
 

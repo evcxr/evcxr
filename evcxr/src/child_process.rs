@@ -12,12 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{bail, Error};
+use crate::errors::bail;
+use crate::errors::Error;
 use crate::runtime;
 use std::io::BufReader;
 use std::process;
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
+use std::sync::Mutex;
 
 pub(crate) struct ChildProcess {
     process: std::process::Child,

@@ -12,8 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{bail, Context, Result};
-use json::{self, JsonValue};
+use anyhow::bail;
+use anyhow::Context;
+use anyhow::Result;
+use json::JsonValue;
+use json::{self};
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use std::collections::HashMap;
@@ -131,7 +134,8 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
 mod tests {
     use crate::eval_context::Config;
 
-    use super::{get_library_names, library_names_from_metadata};
+    use super::get_library_names;
+    use super::library_names_from_metadata;
     use anyhow::Result;
     use std::path::Path;
     use tempfile;

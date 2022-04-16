@@ -11,7 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use parking_lot::{MappedMutexGuard, Mutex, Once};
+use parking_lot::MappedMutexGuard;
+use parking_lot::Mutex;
+use parking_lot::Once;
 use std::thread::JoinHandle;
 
 // We're using `parking_lot`'s mutex so that we can get the mapped guards — it's

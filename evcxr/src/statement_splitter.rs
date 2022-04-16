@@ -12,7 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ra_ap_syntax::{ast, AstNode, SourceFile, SyntaxNode};
+use ra_ap_syntax::ast;
+use ra_ap_syntax::AstNode;
+use ra_ap_syntax::SourceFile;
+use ra_ap_syntax::SyntaxNode;
 
 pub(crate) struct OriginalUserCode<'a> {
     pub(crate) code: &'a str,
@@ -59,7 +62,9 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
 
 #[cfg(test)]
 mod test {
-    use ra_ap_syntax::{ast, AstNode, SyntaxKind};
+    use ra_ap_syntax::ast;
+    use ra_ap_syntax::AstNode;
+    use ra_ap_syntax::SyntaxKind;
 
     use super::split_into_statements;
 

@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::connection::{Connection, HmacSha256};
-use anyhow::{anyhow, bail, Result};
+use crate::connection::Connection;
+use crate::connection::HmacSha256;
+use anyhow::anyhow;
+use anyhow::bail;
+use anyhow::Result;
 use chrono::Utc;
 use generic_array::GenericArray;
-use json::{self, JsonValue};
-use std::{self, fmt};
+use json::JsonValue;
+use json::{self};
+use std::fmt;
+use std::{self};
 use uuid::Uuid;
 
 struct RawMessage {

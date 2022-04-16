@@ -13,7 +13,8 @@
 // limitations under the License.
 
 use crate::statement_splitter;
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
+use anyhow::Result;
 use once_cell::sync::OnceCell;
 use ra_ap_syntax::SyntaxNode;
 use regex::Regex;
@@ -378,7 +379,8 @@ impl CodeBlock {
 
 #[cfg(test)]
 mod test {
-    use super::{CodeBlock, CodeKind};
+    use super::CodeBlock;
+    use super::CodeKind;
 
     #[test]
     fn basic_usage() {

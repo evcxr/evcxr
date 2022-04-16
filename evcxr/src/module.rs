@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{code_block::CodeBlock, eval_context::ContextState};
-use crate::{
-    errors::{bail, CompilationError, Error},
-    eval_context::Config,
-};
+use crate::code_block::CodeBlock;
+use crate::errors::bail;
+use crate::errors::CompilationError;
+use crate::errors::Error;
+use crate::eval_context::Config;
+use crate::eval_context::ContextState;
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {

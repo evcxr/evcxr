@@ -12,20 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::anyhow;
+use anyhow::bail;
+use anyhow::Context;
+use anyhow::Result;
 use once_cell::sync::OnceCell;
-use ra_ap_base_db::{FileId, SourceRoot};
+use ra_ap_base_db::FileId;
+use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
 use ra_ap_ide_db::helpers::insert_use::ImportGranularity;
-use ra_ap_ide_db::helpers::{insert_use::InsertUseConfig, SnippetCap};
+use ra_ap_ide_db::helpers::insert_use::InsertUseConfig;
+use ra_ap_ide_db::helpers::SnippetCap;
 use ra_ap_paths::AbsPathBuf;
-use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace};
-use ra_ap_syntax::ast::{self, AstNode};
+use ra_ap_project_model::CargoConfig;
+use ra_ap_project_model::ProjectManifest;
+use ra_ap_project_model::ProjectWorkspace;
+use ra_ap_syntax::ast::AstNode;
+use ra_ap_syntax::ast::{self};
 use ra_ap_vfs as ra_vfs;
 use ra_ap_vfs_notify as vfs_notify;
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::path::Path;
 use std::sync::mpsc;
-use std::{collections::HashMap, convert::TryFrom, path::Path, sync::Arc};
+use std::sync::Arc;
 
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
@@ -112,7 +123,8 @@ impl RustAnalyzer {
 
     /// Returns top-level variable names and their types in the specified function.
     pub(crate) fn top_level_variables(&self, function_name: &str) -> HashMap<String, VariableInfo> {
-        use ra_ap_syntax::ast::{HasModuleItem, HasName};
+        use ra_ap_syntax::ast::HasModuleItem;
+        use ra_ap_syntax::ast::HasName;
         let mut result = HashMap::new();
         let sema = ra_ide::Semantics::new(self.analysis_host.raw_database());
         let source_file = sema.parse(self.source_file_id);
@@ -391,7 +403,8 @@ pub(crate) fn is_type_valid(type_name: &str) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::{is_type_valid, RustAnalyzer};
+    use super::is_type_valid;
+    use super::RustAnalyzer;
     use anyhow::Result;
     use tempfile;
 

@@ -12,10 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::code_block::{count_columns, CodeBlock, CodeKind, CommandCall, Segment, UserCodeInfo};
-use json::{self, JsonValue};
+use crate::code_block::count_columns;
+use crate::code_block::CodeBlock;
+use crate::code_block::CodeKind;
+use crate::code_block::CommandCall;
+use crate::code_block::Segment;
+use crate::code_block::UserCodeInfo;
+use json::JsonValue;
+use json::{self};
 use once_cell::sync::OnceCell;
-use ra_ap_ide::{TextRange, TextSize};
+use ra_ap_ide::TextRange;
+use ra_ap_ide::TextSize;
 use regex::Regex;
 use std::fmt;
 use std::io;

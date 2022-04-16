@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use evcxr::{self, EvalContext};
+use evcxr::EvalContext;
+use evcxr::{self};
 use std::io;
 use std::sync::mpsc;
 

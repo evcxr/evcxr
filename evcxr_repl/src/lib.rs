@@ -16,5 +16,6 @@ mod bginit;
 mod repl;
 mod scan;
 
-pub use bginit::{BgInitMutex, BgInitMutexGuard};
+pub use bginit::BgInitMutex;
+pub use bginit::BgInitMutexGuard;
 pub use repl::EvcxrRustylineHelper;

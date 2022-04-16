@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::errors::{bail, Error};
+use crate::errors::bail;
+use crate::errors::Error;
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use std::path::Path;

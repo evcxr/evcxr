@@ -12,31 +12,42 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::child_process::ChildProcess;
+use crate::code_block::CodeBlock;
+use crate::code_block::CodeKind;
+use crate::code_block::Segment;
+use crate::code_block::UserCodeInfo;
+use crate::crate_config::ExternalCrate;
+use crate::errors::bail;
+use crate::errors::CompilationError;
+use crate::errors::Error;
+use crate::errors::Span;
+use crate::errors::SpannedMessage;
 use crate::evcxr_internal_runtime;
 use crate::item;
-use crate::module::{Module, SoFile};
+use crate::module::Module;
+use crate::module::SoFile;
 use crate::runtime;
-use crate::rust_analyzer::{Completions, RustAnalyzer, VariableInfo};
-use crate::{child_process::ChildProcess, use_trees::Import};
-use crate::{
-    code_block::UserCodeInfo,
-    errors::{bail, CompilationError, Error},
-};
-use crate::{
-    code_block::{CodeBlock, CodeKind, Segment},
-    errors::SpannedMessage,
-};
-use crate::{crate_config::ExternalCrate, errors::Span};
+use crate::rust_analyzer::Completions;
+use crate::rust_analyzer::RustAnalyzer;
+use crate::rust_analyzer::VariableInfo;
+use crate::use_trees::Import;
 use anyhow::Result;
 use once_cell::sync::OnceCell;
 use ra_ap_ide::TextRange;
-use ra_ap_syntax::{ast, AstNode, SyntaxKind, SyntaxNode};
+use ra_ap_syntax::ast;
+use ra_ap_syntax::AstNode;
+use ra_ap_syntax::SyntaxKind;
+use ra_ap_syntax::SyntaxNode;
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::path::Path;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::mpsc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+use std::time::Instant;
 
 pub struct EvalContext {
     // Our tmpdir if EVCXR_TMPDIR wasn't set - Drop causes tmpdir to be cleaned up.
@@ -171,7 +182,8 @@ static ERROR_FORMATS: &[ErrorFormat] = &[
 
 const SEND_TEXT_PLAIN_DEF: &str = stringify!(
     fn evcxr_send_text_plain(text: &str) {
-        use std::io::{self, Write};
+        use std::io::Write;
+        use std::io::{self};
         fn try_send_text(text: &str) -> io::Result<()> {
             let stdout = io::stdout();
             let mut output = stdout.lock();
