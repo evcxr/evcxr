@@ -21,9 +21,9 @@ use ra_ap_base_db::FileId;
 use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
-use ra_ap_ide_db::helpers::insert_use::ImportGranularity;
-use ra_ap_ide_db::helpers::insert_use::InsertUseConfig;
-use ra_ap_ide_db::helpers::SnippetCap;
+use ra_ap_ide_db::imports::insert_use::ImportGranularity;
+use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
+use ra_ap_ide_db::SnippetCap;
 use ra_ap_paths::AbsPathBuf;
 use ra_ap_project_model::CargoConfig;
 use ra_ap_project_model::ProjectManifest;
@@ -140,7 +140,10 @@ impl RustAnalyzer {
                     } else {
                         continue;
                     };
-                    let module = sema.scope(function.syntax()).module().unwrap();
+                    let module = sema
+                        .scope(function.syntax())
+                        .map(|scope| scope.module())
+                        .unwrap();
                     for statement in body.statements() {
                         if let ast::Stmt::LetStmt(let_stmt) = statement {
                             if let Some(pat) = let_stmt.pat() {
@@ -264,6 +267,7 @@ impl RustAnalyzer {
             snippet_cap: SnippetCap::new(true),
             enable_imports_on_the_fly: false,
             enable_self_on_the_fly: true,
+            enable_private_editable: true,
             snippets: vec![],
             insert_use: InsertUseConfig {
                 prefix_kind: ra_hir::PrefixKind::ByCrate,
