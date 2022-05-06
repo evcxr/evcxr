@@ -544,13 +544,13 @@ impl<'a> From<&'a str> for Error {
     }
 }
 
-impl<'a> From<anyhow::Error> for Error {
+impl From<anyhow::Error> for Error {
     fn from(error: anyhow::Error) -> Self {
         Error::Message(error.to_string())
     }
 }
 
-impl<'a> From<libloading::Error> for Error {
+impl From<libloading::Error> for Error {
     fn from(error: libloading::Error) -> Self {
         Error::Message(error.to_string())
     }
