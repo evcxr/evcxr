@@ -38,6 +38,10 @@ ra_ap_syntax = "=0.0.104"
 # packages.
 salsa = "=0.17.0-pre.2"
 
+# Version 5.3.3 made changes that cause ra_ap_hir_def to fail to compile. This
+# can likely be removed next time we update rust-analyzer packages.
+dashmap = "=5.2.0"
+
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
 sig = "1.0.0"
 

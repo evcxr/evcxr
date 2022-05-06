@@ -507,6 +507,7 @@ version = "0.12.0"
 dependencies = [
  "anyhow",
  "backtrace",
+ "dashmap",
  "dirs",
  "evcxr_input",
  "filetime",
