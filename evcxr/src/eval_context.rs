@@ -227,6 +227,8 @@ impl<'a> Default for EvalCallbacks<'a> {
 
 impl EvalContext {
     pub fn new() -> Result<(EvalContext, EvalContextOutputs), Error> {
+        fix_path();
+
         let current_exe = std::env::current_exe()?;
         Self::with_subprocess_command(std::process::Command::new(&current_exe))
     }
@@ -904,6 +906,28 @@ impl EvalContext {
             }
         }
         Ok(())
+    }
+}
+
+fn fix_path() {
+    // If cargo isn't on our path, see if it exists in the same directory as
+    // our executable and if it does, add that directory to our PATH.
+    if which::which("cargo").is_err() {
+        if let Ok(current_exe) = std::env::current_exe() {
+            if let Some(bin_dir) = current_exe.parent() {
+                if bin_dir.join("cargo").exists() {
+                    if let Some(mut path) = std::env::var_os("PATH") {
+                        if cfg!(windows) {
+                            path.push(";");
+                        } else {
+                            path.push(":");
+                        }
+                        path.push(bin_dir);
+                        std::env::set_var("PATH", path);
+                    }
+                }
+            }
+        }
     }
 }
 
