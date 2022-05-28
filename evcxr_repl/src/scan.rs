@@ -59,7 +59,7 @@ use std::str::CharIndices;
 use unicode_xid::UnicodeXID;
 
 /// Return type for `validate_source_fragment`
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum FragmentValidity {
     /// Note that despite it's name, this really just means "not obviously
     /// invalid". There are many ways the source might still be invalid or
@@ -169,7 +169,7 @@ pub fn validate_source_fragment(source: &str) -> FragmentValidity {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum StrKind {
     /// Normal string. Closed on first ", but a backslash can escape a single
     /// quote.
@@ -286,7 +286,7 @@ fn eat_comment_block(iter: &mut Peekable<CharIndices<'_>>) -> bool {
 }
 
 /// Return value of `eat_char`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EatCharRes {
     AteChar,
     SawLifetime,
@@ -392,7 +392,7 @@ fn eat_char(input: &mut Peekable<CharIndices<'_>>) -> Option<EatCharRes> {
     res
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum Bracket {
     Round,
     Square,
