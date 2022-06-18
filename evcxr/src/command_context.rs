@@ -308,7 +308,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 )
             })
         } else {
-            return Err(CompilationError::from_segment_span(
+            Err(CompilationError::from_segment_span(
                 segment,
                 SpannedMessage::from_segment_span(
                     segment,
@@ -319,7 +319,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     ),
                 ),
                 format!("Unrecognised command {}", command_call.command),
-            ));
+            ))
         }
     }
 

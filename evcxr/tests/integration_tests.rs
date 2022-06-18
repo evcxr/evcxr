@@ -578,8 +578,8 @@ fn abort_and_restart() {
     if let Err(Error::SubprocessTerminated(message)) = result {
         #[cfg(not(windows))]
         {
-            if message != "Subprocess terminated with status: signal: 6 (core dumped)" {
-                assert_eq!(message, "Subprocess terminated with status: signal: 6");
+            if !message.starts_with("Subprocess terminated with status: signal: 6") {
+                panic!("Unexpected abort message: '{message}'");
             }
         }
         #[cfg(windows)]

@@ -12,6 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Disable a lint that is giving false positives -
+// https://github.com/rust-lang/rust-clippy/issues/8963
+#![allow(clippy::significant_drop_in_scrutinee)]
+
 #[cfg(all(unix, not(target_os = "freebsd")))]
 #[macro_use]
 extern crate sig;
