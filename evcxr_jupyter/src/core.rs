@@ -167,13 +167,15 @@ impl Server {
                     "execution_count" => execution_count,
                     "code" => src
                 })
-                .send(&*self.iopub.lock().unwrap())?;
+                .send(&self.iopub.lock().unwrap())?;
             let mut callbacks = evcxr::EvalCallbacks {
                 input_reader: &|prompt, is_password| {
                     self.request_input(&message, prompt, is_password)
                         .unwrap_or_default()
                 },
             };
+
+            #[allow(unknown_lints, clippy::significant_drop_in_scrutinee)]
             match context
                 .lock()
                 .unwrap()
@@ -205,7 +207,7 @@ impl Server {
                                 "data" => data,
                                 "metadata" => object!(),
                             })
-                            .send(&*self.iopub.lock().unwrap())?;
+                            .send(&self.iopub.lock().unwrap())?;
                     }
                     if let Some(duration) = output.timing {
                         // TODO replace by duration.as_millis() when stable
@@ -225,7 +227,7 @@ impl Server {
                                 "data" => data,
                                 "metadata" => object!(),
                             })
-                            .send(&*self.iopub.lock().unwrap())?;
+                            .send(&self.iopub.lock().unwrap())?;
                     }
                     execution_reply_sender.send(message.new_reply().with_content(object! {
                         "status" => "ok",
@@ -260,9 +262,9 @@ impl Server {
                 "prompt" => prompt,
                 "password" => password,
             });
-        stdin_request.send(&*stdin).ok()?;
+        stdin_request.send(&stdin).ok()?;
 
-        let input_response = JupyterMessage::read(&*stdin).ok()?;
+        let input_response = JupyterMessage::read(&stdin).ok()?;
         input_response.get_content()["value"]
             .as_str()
             .map(|value| value.to_owned())
@@ -301,7 +303,7 @@ impl Server {
         message
             .new_message("status")
             .with_content(object! {"execution_state" => "busy"})
-            .send(&*self.iopub.lock().unwrap())?;
+            .send(&self.iopub.lock().unwrap())?;
         let idle = message
             .new_message("status")
             .with_content(object! {"execution_state" => "idle"});
@@ -342,7 +344,7 @@ impl Server {
                 message.message_type()
             );
         }
-        idle.send(&*self.iopub.lock().unwrap())?;
+        idle.send(&self.iopub.lock().unwrap())?;
         Ok(())
     }
 
@@ -384,7 +386,7 @@ impl Server {
                             "name" => output_name,
                             "text" => format!("{}\n", line),
                         })
-                        .send(&*self.iopub.lock().unwrap())
+                        .send(&self.iopub.lock().unwrap())
                     {
                         eprintln!("{}", error);
                     }
@@ -432,7 +434,7 @@ impl Server {
                                 "evalue" => error.message(),
                                 "traceback" => traceback,
                             })
-                            .send(&*self.iopub.lock().unwrap())?;
+                            .send(&self.iopub.lock().unwrap())?;
                     } else {
                         parent_message
                             .new_message("error")
@@ -443,7 +445,7 @@ impl Server {
                                     message
                                 ],
                             })
-                            .send(&*self.iopub.lock().unwrap())?;
+                            .send(&self.iopub.lock().unwrap())?;
                     }
                 }
             }
@@ -456,7 +458,7 @@ impl Server {
                         "evalue" => displayed_error.clone(),
                         "traceback" => array![displayed_error],
                     })
-                    .send(&*self.iopub.lock().unwrap())?;
+                    .send(&self.iopub.lock().unwrap())?;
             }
         }
         Ok(())

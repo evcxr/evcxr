@@ -433,15 +433,11 @@ impl EvalContext {
         completions.start_offset = code.output_offset_to_user_offset(completions.start_offset)?;
         completions.end_offset = code.output_offset_to_user_offset(completions.end_offset)?;
         // Filter internal identifiers.
-        completions.completions = completions
-            .completions
-            .into_iter()
-            .filter(|c| {
-                c.code != "evcxr_variable_store"
-                    && c.code != "evcxr_internal_runtime"
-                    && c.code != "evcxr_analysis_wrapper"
-            })
-            .collect();
+        completions.completions.retain(|c| {
+            c.code != "evcxr_variable_store"
+                && c.code != "evcxr_internal_runtime"
+                && c.code != "evcxr_analysis_wrapper"
+        });
         Ok(completions)
     }
 

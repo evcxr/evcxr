@@ -25,7 +25,7 @@ where
     fn evcxr_display(&self) {
         let mut buffer = Vec::new();
         image::png::PngEncoder::new(&mut buffer)
-            .encode(&**self, self.width(), self.height(), P::COLOR_TYPE)
+            .encode(self, self.width(), self.height(), P::COLOR_TYPE)
             .unwrap();
         evcxr_runtime::mime_type("image/png").bytes(&buffer);
     }
