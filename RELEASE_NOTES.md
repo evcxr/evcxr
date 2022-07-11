@@ -1,7 +1,11 @@
 # Version 0.13.0 (unreleased)
 * Now uses Rust edition 2021.
-* MSRV is now 1.56.
-* Update to latest rust-analyzer.
+* MSRV is now 1.59.
+* Changed completion type in REPL to `list`. See evcxr_repl/README.md if you'd
+  like the old behavior.
+* Update to latest rust-analyzer - const generics now work reasonably well!
+* Fix escaping of ampersands in HTML output - Thanks Tim McNamara.
+* Use mold for linking if of path - Thanks Will Eaton.
 
 # Version 0.12.0
 * Fix compilation due to a non-semver breaking change in an upstream crate.
