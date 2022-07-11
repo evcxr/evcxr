@@ -32,6 +32,7 @@ use ra_ap_syntax::ast::AstNode;
 use ra_ap_syntax::ast::{self};
 use ra_ap_vfs as ra_vfs;
 use ra_ap_vfs_notify as vfs_notify;
+use ra_ide::CallableSnippets;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
@@ -245,11 +246,11 @@ impl RustAnalyzer {
                 .map(SourceRoot::new_local)
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(
-            &Default::default(),
-            &mut |_, _| Vec::new(),
-            &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
-        ));
+        change.set_crate_graph(
+            workspace.to_crate_graph(&mut |_, _| Ok(Vec::new()), &mut |path| {
+                self.vfs.file_id(&path.to_path_buf().into())
+            }),
+        );
         Ok(())
     }
 
@@ -262,8 +263,6 @@ impl RustAnalyzer {
         let mut range = None;
         let config = ra_ide::CompletionConfig {
             enable_postfix_completions: true,
-            add_call_parenthesis: true,
-            add_call_argument_snippets: true,
             snippet_cap: SnippetCap::new(true),
             enable_imports_on_the_fly: false,
             enable_self_on_the_fly: true,
@@ -276,6 +275,7 @@ impl RustAnalyzer {
                 enforce_granularity: false,
                 skip_glob_imports: false,
             },
+            callable: Some(CallableSnippets::FillArguments),
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
@@ -283,6 +283,7 @@ impl RustAnalyzer {
                 file_id: self.source_file_id,
                 offset: (position as u32).into(),
             },
+            None,
         ) {
             for item in completion_items {
                 use regex::Regex;
