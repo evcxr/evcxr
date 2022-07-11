@@ -1,4 +1,4 @@
-# Version 0.13.0 (unreleased)
+# Version 0.13.0
 * Now uses Rust edition 2021.
 * MSRV is now 1.59.
 * Changed completion type in REPL to `list`. See evcxr_repl/README.md if you'd
