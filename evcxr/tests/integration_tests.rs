@@ -926,7 +926,9 @@ fn check(ctx: &mut CommandContext, code: &str) -> Vec<String> {
 }
 
 fn strs(input: &[String]) -> Vec<&str> {
-    input.iter().map(|s| s.as_str()).collect()
+    let mut result: Vec<&str> = input.iter().map(|s| s.as_str()).collect();
+    result.sort();
+    result
 }
 
 #[track_caller]
@@ -948,7 +950,7 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
 }
 "#
         )),
-        vec!["error 3:29-4:6", "error 2:41-2:43"]
+        vec!["error 2:41-2:43", "error 3:29-4:6"]
     );
 
     // An unused variable not within a function shouldn't produce a warning.

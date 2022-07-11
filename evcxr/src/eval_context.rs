@@ -1325,7 +1325,7 @@ impl ContextState {
             .add_all(self.error_trait_code(true))
             .generated("fn evcxr_variable_store<T: 'static>(_: T) {}")
             .generated("#[allow(unused_variables)]")
-            .generated("fn evcxr_analysis_wrapper(");
+            .generated("async fn evcxr_analysis_wrapper(");
         for (var_name, state) in &self.stored_variable_states {
             code = code.generated(format!(
                 "{}{}: {},",

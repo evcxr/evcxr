@@ -6,6 +6,7 @@
 * Update to latest rust-analyzer - const generics now work reasonably well!
 * Fix escaping of ampersands in HTML output - Thanks Tim McNamara.
 * Use mold for linking if of path - Thanks Will Eaton.
+* Fix inline errors showing up for await calls in Jupyter notebook.
 
 # Version 0.12.0
 * Fix compilation due to a non-semver breaking change in an upstream crate.
