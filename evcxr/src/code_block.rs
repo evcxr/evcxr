@@ -214,10 +214,9 @@ impl CodeBlock {
                     }),
                     line,
                 );
-            } else if line.trim().is_empty() {
+            } else if line.starts_with(r"//") || line.trim().is_empty() {
                 // Ignore blank lines, otherwise we can't have blank lines before :dep commands.
-            } else if line.starts_with(r"//") {
-                // Ignore comments
+                // We also ignore lines that start with //, because those are line comments.
             } else {
                 // Anything else, we treat as Rust code to be executed. Since we don't accept commands after Rust code, we're done looking for commands.
                 let non_command_start_byte = line.as_ptr() as usize - user_code.as_ptr() as usize;
