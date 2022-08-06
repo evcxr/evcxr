@@ -18,6 +18,7 @@ use crate::jupyter_message::JupyterMessage;
 use anyhow::bail;
 use anyhow::Result;
 use colored::*;
+use crossbeam_channel::Select;
 use evcxr::CommandContext;
 use json::JsonValue;
 use std::collections::HashMap;
@@ -25,6 +26,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
 use std::time;
+use std::time::Duration;
 
 // Note, to avoid potential deadlocks, each thread should lock at most one mutex at a time.
 #[derive(Clone)]
@@ -101,12 +103,10 @@ impl Server {
                 &execution_response_sender,
             )
         });
-        server
-            .clone()
-            .start_output_pass_through_thread("stdout", outputs.stdout);
-        server
-            .clone()
-            .start_output_pass_through_thread("stderr", outputs.stderr);
+        server.clone().start_output_pass_through_thread(vec![
+            ("stdout", outputs.stdout),
+            ("stderr", outputs.stderr),
+        ]);
         Ok(server)
     }
 
@@ -372,28 +372,46 @@ impl Server {
 
     fn start_output_pass_through_thread(
         self,
-        output_name: &'static str,
-        channel: crossbeam_channel::Receiver<String>,
+        channels: Vec<(&'static str, crossbeam_channel::Receiver<String>)>,
     ) {
         thread::spawn(move || {
-            while let Ok(line) = channel.recv() {
-                let mut message = None;
-                if let Some(exec_request) = &*self.latest_execution_request.lock().unwrap() {
-                    message = Some(exec_request.new_message("stream"));
-                }
-                if let Some(message) = message {
-                    if let Err(error) = message
-                        .with_content(object! {
-                            "name" => output_name,
-                            "text" => format!("{}\n", line),
-                        })
-                        .send(&self.iopub.lock().unwrap())
-                    {
-                        eprintln!("{}", error);
-                    }
+            let mut select = Select::new();
+            for (_, channel) in &channels {
+                select.recv(channel);
+            }
+            loop {
+                let index = select.ready();
+                let (output_name, channel) = &channels[index];
+                // Read from the channel that has output until it has been idle
+                // for 1ms before we return to checking other channels. This
+                // reduces the extent to which outputs interleave. e.g. a
+                // multi-line print is performed to stderr, then another to
+                // stdout - we can't guarantee the order in which they get sent,
+                // but we'd like to try to make sure that we don't interleave
+                // their lines if possible.
+                while let Ok(line) = channel.recv_timeout(Duration::from_millis(1)) {
+                    self.pass_output_line(output_name, line);
                 }
             }
         });
+    }
+
+    fn pass_output_line(&self, output_name: &'static str, line: String) {
+        let mut message = None;
+        if let Some(exec_request) = &*self.latest_execution_request.lock().unwrap() {
+            message = Some(exec_request.new_message("stream"));
+        }
+        if let Some(message) = message {
+            if let Err(error) = message
+                .with_content(object! {
+                    "name" => output_name,
+                    "text" => format!("{}\n", line),
+                })
+                .send(&self.iopub.lock().unwrap())
+            {
+                eprintln!("{}", error);
+            }
+        }
     }
 
     fn emit_errors(&self, errors: &evcxr::Error, parent_message: &JupyterMessage) -> Result<()> {
