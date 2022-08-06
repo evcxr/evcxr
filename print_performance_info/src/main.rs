@@ -15,9 +15,11 @@
 use evcxr::EvalContext;
 use evcxr::{self};
 use std::io;
-use std::sync::mpsc;
 
-fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, mut output: T) {
+fn send_output<T: io::Write + Send + 'static>(
+    channel: crossbeam_channel::Receiver<String>,
+    mut output: T,
+) {
     std::thread::spawn(move || {
         while let Ok(line) = channel.recv() {
             if writeln!(output, "{}", line).is_err() {

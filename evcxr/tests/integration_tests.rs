@@ -22,7 +22,6 @@ use std::collections::HashSet;
 use std::io;
 use std::ops::Deref;
 use std::ops::DerefMut;
-use std::sync::mpsc;
 use std::sync::Mutex;
 use tempfile;
 
@@ -59,7 +58,10 @@ fn new_command_context_and_outputs() -> (CommandContext, EvalContextOutputs) {
     (command_context, outputs)
 }
 
-fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, mut output: T) {
+fn send_output<T: io::Write + Send + 'static>(
+    channel: crossbeam_channel::Receiver<String>,
+    mut output: T,
+) {
     std::thread::spawn(move || {
         while let Ok(line) = channel.recv() {
             if writeln!(output, "{}", line).is_err() {

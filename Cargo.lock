@@ -530,6 +530,7 @@ version = "0.13.0"
 dependencies = [
  "anyhow",
  "backtrace",
+ "crossbeam-channel",
  "dirs",
  "evcxr_input",
  "filetime",
@@ -575,6 +576,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "colored",
+ "crossbeam-channel",
  "dirs",
  "evcxr",
  "generic-array",
@@ -593,6 +595,7 @@ name = "evcxr_repl"
 version = "0.13.0"
 dependencies = [
  "colored",
+ "crossbeam-channel",
  "evcxr",
  "mimalloc",
  "once_cell",
@@ -1236,6 +1239,7 @@ dependencies = [
 name = "print_performance_info"
 version = "0.1.0"
 dependencies = [
+ "crossbeam-channel",
  "evcxr",
 ]
 

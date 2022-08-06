@@ -30,7 +30,6 @@ use rustyline::Movement;
 use rustyline::Word;
 use std::fs;
 use std::io;
-use std::sync::mpsc;
 use std::sync::Arc;
 use structopt::StructOpt;
 
@@ -42,7 +41,7 @@ struct Repl {
 }
 
 fn send_output<T: io::Write + Send + 'static>(
-    channel: mpsc::Receiver<String>,
+    channel: crossbeam_channel::Receiver<String>,
     mut output: T,
     color: Option<Color>,
 ) {

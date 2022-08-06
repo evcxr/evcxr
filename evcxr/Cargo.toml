@@ -22,6 +22,7 @@ dirs = "4.0.0"
 which = "4.0.2"
 evcxr_input = "1.0.0"
 unicode-segmentation = "1.7.1"
+crossbeam-channel = "0.5.5"
 
 ra_ap_ide = "=0.0.120"
 ra_ap_ide_db = "=0.0.120"

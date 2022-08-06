@@ -17,7 +17,6 @@ use crate::errors::Error;
 use crate::runtime;
 use std::io::BufReader;
 use std::process;
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -27,13 +26,13 @@ pub(crate) struct ChildProcess {
     // Only none while in drop.
     stdin: Option<std::process::ChildStdin>,
     command: Arc<Mutex<process::Command>>,
-    stderr_sender: Arc<Mutex<mpsc::Sender<String>>>,
+    stderr_sender: Arc<Mutex<crossbeam_channel::Sender<String>>>,
 }
 
 impl ChildProcess {
     pub(crate) fn new(
         mut command: std::process::Command,
-        stderr_sender: mpsc::Sender<String>,
+        stderr_sender: crossbeam_channel::Sender<String>,
     ) -> Result<ChildProcess, Error> {
         // Avoid a fork bomb. We could call runtime_hook here but then all the work that we did up
         // to this point would be wasted. Also, it's possible that we could already have started
@@ -55,7 +54,7 @@ impl ChildProcess {
 
     fn new_internal(
         command: Arc<Mutex<std::process::Command>>,
-        stderr_sender: Arc<Mutex<mpsc::Sender<String>>>,
+        stderr_sender: Arc<Mutex<crossbeam_channel::Sender<String>>>,
     ) -> Result<ChildProcess, Error> {
         let process = command.lock().unwrap().spawn();
         let mut process = match process {

@@ -45,7 +45,6 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::mpsc;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -55,7 +54,7 @@ pub struct EvalContext {
     module: Module,
     committed_state: ContextState,
     child_process: ChildProcess,
-    stdout_sender: mpsc::Sender<String>,
+    stdout_sender: crossbeam_channel::Sender<String>,
     analyzer: RustAnalyzer,
     initial_config: Config,
 }
@@ -204,8 +203,8 @@ const PANIC_NOTIFICATION: &str = "EVCXR_PANIC_NOTIFICATION";
 // Outputs from an EvalContext. This is a separate struct since users may want
 // destructure this and pass its components to separate threads.
 pub struct EvalContextOutputs {
-    pub stdout: mpsc::Receiver<String>,
-    pub stderr: mpsc::Receiver<String>,
+    pub stdout: crossbeam_channel::Receiver<String>,
+    pub stderr: crossbeam_channel::Receiver<String>,
 }
 
 //#[non_exhaustive]
@@ -292,8 +291,8 @@ impl EvalContext {
 
         Self::apply_platform_specific_vars(&module, &mut subprocess_command);
 
-        let (stdout_sender, stdout_receiver) = mpsc::channel();
-        let (stderr_sender, stderr_receiver) = mpsc::channel();
+        let (stdout_sender, stdout_receiver) = crossbeam_channel::unbounded();
+        let (stderr_sender, stderr_receiver) = crossbeam_channel::unbounded();
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
         let initial_config = create_initial_config(module.crate_dir().to_owned());
         let initial_state = ContextState::new(initial_config.clone());

@@ -6,3 +6,4 @@ edition = "2021"
 
 [dependencies]
 evcxr = { path = "../evcxr" }
+crossbeam-channel = "0.5.5"

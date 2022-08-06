@@ -21,7 +21,6 @@ use colored::*;
 use evcxr::CommandContext;
 use json::JsonValue;
 use std::collections::HashMap;
-use std::sync::mpsc;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::thread;
@@ -33,8 +32,8 @@ pub(crate) struct Server {
     iopub: Arc<Mutex<Connection>>,
     stdin: Arc<Mutex<Connection>>,
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
-    shutdown_requested_receiver: Arc<Mutex<mpsc::Receiver<()>>>,
-    shutdown_requested_sender: Arc<Mutex<mpsc::Sender<()>>>,
+    shutdown_requested_receiver: Arc<Mutex<crossbeam_channel::Receiver<()>>>,
+    shutdown_requested_sender: Arc<Mutex<crossbeam_channel::Sender<()>>>,
 }
 
 impl Server {
@@ -64,7 +63,8 @@ impl Server {
             zmq_context.socket(SocketType::PUB)?,
         )?));
 
-        let (shutdown_requested_sender, shutdown_requested_receiver) = mpsc::channel();
+        let (shutdown_requested_sender, shutdown_requested_receiver) =
+            crossbeam_channel::unbounded();
 
         let server = Server {
             iopub,
@@ -74,8 +74,9 @@ impl Server {
             shutdown_requested_sender: Arc::new(Mutex::new(shutdown_requested_sender)),
         };
 
-        let (execution_sender, execution_receiver) = mpsc::channel();
-        let (execution_response_sender, execution_response_receiver) = mpsc::channel();
+        let (execution_sender, execution_receiver) = crossbeam_channel::unbounded();
+        let (execution_response_sender, execution_response_receiver) =
+            crossbeam_channel::unbounded();
 
         thread::spawn(move || Self::handle_hb(&heartbeat));
         server.start_thread(move |server: Server| server.handle_control(control_socket));
@@ -149,8 +150,8 @@ impl Server {
     fn handle_execution_requests(
         self,
         context: Arc<Mutex<CommandContext>>,
-        receiver: &mpsc::Receiver<JupyterMessage>,
-        execution_reply_sender: &mpsc::Sender<JupyterMessage>,
+        receiver: &crossbeam_channel::Receiver<JupyterMessage>,
+        execution_reply_sender: &crossbeam_channel::Sender<JupyterMessage>,
     ) -> Result<()> {
         let mut execution_count = 1;
         loop {
@@ -273,8 +274,8 @@ impl Server {
     fn handle_shell(
         self,
         connection: Connection,
-        execution_channel: &mpsc::Sender<JupyterMessage>,
-        execution_reply_receiver: &mpsc::Receiver<JupyterMessage>,
+        execution_channel: &crossbeam_channel::Sender<JupyterMessage>,
+        execution_reply_receiver: &crossbeam_channel::Receiver<JupyterMessage>,
         context: Arc<Mutex<CommandContext>>,
     ) -> Result<()> {
         loop {
@@ -293,8 +294,8 @@ impl Server {
         &self,
         message: JupyterMessage,
         connection: &Connection,
-        execution_channel: &mpsc::Sender<JupyterMessage>,
-        execution_reply_receiver: &mpsc::Receiver<JupyterMessage>,
+        execution_channel: &crossbeam_channel::Sender<JupyterMessage>,
+        execution_reply_receiver: &crossbeam_channel::Receiver<JupyterMessage>,
         context: &Arc<Mutex<CommandContext>>,
     ) -> Result<()> {
         // Processing of every message should be enclosed between "busy" and "idle"
@@ -372,7 +373,7 @@ impl Server {
     fn start_output_pass_through_thread(
         self,
         output_name: &'static str,
-        channel: mpsc::Receiver<String>,
+        channel: crossbeam_channel::Receiver<String>,
     ) {
         thread::spawn(move || {
             while let Ok(line) = channel.recv() {
