@@ -52,9 +52,10 @@ fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
 fn get_code_origins_for_span<'a>(
     span: &JsonValue,
     code_block: &'a CodeBlock,
-) -> Vec<(&'a CodeKind, usize)> {
-    let mut code_origins = Vec::new();
+) -> (Vec<(&'a CodeKind, usize)>, (usize, usize)) {
     if let Some(span) = spans_in_local_source(span) {
+        let mut code_origins = Vec::new();
+
         if let (Some(line_start), Some(line_end)) =
             (span["line_start"].as_usize(), span["line_end"].as_usize())
         {
@@ -62,8 +63,30 @@ fn get_code_origins_for_span<'a>(
                 code_origins.push(code_block.origin_for_line(line));
             }
         }
+        let mut bs = span["byte_start"].as_usize().unwrap_or(0) + 20;
+        let mut be = span["byte_end"].as_usize().unwrap_or(0) + 20;
+        for x in &code_block.segments {
+            if x.code.len() > bs {
+                break;
+            }
+            if matches!(x.kind, CodeKind::OriginalUserCode(_)) {
+                break;
+            }
+            bs -= x.code.len();
+        }
+        for x in &code_block.segments {
+            if x.code.len() > be {
+                break;
+            }
+            if matches!(x.kind, CodeKind::OriginalUserCode(_)) {
+                break;
+            }
+            be -= x.code.len();
+        }
+        (code_origins, (bs, be))
+    } else {
+        (vec![], (0, 0))
     }
-    code_origins
 }
 
 fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a CodeKind> {
@@ -72,6 +95,7 @@ fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a 
         for span in spans {
             code_origins.extend(
                 get_code_origins_for_span(span, code_block)
+                    .0
                     .iter()
                     .map(|(origin, _)| origin),
             );
@@ -326,6 +350,9 @@ pub struct Span {
     /// 1-based column (character) number in the original user code on which the span ends
     /// (exclusive).
     pub end_column: usize,
+    pub byte_start: usize,
+    pub byte_end: usize,
+    pub code_block_id: usize,
 }
 
 impl Span {
@@ -339,6 +366,9 @@ impl Span {
             start_column,
             end_line: command.line_number,
             end_column,
+            byte_start: start_column,
+            byte_end: end_column,
+            code_block_id: 0,
         }
     }
 
@@ -361,6 +391,9 @@ impl Span {
                 start_column,
                 end_line,
                 end_column,
+                byte_start: start_column,
+                byte_end: end_column,
+                code_block_id: 0,
             })
         } else {
             None
@@ -402,7 +435,7 @@ impl SpannedMessage {
             span_json["column_end"].as_usize(),
         ) {
             if file_name.ends_with("lib.rs") {
-                let origins = get_code_origins_for_span(span_json, code_block);
+                let (origins, (bs, be)) = get_code_origins_for_span(span_json, code_block);
                 if let (
                     Some((CodeKind::OriginalUserCode(start), start_line_offset)),
                     Some((CodeKind::OriginalUserCode(end), end_line_offset)),
@@ -423,6 +456,9 @@ impl SpannedMessage {
                             } else {
                                 0
                             }),
+                        byte_start: bs,
+                        byte_end: be,
+                        code_block_id: start.node_index,
                     })
                 } else {
                     // Spans within generated code won't mean anything to the user, suppress

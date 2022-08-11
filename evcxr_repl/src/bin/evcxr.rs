@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use ariadne::{sources, ColorGenerator, Label, Report, ReportKind};
 use colored::*;
 use evcxr::CommandContext;
 use evcxr::CompilationError;
@@ -38,6 +39,7 @@ const PROMPT: &str = ">> ";
 struct Repl {
     command_context: Arc<BgInitMutex<CommandContext>>,
     ide_mode: bool,
+    command_history: Vec<(&'static str, &'static str)>,
 }
 
 fn send_output<T: io::Write + Send + 'static>(
@@ -83,10 +85,15 @@ impl Repl {
         Repl {
             command_context,
             ide_mode,
+            command_history: vec![],
         }
     }
     fn execute(&mut self, to_run: &str) {
         let execution_result = self.command_context.lock().execute(to_run);
+        let command_id =
+            Box::leak(format!("command_{}", self.command_history.len()).into_boxed_str());
+        let command_text = Box::leak(to_run.to_string().into_boxed_str());
+        self.command_history.push((command_id, command_text));
         let success = match execution_result {
             Ok(output) => {
                 if let Some(text) = output.get("text/plain") {
@@ -124,47 +131,35 @@ impl Repl {
         let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
             if error.is_from_user_code() {
+                let mut builder =
+                    Report::build(ReportKind::Error, self.command_history.last().unwrap().0, 0)
+                        .with_message(&error.message());
+                let mut colors = ColorGenerator::new();
+                if let Some(code) = error.code() {
+                    builder = builder.with_code(code);
+                }
                 for spanned_message in error.spanned_messages() {
                     if let Some(span) = &spanned_message.span {
-                        let mut start_column = character_column_to_grapheme_number(
-                            span.start_column - 1,
-                            &spanned_message.lines[0],
+                        builder = builder.with_label(
+                            Label::new((
+                                self.command_history.last().unwrap().0,
+                                span.byte_start..span.byte_end,
+                            ))
+                            .with_message(&spanned_message.label)
+                            .with_color(colors.next())
+                            .with_order(10),
                         );
-                        let mut end_column = character_column_to_grapheme_number(
-                            span.end_column - 1,
-                            spanned_message.lines.last().unwrap(),
-                        );
-                        // Considering spans can cover multiple lines, it could be that end_column
-                        // is less than start_column.
-                        if end_column < start_column {
-                            std::mem::swap(&mut start_column, &mut end_column);
-                        }
-                        if source.lines().count() > 1 {
-                            // for multi line source code, print the lines
-                            if last_span_lines != &spanned_message.lines {
-                                for line in &spanned_message.lines {
-                                    println!("{}", line);
-                                }
-                            }
-                            last_span_lines = &spanned_message.lines;
-                        } else {
-                            print!("{}", " ".repeat(PROMPT.len()));
-                        }
-                        print!("{}", " ".repeat(start_column));
-
-                        // Guaranteed not to underflow since if they were out-of-order, we swapped
-                        // them above.
-                        let span_diff = end_column - start_column;
-                        let carrots = "^".repeat(span_diff);
-                        print!("{}", carrots.bright_red());
-                        println!(" {}", spanned_message.label.bright_blue());
                     } else {
                         // Our error originates from both user-code and generated
                         // code.
                         println!("{}", spanned_message.label.bright_blue());
                     }
                 }
-                println!("{}", error.message().bright_red());
+                builder
+                    .finish()
+                    .print(sources(self.command_history.clone().into_iter()))
+                    .unwrap();
+                //println!("{}", error.message().bright_red());
                 for help in error.help() {
                     println!("{} {}", "help:".bold(), help);
                 }
