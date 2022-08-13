@@ -108,7 +108,7 @@ impl Config {
         Config {
             crate_dir,
             debug_mode: false,
-            preserve_vars_on_panic: false,
+            preserve_vars_on_panic: true,
             output_format: "{:?}".to_owned(),
             display_final_expression: true,
             expand_use_statements: true,

@@ -5,10 +5,6 @@ and the [Evcxr Jupyter kernel](evcxr_jupyter/README.md).
 
 ## Usage notes
 
-* If your code panics, all variables will be lost. You can optionally run
-  `:preserve_vars_on_panic 1` to turn on preservation of variables. However note
-  that this will slow down compilation. Also, only variables that either are not
-  referenced by the code being run, or are Copy will be preserved.
 * If your code segfaults (e.g. due to buggy unsafe code), aborts, exits etc, the
   process in which the code runs will be restarted. All variables will be lost.
 
@@ -134,14 +130,6 @@ The `:vars` command will list all the variables defined in the current context:
 y: i32
 x: i32
 ```
-
-If your code panics, all variables will be lost. To preserve variables on panics, you can set the `:preserve_vars_on_panic` configuration option:
-```rust
->> :preserve_vars_on_panic 1
-Preserve vars on panic: true
-```
-
-Only variables that either are not referenced by the code being run or implement `Copy` will be preserved. Also note that this will slow down compilation.
 
 ### References
 
