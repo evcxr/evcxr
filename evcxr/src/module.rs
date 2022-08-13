@@ -45,6 +45,15 @@ fn create_dir(dir: &Path) -> Result<(), Error> {
 fn write_file(dir: &Path, basename: &str, contents: &str) -> Result<(), Error> {
     create_dir(dir)?;
     let filename = dir.join(basename);
+    // If the file contents is already correct, then skip writing it again. This
+    // is mostly to avoid rewriting Cargo.toml which should change relatively
+    // little.
+    if fs::read_to_string(&filename)
+        .map(|c| c == contents)
+        .unwrap_or(false)
+    {
+        return Ok(());
+    }
     if let Err(err) = fs::write(&filename, contents) {
         bail!("Error writing '{:?}': {}", filename, err);
     }
