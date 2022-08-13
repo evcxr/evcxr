@@ -178,7 +178,8 @@ impl Module {
             .arg("--")
             .arg("-C")
             .arg("prefer-dynamic")
-            .env("CARGO_TARGET_DIR", "target");
+            .env("CARGO_TARGET_DIR", "target")
+            .env("RUSTC", &config.rustc_path);
         if config.linker == "lld" {
             command
                 .arg("-C")

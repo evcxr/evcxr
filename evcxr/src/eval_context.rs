@@ -87,6 +87,7 @@ pub(crate) struct Config {
     pub(crate) offline_mode: bool,
     pub(crate) toolchain: String,
     cargo_path: String,
+    pub(crate) rustc_path: String,
 }
 
 fn create_initial_config(crate_dir: PathBuf) -> Config {
@@ -119,6 +120,7 @@ impl Config {
             offline_mode: false,
             toolchain: String::new(),
             cargo_path: default_cargo_path(),
+            rustc_path: default_rustc_path(),
         }
     }
 
@@ -1863,6 +1865,24 @@ fn rustup_cargo_path() -> Option<String> {
 
 fn default_cargo_path() -> String {
     rustup_cargo_path().unwrap_or_else(|| "cargo".to_owned())
+}
+
+// Similar to the above, this avoids cargo invoking rustup, cutting the eval
+// time for a trivial bit of code to about 75ms.
+fn rustup_rustc_path() -> Option<String> {
+    let output = Command::new("rustup")
+        .arg("which")
+        .arg("rustc")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(std::str::from_utf8(&output.stdout).ok()?.trim().to_owned())
+}
+
+fn default_rustc_path() -> String {
+    rustup_rustc_path().unwrap_or_else(|| "rustc".to_owned())
 }
 
 fn replace_reserved_words_in_type(ty: &str) -> String {
