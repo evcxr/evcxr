@@ -1028,7 +1028,7 @@ struct UserCodeSpan {
     range: TextRange,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 enum VariableMoveState {
     Available,
     CopiedIntoCatchUnwind,
@@ -1454,8 +1454,8 @@ impl ContextState {
                 .add_all(self.check_variable_statements())
                 .add_all(self.load_variable_statements());
             user_code = user_code
-                .add_all(self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind))
-                .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind));
+                .add_all(self.store_variable_statements(VariableMoveState::MovedIntoCatchUnwind))
+                .add_all(self.store_variable_statements(VariableMoveState::CopiedIntoCatchUnwind));
         } else {
             code = code.generated("evcxr_variable_store: *mut u8) -> *mut u8 {");
         }
@@ -1500,7 +1500,7 @@ impl ContextState {
                     .generated("  Ok(inner_store) => evcxr_variable_store.merge(inner_store),")
                     .generated("  Err(_) => {")
                     .add_all(
-                        self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind),
+                        self.store_variable_statements(VariableMoveState::CopiedIntoCatchUnwind),
                     )
                     .generated(format!("    println!(\"{}\");", PANIC_NOTIFICATION))
                     .generated("}}");
@@ -1516,16 +1516,16 @@ impl ContextState {
             code = code.add_all(user_code);
         }
         if needs_variable_store {
-            code = code.add_all(self.store_variable_statements(&VariableMoveState::Available));
+            code = code.add_all(self.store_variable_statements(VariableMoveState::Available));
         }
         code = code.generated("evcxr_variable_store");
         code.generated("}")
     }
 
-    fn store_variable_statements(&self, move_state: &VariableMoveState) -> CodeBlock {
+    fn store_variable_statements(&self, move_state: VariableMoveState) -> CodeBlock {
         let mut statements = CodeBlock::new();
         for (var_name, var_state) in &self.variable_states {
-            if var_state.move_state == *move_state {
+            if var_state.move_state == move_state {
                 statements.pack_variable(
                     var_name.clone(),
                     format!(
