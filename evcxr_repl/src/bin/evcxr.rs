@@ -112,7 +112,7 @@ impl Repl {
                 true
             }
             Err(evcxr::Error::CompilationErrors(errors)) => {
-                self.display_errors(to_run, errors);
+                self.display_errors(errors);
                 false
             }
             Err(err) => {
@@ -127,8 +127,11 @@ impl Repl {
         }
     }
 
-    fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
-        let mut last_span_lines: &Vec<String> = &vec![];
+    fn display_errors(&mut self, errors: Vec<CompilationError>) {
+        use yansi::Paint;
+        if cfg!(windows) && !Paint::enable_windows_ascii() {
+            Paint::disable()
+        }
         for error in &errors {
             if error.is_from_user_code() {
                 let mut builder =
@@ -175,23 +178,6 @@ impl Repl {
             }
         }
     }
-}
-
-/// Returns a 0-based grapheme index corresponding to the supplied 0-based character column.
-fn character_column_to_grapheme_number(character_column: usize, line: &str) -> usize {
-    let mut characters_remaining = character_column;
-    let mut grapheme_index = 0;
-    for (_byte_offset, chars) in
-        unicode_segmentation::UnicodeSegmentation::grapheme_indices(line, true)
-    {
-        let num_chars = chars.chars().count();
-        if characters_remaining < num_chars {
-            break;
-        }
-        characters_remaining -= num_chars;
-        grapheme_index += 1;
-    }
-    grapheme_index
 }
 
 fn readline_direct(prompt: &str) -> rustyline::Result<String> {
@@ -320,25 +306,3 @@ fn parse_edit_mode(src: &str) -> Result<EditMode, &str> {
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
 static MIMALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-#[cfg(test)]
-mod tests {
-    use super::character_column_to_grapheme_number;
-
-    #[test]
-    fn test_character_column_to_grapheme_number() {
-        assert_eq!(character_column_to_grapheme_number(0, ""), 0);
-        assert_eq!(character_column_to_grapheme_number(0, "aaa"), 0);
-        assert_eq!(character_column_to_grapheme_number(1, "aaa"), 1);
-        assert_eq!(character_column_to_grapheme_number(2, "aaa"), 2);
-        assert_eq!(character_column_to_grapheme_number(3, "aaa"), 3);
-        assert_eq!(character_column_to_grapheme_number(0, "äää"), 0);
-        assert_eq!(character_column_to_grapheme_number(1, "äää"), 0);
-        assert_eq!(character_column_to_grapheme_number(2, "äää"), 1);
-        assert_eq!(character_column_to_grapheme_number(3, "äää"), 1);
-        assert_eq!(character_column_to_grapheme_number(4, "äää"), 2);
-        assert_eq!(character_column_to_grapheme_number(5, "äää"), 2);
-        assert_eq!(character_column_to_grapheme_number(6, "äää"), 3);
-        assert_eq!(character_column_to_grapheme_number(7, "äää"), 3);
-    }
-}

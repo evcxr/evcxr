@@ -63,27 +63,22 @@ fn get_code_origins_for_span<'a>(
                 code_origins.push(code_block.origin_for_line(line));
             }
         }
-        let mut bs = span["byte_start"].as_usize().unwrap_or(0) + 20;
-        let mut be = span["byte_end"].as_usize().unwrap_or(0) + 20;
-        for x in &code_block.segments {
-            if x.code.len() > bs {
-                break;
+        let find_pos = |mut pos| {
+            let mut result = pos;
+            for x in &code_block.segments {
+                if x.code.len() > pos {
+                    break;
+                }
+                pos -= x.code.len();
+                if !matches!(x.kind, CodeKind::OriginalUserCode(_)) {
+                    result -= x.code.len();
+                }
             }
-            if matches!(x.kind, CodeKind::OriginalUserCode(_)) {
-                break;
-            }
-            bs -= x.code.len();
-        }
-        for x in &code_block.segments {
-            if x.code.len() > be {
-                break;
-            }
-            if matches!(x.kind, CodeKind::OriginalUserCode(_)) {
-                break;
-            }
-            be -= x.code.len();
-        }
-        (code_origins, (bs, be))
+            result
+        };
+        let result_start = find_pos(span["byte_start"].as_usize().unwrap_or(0));
+        let result_end = find_pos(span["byte_end"].as_usize().unwrap_or(0));
+        (code_origins, (result_start, result_end))
     } else {
         (vec![], (0, 0))
     }

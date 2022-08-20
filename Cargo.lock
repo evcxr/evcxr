@@ -615,6 +615,7 @@ dependencies = [
  "structopt",
  "unicode-segmentation",
  "unicode-xid",
+ "yansi",
 ]
 
 [[package]]
