@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use anyhow::Result;
 use ariadne::sources;
 use colored::*;
 use evcxr::CommandContext;
@@ -249,7 +250,7 @@ struct Options {
     edit_mode: rustyline::EditMode,
 }
 
-fn main() {
+fn main() -> Result<()> {
     evcxr::runtime_hook();
 
     let options = Options::from_args();
@@ -283,7 +284,7 @@ fn main() {
         config_builder = config_builder.completion_type(rustyline::CompletionType::List);
     }
     let config = config_builder.build();
-    let mut editor = Editor::<EvcxrRustylineHelper>::with_config(config);
+    let mut editor = Editor::<EvcxrRustylineHelper>::with_config(config)?;
     editor.bind_sequence(
         KeyEvent(KeyCode::Left, Modifiers::CTRL),
         Cmd::Move(Movement::BackwardWord(1, Word::Big)),
@@ -325,6 +326,7 @@ fn main() {
     if let Some(history_file) = &opt_history_file {
         editor.save_history(&history_file).ok();
     }
+    Ok(())
 }
 
 fn parse_edit_mode(src: &str) -> Result<EditMode, &str> {

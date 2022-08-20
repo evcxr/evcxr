@@ -13,7 +13,7 @@ default = ["mimalloc"]
 
 [dependencies]
 evcxr = { version = "=0.13.0", path = "../evcxr" }
-rustyline = "9.0.0"
+rustyline = "10.0.0"
 colored = "2.0.0"
 once_cell = "1.5.2"
 regex = { version = "1.4.1", default-features = false, features = [ "std" ] }
@@ -25,3 +25,4 @@ parking_lot = "0.12.1"
 crossbeam-channel = "0.5.5"
 ariadne = "0.1.5"
 yansi = "0.5.1"
+anyhow = "1.0.33"
