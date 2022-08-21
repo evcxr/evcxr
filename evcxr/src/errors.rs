@@ -18,6 +18,7 @@ use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
 use crate::code_block::Segment;
 use crate::code_block::UserCodeInfo;
+use ariadne::{ColorGenerator, Label, Report, ReportKind};
 use json::JsonValue;
 use json::{self};
 use once_cell::sync::OnceCell;
@@ -26,6 +27,7 @@ use ra_ap_ide::TextSize;
 use regex::Regex;
 use std::fmt;
 use std::io;
+use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct CompilationError {
@@ -34,6 +36,38 @@ pub struct CompilationError {
     pub(crate) code_origins: Vec<CodeKind>,
     spanned_messages: Vec<SpannedMessage>,
     level: String,
+}
+
+impl CompilationError {
+    pub fn build_report(
+        &self,
+        command_history: &[(&'static str, &'static str)],
+    ) -> Option<Report<(&'static str, Range<usize>)>> {
+        let error = self;
+        let (file_name, source) = command_history.last().unwrap();
+        if !source.is_ascii() {
+            return None;
+        }
+        let mut builder =
+            Report::build(ReportKind::Error, *file_name, 0).with_message(&error.message());
+        let mut colors = ColorGenerator::new();
+        if let Some(code) = error.code() {
+            builder = builder.with_code(code);
+        }
+        for spanned_message in error.spanned_messages() {
+            if let Some(span) = &spanned_message.span {
+                builder = builder.with_label(
+                    Label::new((*file_name, span.byte_start..span.byte_end))
+                        .with_message(&spanned_message.label)
+                        .with_color(colors.next())
+                        .with_order(10),
+                );
+            } else {
+                return None;
+            }
+        }
+        Some(builder.finish())
+    }
 }
 
 fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {

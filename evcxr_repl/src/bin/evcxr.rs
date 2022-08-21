@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use ariadne::{sources, ColorGenerator, Label, Report, ReportKind};
+use ariadne::sources;
 use colored::*;
 use evcxr::CommandContext;
 use evcxr::CompilationError;
@@ -132,37 +132,57 @@ impl Repl {
         if cfg!(windows) && !Paint::enable_windows_ascii() {
             Paint::disable()
         }
+        let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
             if error.is_from_user_code() {
-                let mut builder =
-                    Report::build(ReportKind::Error, self.command_history.last().unwrap().0, 0)
-                        .with_message(&error.message());
-                let mut colors = ColorGenerator::new();
-                if let Some(code) = error.code() {
-                    builder = builder.with_code(code);
+                if let Some(report) = error.build_report(&self.command_history) {
+                    report
+                        .print(sources(self.command_history.clone().into_iter()))
+                        .unwrap();
+                    continue;
                 }
+                let source = self.command_history.last().unwrap().1;
                 for spanned_message in error.spanned_messages() {
                     if let Some(span) = &spanned_message.span {
-                        builder = builder.with_label(
-                            Label::new((
-                                self.command_history.last().unwrap().0,
-                                span.byte_start..span.byte_end,
-                            ))
-                            .with_message(&spanned_message.label)
-                            .with_color(colors.next())
-                            .with_order(10),
+                        let mut start_column = character_column_to_grapheme_number(
+                            span.start_column - 1,
+                            &spanned_message.lines[0],
                         );
+                        let mut end_column = character_column_to_grapheme_number(
+                            span.end_column - 1,
+                            spanned_message.lines.last().unwrap(),
+                        );
+                        // Considering spans can cover multiple lines, it could be that end_column
+                        // is less than start_column.
+                        if end_column < start_column {
+                            std::mem::swap(&mut start_column, &mut end_column);
+                        }
+                        if source.lines().count() > 1 {
+                            // for multi line source code, print the lines
+                            if last_span_lines != &spanned_message.lines {
+                                for line in &spanned_message.lines {
+                                    println!("{}", line);
+                                }
+                            }
+                            last_span_lines = &spanned_message.lines;
+                        } else {
+                            print!("{}", " ".repeat(PROMPT.len()));
+                        }
+                        print!("{}", " ".repeat(start_column));
+
+                        // Guaranteed not to underflow since if they were out-of-order, we swapped
+                        // them above.
+                        let span_diff = end_column - start_column;
+                        let carrots = "^".repeat(span_diff);
+                        print!("{}", carrots.bright_red());
+                        println!(" {}", spanned_message.label.bright_blue());
                     } else {
                         // Our error originates from both user-code and generated
                         // code.
                         println!("{}", spanned_message.label.bright_blue());
                     }
                 }
-                builder
-                    .finish()
-                    .print(sources(self.command_history.clone().into_iter()))
-                    .unwrap();
-                //println!("{}", error.message().bright_red());
+                println!("{}", error.message().bright_red());
                 for help in error.help() {
                     println!("{} {}", "help:".bold(), help);
                 }
@@ -178,6 +198,23 @@ impl Repl {
             }
         }
     }
+}
+
+/// Returns a 0-based grapheme index corresponding to the supplied 0-based character column.
+fn character_column_to_grapheme_number(character_column: usize, line: &str) -> usize {
+    let mut characters_remaining = character_column;
+    let mut grapheme_index = 0;
+    for (_byte_offset, chars) in
+        unicode_segmentation::UnicodeSegmentation::grapheme_indices(line, true)
+    {
+        let num_chars = chars.chars().count();
+        if characters_remaining < num_chars {
+            break;
+        }
+        characters_remaining -= num_chars;
+        grapheme_index += 1;
+    }
+    grapheme_index
 }
 
 fn readline_direct(prompt: &str) -> rustyline::Result<String> {
@@ -306,3 +343,25 @@ fn parse_edit_mode(src: &str) -> Result<EditMode, &str> {
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
 static MIMALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+#[cfg(test)]
+mod tests {
+    use super::character_column_to_grapheme_number;
+
+    #[test]
+    fn test_character_column_to_grapheme_number() {
+        assert_eq!(character_column_to_grapheme_number(0, ""), 0);
+        assert_eq!(character_column_to_grapheme_number(0, "aaa"), 0);
+        assert_eq!(character_column_to_grapheme_number(1, "aaa"), 1);
+        assert_eq!(character_column_to_grapheme_number(2, "aaa"), 2);
+        assert_eq!(character_column_to_grapheme_number(3, "aaa"), 3);
+        assert_eq!(character_column_to_grapheme_number(0, "äää"), 0);
+        assert_eq!(character_column_to_grapheme_number(1, "äää"), 0);
+        assert_eq!(character_column_to_grapheme_number(2, "äää"), 1);
+        assert_eq!(character_column_to_grapheme_number(3, "äää"), 1);
+        assert_eq!(character_column_to_grapheme_number(4, "äää"), 2);
+        assert_eq!(character_column_to_grapheme_number(5, "äää"), 2);
+        assert_eq!(character_column_to_grapheme_number(6, "äää"), 3);
+        assert_eq!(character_column_to_grapheme_number(7, "äää"), 3);
+    }
+}

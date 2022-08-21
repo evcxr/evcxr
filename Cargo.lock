@@ -538,6 +538,7 @@ name = "evcxr"
 version = "0.13.0"
 dependencies = [
  "anyhow",
+ "ariadne",
  "backtrace",
  "crossbeam-channel",
  "dirs",
@@ -583,6 +584,7 @@ name = "evcxr_jupyter"
 version = "0.13.0"
 dependencies = [
  "anyhow",
+ "ariadne",
  "chrono",
  "colored",
  "crossbeam-channel",
