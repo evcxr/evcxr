@@ -21,7 +21,7 @@ on the repository and we can figure out your use case.
 See .github/workflows/ci.yml for the current minimum supported rust version.
 Generally rare that we support much older versions than the latest stable, since
 - mostly because our upstream dependencies make use of new rust features pretty
-quickly after they stabalize.
+quickly after they stabilize.
 
 ## How it works
 
