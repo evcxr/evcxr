@@ -18,6 +18,7 @@ use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
 use crate::code_block::Segment;
 use crate::code_block::UserCodeInfo;
+use ariadne::Color;
 use ariadne::{ColorGenerator, Label, Report, ReportKind};
 use json::JsonValue;
 use json::{self};
@@ -38,10 +39,29 @@ pub struct CompilationError {
     level: String,
 }
 
+pub enum Theme {
+    Light,
+    Dark,
+}
+
+fn span_to_byte_range(source: &str, span: &Span) -> Range<usize> {
+    fn line_and_number_to_byte_offset(source: &str, line_number: usize, column: usize) -> usize {
+        source
+            .lines()
+            .take(line_number - 1)
+            .map(|x| x.len())
+            .sum::<usize>()
+            + column + line_number - 2
+    }
+    line_and_number_to_byte_offset(source, span.start_line, span.start_column)
+        ..line_and_number_to_byte_offset(source, span.end_line, span.end_column)
+}
+
 impl CompilationError {
     pub fn build_report(
         &self,
         command_history: &[(&'static str, &'static str)],
+        theme: Theme,
     ) -> Option<Report<(&'static str, Range<usize>)>> {
         let error = self;
         let (file_name, source) = command_history.last().unwrap();
@@ -50,16 +70,28 @@ impl CompilationError {
         }
         let mut builder =
             Report::build(ReportKind::Error, *file_name, 0).with_message(&error.message());
-        let mut colors = ColorGenerator::new();
+        let mut next_color = {
+            let mut colors = ColorGenerator::new();
+            move || {
+                if let Color::Fixed(x) = colors.next() {
+                    Color::Fixed(match theme {
+                        Theme::Light => 255 - x,
+                        Theme::Dark => x,
+                    })
+                } else {
+                    unreachable!()
+                }
+            }
+        };
         if let Some(code) = error.code() {
             builder = builder.with_code(code);
         }
         for spanned_message in error.spanned_messages() {
             if let Some(span) = &spanned_message.span {
                 builder = builder.with_label(
-                    Label::new((*file_name, span.byte_start..span.byte_end))
+                    Label::new((*file_name, span_to_byte_range(source, span)))
                         .with_message(&spanned_message.label)
-                        .with_color(colors.next())
+                        .with_color(next_color())
                         .with_order(10),
                 );
             } else {
@@ -86,10 +118,9 @@ fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
 fn get_code_origins_for_span<'a>(
     span: &JsonValue,
     code_block: &'a CodeBlock,
-) -> (Vec<(&'a CodeKind, usize)>, (usize, usize)) {
+) -> Vec<(&'a CodeKind, usize)> {
+    let mut code_origins = Vec::new();
     if let Some(span) = spans_in_local_source(span) {
-        let mut code_origins = Vec::new();
-
         if let (Some(line_start), Some(line_end)) =
             (span["line_start"].as_usize(), span["line_end"].as_usize())
         {
@@ -97,25 +128,8 @@ fn get_code_origins_for_span<'a>(
                 code_origins.push(code_block.origin_for_line(line));
             }
         }
-        let find_pos = |mut pos| {
-            let mut result = pos;
-            for x in &code_block.segments {
-                if x.code.len() > pos {
-                    break;
-                }
-                pos -= x.code.len();
-                if !matches!(x.kind, CodeKind::OriginalUserCode(_)) {
-                    result -= x.code.len();
-                }
-            }
-            result
-        };
-        let result_start = find_pos(span["byte_start"].as_usize().unwrap_or(0));
-        let result_end = find_pos(span["byte_end"].as_usize().unwrap_or(0));
-        (code_origins, (result_start, result_end))
-    } else {
-        (vec![], (0, 0))
     }
+    code_origins
 }
 
 fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a CodeKind> {
@@ -124,7 +138,6 @@ fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a 
         for span in spans {
             code_origins.extend(
                 get_code_origins_for_span(span, code_block)
-                    .0
                     .iter()
                     .map(|(origin, _)| origin),
             );
@@ -379,9 +392,6 @@ pub struct Span {
     /// 1-based column (character) number in the original user code on which the span ends
     /// (exclusive).
     pub end_column: usize,
-    pub byte_start: usize,
-    pub byte_end: usize,
-    pub code_block_id: usize,
 }
 
 impl Span {
@@ -395,9 +405,6 @@ impl Span {
             start_column,
             end_line: command.line_number,
             end_column,
-            byte_start: start_column,
-            byte_end: end_column,
-            code_block_id: 0,
         }
     }
 
@@ -420,9 +427,6 @@ impl Span {
                 start_column,
                 end_line,
                 end_column,
-                byte_start: start_column,
-                byte_end: end_column,
-                code_block_id: 0,
             })
         } else {
             None
@@ -464,7 +468,7 @@ impl SpannedMessage {
             span_json["column_end"].as_usize(),
         ) {
             if file_name.ends_with("lib.rs") {
-                let (origins, (bs, be)) = get_code_origins_for_span(span_json, code_block);
+                let origins = get_code_origins_for_span(span_json, code_block);
                 if let (
                     Some((CodeKind::OriginalUserCode(start), start_line_offset)),
                     Some((CodeKind::OriginalUserCode(end), end_line_offset)),
@@ -485,9 +489,6 @@ impl SpannedMessage {
                             } else {
                                 0
                             }),
-                        byte_start: bs,
-                        byte_end: be,
-                        code_block_id: start.node_index,
                     })
                 } else {
                     // Spans within generated code won't mean anything to the user, suppress

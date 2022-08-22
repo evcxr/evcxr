@@ -17,6 +17,7 @@ use colored::*;
 use evcxr::CommandContext;
 use evcxr::CompilationError;
 use evcxr::Error;
+use evcxr::Theme;
 use evcxr_repl::BgInitMutex;
 use evcxr_repl::EvcxrRustylineHelper;
 use rustyline::error::ReadlineError;
@@ -135,7 +136,7 @@ impl Repl {
         let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
             if error.is_from_user_code() {
-                if let Some(report) = error.build_report(&self.command_history) {
+                if let Some(report) = error.build_report(&self.command_history, Theme::Dark) {
                     report
                         .print(sources(self.command_history.clone().into_iter()))
                         .unwrap();

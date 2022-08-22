@@ -21,6 +21,7 @@ use ariadne::sources;
 use colored::*;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
+use evcxr::Theme;
 use json::JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -432,7 +433,7 @@ impl Server {
                     let message = format!("{}", error.message().bright_red());
                     if error.is_from_user_code() {
                         let mut traceback = Vec::new();
-                        if let Some(report) = error.build_report(&self.command_history) {
+                        if let Some(report) = error.build_report(&self.command_history, Theme::Light) {
                             let mut s = Vec::new();
                             report
                                 .write(sources(self.command_history.clone().into_iter()), &mut s)
