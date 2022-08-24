@@ -651,19 +651,13 @@ impl EvalContext {
             {
                 continue;
             }
-            let preserve_vars_on_panic = state.config.preserve_vars_on_panic;
             state
                 .variable_states
                 .entry(variable_name)
                 .or_insert_with(|| VariableState {
                     type_name: String::new(),
                     is_mut: is_mutable,
-                    // All new locals will initially be defined only inside our catch_unwind
-                    // block.
-                    move_state: VariableMoveState::MovedIntoCatchUnwind,
-                    // If we're preserving copy types, then assume this variable
-                    // is copy until we find out it's not.
-                    is_copy_type: preserve_vars_on_panic,
+                    move_state: VariableMoveState::New,
                     definition_span: None,
                 })
                 .type_name = type_name;
@@ -709,13 +703,11 @@ impl EvalContext {
                     .send(&(callbacks.input_reader)(prompt, is_password))?;
             } else if line == evcxr_internal_runtime::USER_ERROR_OCCURRED {
                 // A question mark operator in user code triggered an early
-                // return. Any variables moved into the block in which the code
-                // was running, including any newly defined variables will have
-                // been lost (or possibly never even defined).
+                // return. Any newly defined variables won't have been stored.
                 state
                     .variable_states
                     .retain(|_variable_name, variable_state| {
-                        variable_state.move_state != VariableMoveState::MovedIntoCatchUnwind
+                        variable_state.move_state != VariableMoveState::New
                     });
             } else if let Some(variable_name) =
                 line.strip_prefix(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE)
@@ -747,26 +739,11 @@ impl EvalContext {
             }
         }
         if got_panic {
-            let mut lost = Vec::new();
             state
                 .variable_states
-                .retain(|variable_name, variable_state| {
-                    if variable_state.move_state == VariableMoveState::MovedIntoCatchUnwind {
-                        lost.push(variable_name.clone());
-                        false
-                    } else {
-                        true
-                    }
+                .retain(|_variable_name, variable_state| {
+                    variable_state.move_state != VariableMoveState::New
                 });
-            if !lost.is_empty() {
-                output.content_by_mime_type.insert(
-                    "text/plain".to_owned(),
-                    format!(
-                        "Panic occurred, the following variables have been lost: {}",
-                        lost.join(", ")
-                    ),
-                );
-            }
         } else if !lost_variables.is_empty() {
             return Err(Error::TypeRedefinedVariablesLost(lost_variables));
         }
@@ -820,18 +797,7 @@ impl EvalContext {
                         }
                     } else if error.code() == Some("E0382") {
                         // Use of moved value.
-                        let old_move_state = std::mem::replace(
-                            &mut state
-                                .variable_states
-                                .get_mut(variable_name)
-                                .unwrap()
-                                .move_state,
-                            VariableMoveState::MovedIntoCatchUnwind,
-                        );
-                        if old_move_state == VariableMoveState::MovedIntoCatchUnwind {
-                            // Variable is truly moved, forget about it.
-                            state.variable_states.remove(variable_name);
-                        }
+                        state.variable_states.remove(variable_name);
                         fixed_errors.insert("Captured value");
                     } else if error.code() == Some("E0425") {
                         // cannot find value in scope.
@@ -858,14 +824,6 @@ impl EvalContext {
                             variable_name,
                             state.variable_states[variable_name].type_name
                         );
-                    }
-                }
-                CodeKind::AssertCopyType { variable_name } => {
-                    if error.code() == Some("E0277") {
-                        if let Some(variable_state) = state.variable_states.get_mut(variable_name) {
-                            variable_state.is_copy_type = false;
-                            fixed_errors.insert("Non-copy type");
-                        }
                     }
                 }
                 CodeKind::WithFallback(fallback) => {
@@ -1014,11 +972,6 @@ struct VariableState {
     type_name: String,
     is_mut: bool,
     move_state: VariableMoveState,
-    // Whether the type of this variable implements Copy. Variables that implement copy never get
-    // moved into the catch_unwind block (they get copied), so we need to make sure we always save
-    // them from within the catch_unwind block, otherwise any changes made to the variable within
-    // the block will be lost.
-    is_copy_type: bool,
     definition_span: Option<UserCodeSpan>,
 }
 
@@ -1030,9 +983,8 @@ struct UserCodeSpan {
 
 #[derive(PartialEq, Eq, Debug, Copy, Clone)]
 enum VariableMoveState {
+    New,
     Available,
-    CopiedIntoCatchUnwind,
-    MovedIntoCatchUnwind,
 }
 
 struct ExecutionArtifacts {
@@ -1453,9 +1405,7 @@ impl ContextState {
                 .generated("let evcxr_variable_store = unsafe {&mut *evcxr_variable_store};")
                 .add_all(self.check_variable_statements())
                 .add_all(self.load_variable_statements());
-            user_code = user_code
-                .add_all(self.store_variable_statements(VariableMoveState::MovedIntoCatchUnwind))
-                .add_all(self.store_variable_statements(VariableMoveState::CopiedIntoCatchUnwind));
+            user_code = user_code.add_all(self.store_variable_statements(VariableMoveState::New));
         } else {
             code = code.generated("evcxr_variable_store: *mut u8) -> *mut u8 {");
         }
@@ -1486,22 +1436,13 @@ impl ContextState {
             if needs_variable_store {
                 code = code
                     .generated("match std::panic::catch_unwind(")
-                    .generated("  std::panic::AssertUnwindSafe(move ||{")
-                    // Shadow the outer evcxr_variable_store with a local one for variables moved
-                    // into the closure.
-                    .generated(
-                        "let mut evcxr_variable_store = evcxr_internal_runtime::VariableStore::new();",
-                    )
+                    .generated("  std::panic::AssertUnwindSafe(||{")
                     .add_all(user_code)
                     // Return our local variable store from the closure to be merged back into the
                     // main variable store.
-                    .generated("evcxr_variable_store")
                     .generated("})) { ")
-                    .generated("  Ok(inner_store) => evcxr_variable_store.merge(inner_store),")
+                    .generated("  Ok(_) => {}")
                     .generated("  Err(_) => {")
-                    .add_all(
-                        self.store_variable_statements(VariableMoveState::CopiedIntoCatchUnwind),
-                    )
                     .generated(format!("    println!(\"{}\");", PANIC_NOTIFICATION))
                     .generated("}}");
             } else {
@@ -1535,12 +1476,6 @@ impl ContextState {
                         var_state.type_name, var_name, var_name
                     ),
                 );
-                if var_state.is_copy_type {
-                    statements.assert_copy_variable(
-                        var_name.clone(),
-                        format!("evcxr_variable_store.assert_copy_type({});", var_name),
-                    );
-                }
             }
         }
         statements
@@ -1599,21 +1534,8 @@ impl ContextState {
     /// code. Things like use-statements will be removed from the returned code,
     /// as they will have been stored in `self`.
     fn apply(&mut self, user_code: CodeBlock, nodes: &[SyntaxNode]) -> Result<CodeBlock, Error> {
-        if self.config.preserve_vars_on_panic {
-            // Any pre-existing, non-copy variables are marked as available, so that we'll take their
-            // values from outside of the catch_unwind block. If they remain this way, then this
-            // effectively means that they're not being used.
-            for variable_state in self.variable_states.values_mut() {
-                variable_state.move_state = if variable_state.is_copy_type {
-                    VariableMoveState::CopiedIntoCatchUnwind
-                } else {
-                    VariableMoveState::Available
-                };
-            }
-        } else {
-            for variable_state in self.variable_states.values_mut() {
-                variable_state.move_state = VariableMoveState::Available;
-            }
+        for variable_state in self.variable_states.values_mut() {
+            variable_state.move_state = VariableMoveState::Available;
         }
 
         let mut code_out = CodeBlock::new();
@@ -1829,10 +1751,7 @@ impl ContextState {
                     is_mut: pat_ident.mut_token().is_some(),
                     // All new locals will initially be defined only inside our catch_unwind
                     // block.
-                    move_state: VariableMoveState::MovedIntoCatchUnwind,
-                    // If we're preserving copy types, then assume this variable
-                    // is copy until we find out it's not.
-                    is_copy_type: self.config.preserve_vars_on_panic,
+                    move_state: VariableMoveState::New,
                     definition_span: segment.sequence.map(|segment_index| {
                         let range = name.syntax().text_range() - let_stmt_range.start();
                         UserCodeSpan {

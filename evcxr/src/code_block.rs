@@ -69,10 +69,6 @@ pub(crate) enum CodeKind {
     PackVariable {
         variable_name: String,
     },
-    /// Used to check if a variable implements Copy.
-    AssertCopyType {
-        variable_name: String,
-    },
     /// A line of code that has a fallback to be used in case the supplied line fails to compile.
     WithFallback(CodeBlock),
     /// Code that we generated, but which we don't expect errors from. If we get errors there's not
@@ -326,13 +322,6 @@ impl CodeBlock {
     pub(crate) fn pack_variable(&mut self, variable_name: String, code: String) {
         self.segments
             .push(Segment::new(CodeKind::PackVariable { variable_name }, code));
-    }
-
-    pub(crate) fn assert_copy_variable(&mut self, variable_name: String, code: String) {
-        self.segments.push(Segment::new(
-            CodeKind::AssertCopyType { variable_name },
-            code,
-        ));
     }
 
     pub(crate) fn add_all(mut self, other: CodeBlock) -> Self {

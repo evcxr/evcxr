@@ -30,8 +30,6 @@ impl VariableStore {
         }
     }
 
-    pub fn assert_copy_type<T: Copy>(&self, _: T) {}
-
     pub fn put_variable<T: 'static>(&mut self, name: &str, value: T) {
         self.variables.insert(name.to_owned(), Box::new(value));
     }
