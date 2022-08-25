@@ -27,6 +27,7 @@ use ra_ap_ide::TextRange;
 use ra_ap_ide::TextSize;
 use regex::Regex;
 use std::fmt;
+use std::fmt::Write as _;
 use std::io;
 use std::ops::Range;
 
@@ -95,7 +96,7 @@ impl CompilationError {
             .chain(error.help_spanned().iter())
         {
             if let Some(span) = &spanned_message.span {
-                if spanned_message.label == "" {
+                if spanned_message.label.is_empty() {
                     continue;
                 }
                 builder = builder.with_label(
@@ -563,9 +564,9 @@ impl SpannedMessage {
             .as_str()
             .map(|s| s.to_owned())
             .or(fallback_label)
-            .unwrap_or_else(String::new);
+            .unwrap_or_default();
         if let Some(replace) = span_json["suggested_replacement"].as_str() {
-            label += &format!(": `{}`", replace);
+            let _ = write!(&mut label, ": `{replace}`");
         }
         SpannedMessage {
             span,
