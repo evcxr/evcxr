@@ -40,7 +40,6 @@ const PROMPT: &str = ">> ";
 struct Repl {
     command_context: Arc<BgInitMutex<CommandContext>>,
     ide_mode: bool,
-    command_history: Vec<(&'static str, &'static str)>,
 }
 
 fn send_output<T: io::Write + Send + 'static>(
@@ -86,15 +85,10 @@ impl Repl {
         Repl {
             command_context,
             ide_mode,
-            command_history: vec![],
         }
     }
     fn execute(&mut self, to_run: &str) {
         let execution_result = self.command_context.lock().execute(to_run);
-        let command_id =
-            Box::leak(format!("command_{}", self.command_history.len()).into_boxed_str());
-        let command_text = Box::leak(to_run.to_string().into_boxed_str());
-        self.command_history.push((command_id, command_text));
         let success = match execution_result {
             Ok(output) => {
                 if let Some(text) = output.get("text/plain") {
@@ -113,7 +107,7 @@ impl Repl {
                 true
             }
             Err(evcxr::Error::CompilationErrors(errors)) => {
-                self.display_errors(errors);
+                self.display_errors(to_run, errors);
                 false
             }
             Err(err) => {
@@ -128,7 +122,7 @@ impl Repl {
         }
     }
 
-    fn display_errors(&mut self, errors: Vec<CompilationError>) {
+    fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
         use yansi::Paint;
         if cfg!(windows) && !Paint::enable_windows_ascii() {
             Paint::disable()
@@ -136,13 +130,14 @@ impl Repl {
         let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
             if error.is_from_user_code() {
-                if let Some(report) = error.build_report(&self.command_history, Theme::Dark) {
+                if let Some(report) =
+                    error.build_report("command".to_string(), source.to_string(), Theme::Dark)
+                {
                     report
-                        .print(sources(self.command_history.clone().into_iter()))
+                        .print(sources([("command".to_string(), source.to_string())]))
                         .unwrap();
                     continue;
                 }
-                let source = self.command_history.last().unwrap().1;
                 for spanned_message in error.spanned_messages() {
                     if let Some(span) = &spanned_message.span {
                         let mut start_column = character_column_to_grapheme_number(

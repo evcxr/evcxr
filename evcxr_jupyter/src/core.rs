@@ -38,7 +38,6 @@ pub(crate) struct Server {
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
     shutdown_requested_receiver: Arc<Mutex<crossbeam_channel::Receiver<()>>>,
     shutdown_requested_sender: Arc<Mutex<crossbeam_channel::Sender<()>>>,
-    command_history: Vec<(&'static str, &'static str)>,
 }
 
 impl Server {
@@ -77,7 +76,6 @@ impl Server {
             stdin: Arc::new(Mutex::new(stdin_socket)),
             shutdown_requested_receiver: Arc::new(Mutex::new(shutdown_requested_receiver)),
             shutdown_requested_sender: Arc::new(Mutex::new(shutdown_requested_sender)),
-            command_history: Vec::new(),
         };
 
         let (execution_sender, execution_receiver) = crossbeam_channel::unbounded();
@@ -152,7 +150,7 @@ impl Server {
     }
 
     fn handle_execution_requests(
-        mut self,
+        self,
         context: Arc<Mutex<CommandContext>>,
         receiver: &crossbeam_channel::Receiver<JupyterMessage>,
         execution_reply_sender: &crossbeam_channel::Sender<JupyterMessage>,
@@ -166,14 +164,6 @@ impl Server {
             *self.latest_execution_request.lock().unwrap() = Some(message.clone());
             let src = message.code();
             execution_count += 1;
-            self.command_history.push({
-                let name = format!("command_{}", execution_count);
-                let src = src.to_string();
-                (
-                    Box::leak(name.into_boxed_str()),
-                    Box::leak(src.into_boxed_str()),
-                )
-            });
             message
                 .new_message("execute_input")
                 .with_content(object! {
@@ -248,7 +238,7 @@ impl Server {
                     }))?;
                 }
                 Err(errors) => {
-                    self.emit_errors(&errors, &message)?;
+                    self.emit_errors(&errors, &message, src, execution_count)?;
                     execution_reply_sender.send(message.new_reply().with_content(object! {
                         "status" => "error",
                         "execution_count" => execution_count
@@ -426,17 +416,26 @@ impl Server {
         }
     }
 
-    fn emit_errors(&self, errors: &evcxr::Error, parent_message: &JupyterMessage) -> Result<()> {
+    fn emit_errors(
+        &self,
+        errors: &evcxr::Error,
+        parent_message: &JupyterMessage,
+        source: &str,
+        execution_count: u32,
+    ) -> Result<()> {
         match errors {
             evcxr::Error::CompilationErrors(errors) => {
                 for error in errors {
                     let message = format!("{}", error.message().bright_red());
                     if error.is_from_user_code() {
+                        let file_name = format!("command_{}", execution_count);
                         let mut traceback = Vec::new();
-                        if let Some(report) = error.build_report(&self.command_history, Theme::Light) {
+                        if let Some(report) =
+                            error.build_report(file_name.clone(), source.to_string(), Theme::Light)
+                        {
                             let mut s = Vec::new();
                             report
-                                .write(sources(self.command_history.clone().into_iter()), &mut s)
+                                .write(sources([(file_name, source.to_string())]), &mut s)
                                 .unwrap();
                             let s = String::from_utf8_lossy(&s);
                             traceback = s.lines().map(|x| x.to_string()).collect::<Vec<_>>();
