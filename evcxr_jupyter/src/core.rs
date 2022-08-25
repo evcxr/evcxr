@@ -17,9 +17,11 @@ use crate::control_file;
 use crate::jupyter_message::JupyterMessage;
 use anyhow::bail;
 use anyhow::Result;
+use ariadne::sources;
 use colored::*;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
+use evcxr::Theme;
 use json::JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -236,7 +238,7 @@ impl Server {
                     }))?;
                 }
                 Err(errors) => {
-                    self.emit_errors(&errors, &message)?;
+                    self.emit_errors(&errors, &message, src, execution_count)?;
                     execution_reply_sender.send(message.new_reply().with_content(object! {
                         "status" => "error",
                         "execution_count" => execution_count
@@ -414,37 +416,55 @@ impl Server {
         }
     }
 
-    fn emit_errors(&self, errors: &evcxr::Error, parent_message: &JupyterMessage) -> Result<()> {
+    fn emit_errors(
+        &self,
+        errors: &evcxr::Error,
+        parent_message: &JupyterMessage,
+        source: &str,
+        execution_count: u32,
+    ) -> Result<()> {
         match errors {
             evcxr::Error::CompilationErrors(errors) => {
                 for error in errors {
                     let message = format!("{}", error.message().bright_red());
                     if error.is_from_user_code() {
+                        let file_name = format!("command_{}", execution_count);
                         let mut traceback = Vec::new();
-                        for spanned_message in error.spanned_messages() {
-                            for line in &spanned_message.lines {
-                                traceback.push(line.clone());
-                            }
-                            if let Some(span) = &spanned_message.span {
-                                let mut carrots = String::new();
-                                for _ in 1..span.start_column {
-                                    carrots.push(' ');
+                        if let Some(report) =
+                            error.build_report(file_name.clone(), source.to_string(), Theme::Light)
+                        {
+                            let mut s = Vec::new();
+                            report
+                                .write(sources([(file_name, source.to_string())]), &mut s)
+                                .unwrap();
+                            let s = String::from_utf8_lossy(&s);
+                            traceback = s.lines().map(|x| x.to_string()).collect::<Vec<_>>();
+                        } else {
+                            for spanned_message in error.spanned_messages() {
+                                for line in &spanned_message.lines {
+                                    traceback.push(line.clone());
                                 }
-                                for _ in span.start_column..span.end_column {
-                                    carrots.push('^');
+                                if let Some(span) = &spanned_message.span {
+                                    let mut carrots = String::new();
+                                    for _ in 1..span.start_column {
+                                        carrots.push(' ');
+                                    }
+                                    for _ in span.start_column..span.end_column {
+                                        carrots.push('^');
+                                    }
+                                    traceback.push(format!(
+                                        "{} {}",
+                                        carrots.bright_red(),
+                                        spanned_message.label.bright_blue()
+                                    ));
+                                } else {
+                                    traceback.push(spanned_message.label.clone());
                                 }
-                                traceback.push(format!(
-                                    "{} {}",
-                                    carrots.bright_red(),
-                                    spanned_message.label.bright_blue()
-                                ));
-                            } else {
-                                traceback.push(spanned_message.label.clone());
                             }
-                        }
-                        traceback.push(error.message());
-                        for help in error.help() {
-                            traceback.push(format!("{}: {}", "help".bold(), help));
+                            traceback.push(error.message());
+                            for help in error.help() {
+                                traceback.push(format!("{}: {}", "help".bold(), help));
+                            }
                         }
                         parent_message
                             .new_message("error")

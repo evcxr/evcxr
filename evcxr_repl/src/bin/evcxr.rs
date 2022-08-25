@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use ariadne::sources;
 use colored::*;
 use evcxr::CommandContext;
 use evcxr::CompilationError;
 use evcxr::Error;
+use evcxr::Theme;
 use evcxr_repl::BgInitMutex;
 use evcxr_repl::EvcxrRustylineHelper;
 use rustyline::error::ReadlineError;
@@ -121,9 +123,21 @@ impl Repl {
     }
 
     fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
+        use yansi::Paint;
+        if cfg!(windows) && !Paint::enable_windows_ascii() {
+            Paint::disable()
+        }
         let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
             if error.is_from_user_code() {
+                if let Some(report) =
+                    error.build_report("command".to_string(), source.to_string(), Theme::Dark)
+                {
+                    report
+                        .print(sources([("command".to_string(), source.to_string())]))
+                        .unwrap();
+                    continue;
+                }
                 for spanned_message in error.spanned_messages() {
                     if let Some(span) = &spanned_message.span {
                         let mut start_column = character_column_to_grapheme_number(

@@ -54,6 +54,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f1f8f5a6f3d50d89e3797d7593a50f96bb2aaa20ca0cc7be1fb673232c91d72"
 
 [[package]]
+name = "ariadne"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1cb2a2046bea8ce5e875551f5772024882de0b540c7f93dfc5d6cf1ca8b030c"
+dependencies = [
+ "yansi",
+]
+
+[[package]]
 name = "arrayvec"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -529,6 +538,7 @@ name = "evcxr"
 version = "0.13.0"
 dependencies = [
  "anyhow",
+ "ariadne",
  "backtrace",
  "crossbeam-channel",
  "dirs",
@@ -574,6 +584,7 @@ name = "evcxr_jupyter"
 version = "0.13.0"
 dependencies = [
  "anyhow",
+ "ariadne",
  "chrono",
  "colored",
  "crossbeam-channel",
@@ -594,6 +605,7 @@ dependencies = [
 name = "evcxr_repl"
 version = "0.13.0"
 dependencies = [
+ "ariadne",
  "colored",
  "crossbeam-channel",
  "evcxr",
@@ -605,6 +617,7 @@ dependencies = [
  "structopt",
  "unicode-segmentation",
  "unicode-xid",
+ "yansi",
 ]
 
 [[package]]
@@ -2458,6 +2471,12 @@ name = "windows_x86_64_msvc"
 version = "0.36.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c811ca4a8c853ef420abd8592ba53ddbbac90410fab6903b3e79972a631f7680"
+
+[[package]]
+name = "yansi"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "zeromq-src"
