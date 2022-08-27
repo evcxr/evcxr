@@ -110,11 +110,22 @@ impl CompilationError {
                 notes.push_str(&spanned_message.label);
             }
         }
-        if !notes.is_empty() {
+        if let Some(evcxr_notes) = evcxr_specific_notes(error) {
+            builder.set_note(evcxr_notes);
+        } else if !notes.is_empty() {
             builder.set_note(notes);
         }
         Some(builder.finish())
     }
+}
+
+fn evcxr_specific_notes(error: &CompilationError) -> Option<&'static str> {
+    Some(match error.code()? {
+        "E0384" | "E0596" => {
+            "You can change an existing variable to mutable like: `let mut x = x;`"
+        }
+        _ => return None,
+    })
 }
 
 fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {

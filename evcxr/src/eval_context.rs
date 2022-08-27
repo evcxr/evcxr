@@ -787,10 +787,7 @@ impl EvalContext {
                                 actual_type = "f64".to_string();
                             }
                             if disallowed_types.is_match(&actual_type) {
-                                bail!(
-                                    "Sorry, the type {} cannot currently be persisted",
-                                    actual_type
-                                );
+                                return non_persistable_type_error(variable_name, &actual_type);
                             }
                             actual_type = replace_reserved_words_in_type(&actual_type);
                             state
@@ -824,12 +821,9 @@ impl EvalContext {
                     } else if error.code() == Some("E0562")
                         || (error.code().is_none() && error.code_origins.len() == 1)
                     {
-                        bail!(
-                            "The variable `{}` has a type `{}` that can't be persisted. You can \
-                            try wrapping your code in braces so that the variable goes out of \
-                            scope before the end of the code to be executed.",
+                        return non_persistable_type_error(
                             variable_name,
-                            state.variable_states[variable_name].type_name
+                            &state.variable_states[variable_name].type_name,
                         );
                     }
                 }
@@ -870,6 +864,29 @@ impl EvalContext {
             }
         }
         Ok(())
+    }
+}
+
+fn non_persistable_type_error(variable_name: &str, actual_type: &str) -> Result<(), Error> {
+    if actual_type.contains("closure") {
+        bail!(
+            "The variable `{}` is a closure, which cannot be persisted.\n\
+             You can however persist closures if you box them. e.g.:\n\
+             let f: Box<dyn Fn()> = Box::new(|| {{println!(\"foo\")}});\n\
+             Alternatively, you can prevent evcxr from attempting to persist\n\
+             the variable by wrapping your code in braces.",
+            variable_name
+        );
+    } else {
+        bail!(
+            "The variable `{}` has type `{}` which cannot be persisted.\n\
+             You might be able to fix this by creating a `Box<dyn YourType>`. e.g.\n\
+             let v: Box<dyn core::fmt::Debug> = Box::new(foo());\n\
+             Alternatively, you can prevent evcxr from attempting to persist\n\
+             the variable by wrapping your code in braces.",
+            variable_name,
+            actual_type
+        );
     }
 }
 
@@ -1232,7 +1249,9 @@ impl ContextState {
             }
             "E0597" => {
                 format!(
-                    "The variable `{}` contains a reference with a non-static lifetime so can't be persisted",
+                    "The variable `{}` contains a reference with a non-static lifetime so\n\
+                    can't be persisted. You can prevent this error by making sure that the\n\
+                    variable goes out of scope - i.e. wrapping the code in {{}}.",
                     variable_name
                 )
             }
