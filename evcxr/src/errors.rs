@@ -90,6 +90,7 @@ impl CompilationError {
         if let Some(code) = error.code() {
             builder = builder.with_code(code);
         }
+        let mut notes = String::new();
         for spanned_message in error
             .spanned_messages()
             .iter()
@@ -106,8 +107,11 @@ impl CompilationError {
                         .with_order(10),
                 );
             } else {
-                return None;
+                notes.push_str(&spanned_message.label);
             }
+        }
+        if !notes.is_empty() {
+            builder.set_note(notes);
         }
         Some(builder.finish())
     }
