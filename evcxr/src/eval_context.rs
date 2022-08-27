@@ -742,8 +742,7 @@ impl EvalContext {
             } else {
                 // Note, errors sending are ignored, since it just means the
                 // user of the library has dropped the Receiver.
-                // TODO: Clone might not be necessary with NLL.
-                let _ = self.stdout_sender.send(line.clone());
+                let _ = self.stdout_sender.send(line);
             }
         }
         if got_panic {
