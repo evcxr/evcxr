@@ -586,7 +586,7 @@ impl SpannedMessage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     CompilationErrors(Vec<CompilationError>),
     TypeRedefinedVariablesLost(Vec<String>),

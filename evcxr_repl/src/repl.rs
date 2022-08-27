@@ -18,6 +18,7 @@ use crate::bginit::BgInitMutex;
 use colored::*;
 use evcxr::CommandContext;
 use evcxr::Completions;
+use evcxr::Error;
 use rustyline::completion::Completer;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
@@ -31,11 +32,11 @@ use std::borrow::Cow;
 use std::sync::Arc;
 
 pub struct EvcxrRustylineHelper {
-    command_context: Arc<BgInitMutex<CommandContext>>,
+    command_context: Arc<BgInitMutex<Result<CommandContext, Error>>>,
 }
 
 impl EvcxrRustylineHelper {
-    pub fn new(command_context: Arc<BgInitMutex<CommandContext>>) -> Self {
+    pub fn new(command_context: Arc<BgInitMutex<Result<CommandContext, Error>>>) -> Self {
         Self { command_context }
     }
 }
@@ -55,11 +56,17 @@ impl Completer for EvcxrRustylineHelper {
         pos: usize,
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<String>)> {
-        let completions = self
-            .command_context
-            .lock()
-            .completions(line, pos)
-            .unwrap_or_else(|_| Completions::default());
+        let completions = match &mut *self.command_context.lock() {
+            Ok(command_context) => command_context
+                .completions(line, pos)
+                .unwrap_or_else(|_| Completions::default()),
+            Err(e) => {
+                return Err(rustyline::error::ReadlineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.clone(),
+                )))
+            }
+        };
         let res: Vec<String> = completions
             .completions
             .into_iter()

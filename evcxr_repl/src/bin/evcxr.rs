@@ -39,7 +39,7 @@ use structopt::StructOpt;
 const PROMPT: &str = ">> ";
 
 struct Repl {
-    command_context: Arc<BgInitMutex<CommandContext>>,
+    command_context: Arc<BgInitMutex<Result<CommandContext, Error>>>,
     ide_mode: bool,
 }
 
@@ -76,20 +76,17 @@ impl Repl {
             }
             Ok(command_context)
         };
-        let command_context = Arc::new(BgInitMutex::new(move || {
-            initialize().unwrap_or_else(|e| {
-                // Note: Start with a `\n` to move off of the line the user may be typing.
-                eprintln!("\nInitialization failed: {}", e);
-                std::process::exit(-1);
-            })
-        }));
+        let command_context = Arc::new(BgInitMutex::new(initialize));
         Repl {
             command_context,
             ide_mode,
         }
     }
-    fn execute(&mut self, to_run: &str) {
-        let execution_result = self.command_context.lock().execute(to_run);
+    fn execute(&mut self, to_run: &str) -> Result<(), Error> {
+        let execution_result = match &mut *self.command_context.lock() {
+            Ok(context) => context.execute(to_run),
+            Err(error) => return Err(error.clone()),
+        };
         let success = match execution_result {
             Ok(output) => {
                 if let Some(text) = output.get("text/plain") {
@@ -121,6 +118,7 @@ impl Repl {
             let success_marker = if success { "\u{0091}" } else { "\u{0092}" };
             print!("{}", success_marker);
         }
+        Ok(())
     }
 
     fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
@@ -314,7 +312,7 @@ fn main() -> Result<()> {
         match readline {
             Ok(line) => {
                 editor.add_history_entry(line.clone());
-                repl.execute(&line);
+                repl.execute(&line)?;
             }
             Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
             Err(err) => {
