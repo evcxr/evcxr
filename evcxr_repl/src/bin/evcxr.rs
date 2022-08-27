@@ -26,6 +26,7 @@ use rustyline::At;
 use rustyline::Cmd;
 use rustyline::EditMode;
 use rustyline::Editor;
+use rustyline::ExternalPrinter;
 use rustyline::KeyCode;
 use rustyline::KeyEvent;
 use rustyline::Modifiers;
@@ -45,17 +46,22 @@ struct Repl {
 
 fn send_output<T: io::Write + Send + 'static>(
     channel: crossbeam_channel::Receiver<String>,
-    mut output: T,
+    mut printer: Option<impl ExternalPrinter + Send + 'static>,
+    mut fallback_output: T,
     color: Option<Color>,
 ) {
     std::thread::spawn(move || {
         while let Ok(line) = channel.recv() {
-            let status = if let Some(color) = color {
-                writeln!(output, "{}", line.color(color))
+            let to_print = if let Some(color) = color {
+                format!("{}\n", line.color(color))
             } else {
-                writeln!(output, "{}", line)
+                format!("{}\n", line)
             };
-            if status.is_err() {
+            if let Some(printer) = printer.as_mut() {
+                if printer.print(to_print).is_err() {
+                    break;
+                }
+            } else if write!(fallback_output, "{}", to_print).is_err() {
                 break;
             }
         }
@@ -63,12 +69,15 @@ fn send_output<T: io::Write + Send + 'static>(
 }
 
 impl Repl {
-    fn new(ide_mode: bool, opt: String) -> Repl {
+    fn new(ide_mode: bool, opt: String, editor: &mut Editor<EvcxrRustylineHelper>) -> Repl {
+        let stdout_printer = editor.create_external_printer().ok();
+        let stderr_printer = editor.create_external_printer().ok();
+        let stderr_colour = Some(Color::BrightRed);
         let initialize = move || -> Result<CommandContext, Error> {
             let (mut command_context, outputs) = CommandContext::new()?;
 
-            send_output(outputs.stdout, io::stdout(), None);
-            send_output(outputs.stderr, io::stderr(), Some(Color::BrightRed));
+            send_output(outputs.stdout, stdout_printer, io::stdout(), None);
+            send_output(outputs.stderr, stderr_printer, io::stderr(), stderr_colour);
             command_context.execute(":load_config --quiet")?;
             if !opt.is_empty() {
                 // Ignore failure
@@ -269,7 +278,6 @@ fn main() -> Result<()> {
             println!("Prelude will be loaded from {}", prelude.display());
         }
     }
-    let mut repl = Repl::new(options.ide_mode, options.opt.clone());
     let mut config_builder = match options.edit_mode {
         EditMode::Vi => {
             rustyline::Config::builder()
@@ -291,6 +299,7 @@ fn main() -> Result<()> {
         KeyEvent(KeyCode::Right, Modifiers::CTRL),
         Cmd::Move(Movement::ForwardWord(1, At::AfterEnd, Word::Big)),
     );
+    let mut repl = Repl::new(options.ide_mode, options.opt.clone(), &mut editor);
     editor.set_helper(Some(EvcxrRustylineHelper::new(Arc::clone(
         &repl.command_context,
     ))));
