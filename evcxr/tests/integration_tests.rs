@@ -644,9 +644,7 @@ fn unnamable_type_closure() {
     let mut e = new_context();
     let result = e.execute(stringify!(let v = || {42};));
     if let Err(Error::Message(message)) = result {
-        if !(message.starts_with("The variable")
-            && message.contains("cannot be persisted"))
-        {
+        if !(message.starts_with("The variable") && message.contains("cannot be persisted")) {
             panic!("Unexpected error: {:?}", message);
         }
     } else {
