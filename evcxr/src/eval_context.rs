@@ -318,7 +318,15 @@ impl EvalContext {
         } else {
             // We need to eval something anyway, otherwise rust-analyzer crashes when trying to get
             // completions. Not 100% sure. Just writing Cargo.toml isn't sufficient.
-            context.eval("42")?;
+            if let Err(error) = context.eval("42") {
+                drop(context);
+                let mut stderr = String::new();
+                while let Ok(line) = outputs.stderr.recv() {
+                    stderr.push_str(&line);
+                    stderr.push('\n');
+                }
+                return Err(format!("{stderr}{error}").into());
+            }
         }
         context.initial_config = context.committed_state.config.clone();
         Ok((context, outputs))
