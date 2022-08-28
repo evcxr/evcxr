@@ -12,6 +12,7 @@ fi
 git pull --rebase
 cargo fmt --all -- --check
 cargo build
+cargo clippy -- -D warnings
 cargo +stable test --all
 cargo +nightly test --all
 cargo +${MIN_RUST_VER}-x86_64-unknown-linux-gnu test --all
