@@ -52,10 +52,17 @@ pub(crate) struct RustAnalyzer {
     current_source: Arc<String>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum TypeName {
+    Named(String),
+    Closure,
+    Unknown,
+}
+
 #[derive(Debug)]
 pub(crate) struct VariableInfo {
-    /// The variable's type as Rust code.
-    pub(crate) type_name: String,
+    /// The variable's type as Rust code, or None if we couldn't determine it.
+    pub(crate) type_name: TypeName,
     /// Whether the variable is declared as mutable.
     pub(crate) is_mutable: bool,
 }
@@ -336,21 +343,20 @@ fn add_variable_for_pattern(
     use ra_ap_syntax::ast::HasName;
     if let ast::Pat::IdentPat(ident_pat) = pat {
         if let Some(name) = ident_pat.name() {
-            if let Some(type_name) = get_type_name(
+            let type_name = get_type_name(
                 explicit_type,
                 sema.type_of_pat(pat).map(|info| info.original()),
                 sema,
                 module,
-            ) {
-                result.insert(
-                    name.text().to_string(),
-                    VariableInfo {
-                        type_name,
-                        is_mutable: ident_pat.mut_token().is_some(),
-                    },
-                );
-                return true;
-            }
+            );
+            result.insert(
+                name.text().to_string(),
+                VariableInfo {
+                    type_name,
+                    is_mutable: ident_pat.mut_token().is_some(),
+                },
+            );
+            return true;
         }
     }
     false
@@ -361,15 +367,25 @@ fn get_type_name(
     inferred_type: Option<ra_hir::Type>,
     sema: &ra_hir::Semantics<ra_ide::RootDatabase>,
     module: ra_hir::Module,
-) -> Option<String> {
+) -> TypeName {
     use ra_hir::HirDisplay;
     if let Some(explicit_type) = explicit_type {
         let type_name = explicit_type.syntax().text().to_string();
         if is_type_valid(&type_name) {
-            return Some(type_name);
+            return TypeName::Named(type_name);
         }
     }
-    inferred_type.and_then(|ty| ty.display_source_code(sema.db, module.into()).ok())
+    if let Some(ty) = inferred_type {
+        if ty.is_closure() {
+            return TypeName::Closure;
+        }
+        if let Some(type_name) = ty.display_source_code(sema.db, module.into()).ok() {
+            if is_type_valid(&type_name) {
+                return TypeName::Named(type_name);
+            }
+        }
+    }
+    TypeName::Unknown
 }
 
 /// Completions found in a particular context.
@@ -410,8 +426,15 @@ pub(crate) fn is_type_valid(type_name: &str) -> bool {
 mod test {
     use super::is_type_valid;
     use super::RustAnalyzer;
+    use super::TypeName;
     use anyhow::Result;
     use tempfile;
+
+    impl TypeName {
+        fn named(name: &str) -> TypeName {
+            TypeName::Named(name.to_owned())
+        }
+    }
 
     #[test]
     fn get_variable_types() -> Result<()> {
@@ -452,15 +475,15 @@ mod test {
             .to_owned(),
         )?;
         let var_types = ra.top_level_variables("foo");
-        assert_eq!(var_types["v1"].type_name, "i32");
+        assert_eq!(var_types["v1"].type_name, TypeName::named("i32"));
         assert!(var_types["v1"].is_mutable);
-        assert_eq!(var_types["v2"].type_name, "&[bool; 1]");
+        assert_eq!(var_types["v2"].type_name, TypeName::named("&[bool; 1]"));
         assert!(!var_types["v2"].is_mutable);
-        assert_eq!(&var_types["v3"].type_name, "Foo<10>");
+        assert_eq!(var_types["v3"].type_name, TypeName::named("Foo<10>"));
         assert!(var_types.get("v100").is_none());
-        assert_eq!(var_types["v4"].type_name, "u64");
-        assert_eq!(var_types["x"].type_name, "u8");
-        assert_eq!(var_types["y2"].type_name, "u8");
+        assert_eq!(var_types["v4"].type_name, TypeName::named("u64"));
+        assert_eq!(var_types["x"].type_name, TypeName::named("u8"));
+        assert_eq!(var_types["y2"].type_name, TypeName::named("u8"));
 
         ra.set_source(
             r#"
@@ -470,7 +493,7 @@ mod test {
             .to_owned(),
         )?;
         let var_types = ra.top_level_variables("foo");
-        assert_eq!(var_types["v1"].type_name, "u16");
+        assert_eq!(var_types["v1"].type_name, TypeName::named("u16"));
         assert!(var_types.get("v2").is_none());
 
         Ok(())

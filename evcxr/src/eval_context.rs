@@ -30,6 +30,7 @@ use crate::module::SoFile;
 use crate::runtime;
 use crate::rust_analyzer::Completions;
 use crate::rust_analyzer::RustAnalyzer;
+use crate::rust_analyzer::TypeName;
 use crate::rust_analyzer::VariableInfo;
 use crate::use_trees::Import;
 use anyhow::Result;
@@ -646,19 +647,30 @@ impl EvalContext {
             },
         ) in self.analyzer.top_level_variables("evcxr_analysis_wrapper")
         {
+            // We don't want to try to store record evcxr_variable_store into itself, so we ignore
+            // it.
+            if variable_name == "evcxr_variable_store" {
+                continue;
+            }
+            let type_name = match type_name {
+                TypeName::Named(x) => x,
+                TypeName::Closure => bail!(
+                    "The variable `{}` is a closure, which cannot be persisted.\n\
+                     You can however persist closures if you box them. e.g.:\n\
+                     let f: Box<dyn Fn()> = Box::new(|| {{println!(\"foo\")}});\n\
+                     Alternatively, you can prevent evcxr from attempting to persist\n\
+                     the variable by wrapping your code in braces.",
+                    variable_name
+                ),
+                TypeName::Unknown => bail!(
+                    "Couldn't automatically determine type of variable `{}`.\n\
+                     Please give it an explicit type.",
+                    variable_name
+                ),
+            };
             // For now, we need to look for and escape any reserved words. This should probably in
             // theory be done in rust analyzer in a less hacky way.
             let type_name = replace_reserved_words_in_type(&type_name);
-            // We don't want to try to store record evcxr_variable_store into itself, so we ignore
-            // it. We also ignore any variables for which we were given an invalid type. Variables
-            // with invalid types will then have their types determined by looking at compilation
-            // errors (although we may eventually drop the code that does that). At the time of
-            // writing, the test `int_array` fails if we don't reject invalid types here.
-            if variable_name == "evcxr_variable_store"
-                || !crate::rust_analyzer::is_type_valid(&type_name)
-            {
-                continue;
-            }
             state
                 .variable_states
                 .entry(variable_name)
@@ -764,42 +776,10 @@ impl EvalContext {
         state: &mut ContextState,
         fixed_errors: &mut HashSet<&'static str>,
     ) -> Result<(), Error> {
-        static DISALLOWED_TYPES: OnceCell<Regex> = OnceCell::new();
-        let disallowed_types =
-            DISALLOWED_TYPES.get_or_init(|| Regex::new("(impl .*|[.*@])").unwrap());
         for code_origin in &error.code_origins {
             match code_origin {
                 CodeKind::PackVariable { variable_name } => {
-                    if error.code() == Some("E0308") {
-                        // Handle mismatched types. We might eventually remove this code entirely
-                        // now that we use Rust analyzer for type inference. Keeping it for now as
-                        // there's still a handful of tests that fail without this code..
-                        if let Some(mut actual_type) = error.get_actual_type() {
-                            // If the user hasn't given enough information for the compiler to
-                            // determine what type of integer or float, we default to i32 and f64
-                            // respectively.
-                            actual_type = actual_type
-                                .replace("{integer}", "i32")
-                                .replace("{float}", "f64");
-                            if actual_type == "integer" {
-                                actual_type = "i32".to_string();
-                            } else if actual_type == "float" {
-                                actual_type = "f64".to_string();
-                            }
-                            if disallowed_types.is_match(&actual_type) {
-                                return non_persistable_type_error(variable_name, &actual_type);
-                            }
-                            actual_type = replace_reserved_words_in_type(&actual_type);
-                            state
-                                .variable_states
-                                .get_mut(variable_name)
-                                .unwrap()
-                                .type_name = actual_type;
-                            fixed_errors.insert("Variable types");
-                        } else {
-                            bail!("Got error E0308 but failed to parse actual type");
-                        }
-                    } else if error.code() == Some("E0382") {
+                    if error.code() == Some("E0382") {
                         // Use of moved value.
                         state.variable_states.remove(variable_name);
                         fixed_errors.insert("Captured value");
@@ -868,26 +848,15 @@ impl EvalContext {
 }
 
 fn non_persistable_type_error(variable_name: &str, actual_type: &str) -> Result<(), Error> {
-    if actual_type.contains("closure") {
-        bail!(
-            "The variable `{}` is a closure, which cannot be persisted.\n\
-             You can however persist closures if you box them. e.g.:\n\
-             let f: Box<dyn Fn()> = Box::new(|| {{println!(\"foo\")}});\n\
-             Alternatively, you can prevent evcxr from attempting to persist\n\
-             the variable by wrapping your code in braces.",
-            variable_name
-        );
-    } else {
-        bail!(
-            "The variable `{}` has type `{}` which cannot be persisted.\n\
+    bail!(
+        "The variable `{}` has type `{}` which cannot be persisted.\n\
              You might be able to fix this by creating a `Box<dyn YourType>`. e.g.\n\
              let v: Box<dyn core::fmt::Debug> = Box::new(foo());\n\
              Alternatively, you can prevent evcxr from attempting to persist\n\
              the variable by wrapping your code in braces.",
-            variable_name,
-            actual_type
-        );
-    }
+        variable_name,
+        actual_type
+    );
 }
 
 fn fix_path() {

@@ -22,10 +22,8 @@ use ariadne::Color;
 use ariadne::{ColorGenerator, Label, Report, ReportKind};
 use json::JsonValue;
 use json::{self};
-use once_cell::sync::OnceCell;
 use ra_ap_ide::TextRange;
 use ra_ap_ide::TextSize;
-use regex::Regex;
 use std::fmt;
 use std::fmt::Write as _;
 use std::io;
@@ -350,49 +348,6 @@ impl CompilationError {
 
     pub fn rendered(&self) -> String {
         self.json["rendered"].as_str().unwrap_or("").to_owned()
-    }
-
-    /// Returns the actual type indicated by the error message or None if this isn't a type error.
-    pub(crate) fn get_actual_type(&self) -> Option<String> {
-        // Observed formats:
-        // Up to 1.40:
-        //   message.children[].message
-        //     "expected type `std::string::String`\n   found type `{integer}`"
-        // 1.41+:
-        //   message.children[].message
-        //     "expected struct `std::string::String`\n     found enum `std::option::Option<std::string::String>`"
-        //     "expected struct `std::string::String`\n    found tuple `({integer}, {float})`"
-        //     "  expected struct `std::string::String`\nfound opaque type `impl Bar`"
-        //   message.spans[].label
-        //     "expected struct `std::string::String`, found integer"
-        //     "expected struct `std::string::String`, found `i32`"
-        static TYPE_ERROR_RE: OnceCell<Regex> = OnceCell::new();
-        let type_error_re =
-            TYPE_ERROR_RE.get_or_init(|| Regex::new(" *expected (?s:.)*found.* `(.*)`").unwrap());
-        if let JsonValue::Array(children) = &self.json["children"] {
-            for child in children {
-                if let Some(message) = child["message"].as_str() {
-                    if let Some(captures) = type_error_re.captures(message) {
-                        return Some(captures[1].to_owned());
-                    }
-                }
-            }
-        }
-        static TYPE_ERROR_RE2: OnceCell<Regex> = OnceCell::new();
-        let type_error_re2 =
-            TYPE_ERROR_RE2.get_or_init(|| Regex::new("expected .* found (integer|float)").unwrap());
-        if let JsonValue::Array(spans) = &self.json["spans"] {
-            for span in spans {
-                if let Some(label) = span["label"].as_str() {
-                    if let Some(captures) = type_error_re.captures(label) {
-                        return Some(captures[1].to_owned());
-                    } else if let Some(captures) = type_error_re2.captures(label) {
-                        return Some(captures[1].to_owned());
-                    }
-                }
-            }
-        }
-        None
     }
 }
 
