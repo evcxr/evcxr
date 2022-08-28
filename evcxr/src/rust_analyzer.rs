@@ -379,7 +379,7 @@ fn get_type_name(
         if ty.is_closure() {
             return TypeName::Closure;
         }
-        if let Some(type_name) = ty.display_source_code(sema.db, module.into()).ok() {
+        if let Ok(type_name) = ty.display_source_code(sema.db, module.into()) {
             if is_type_valid(&type_name) {
                 return TypeName::Named(type_name);
             }
