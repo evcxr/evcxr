@@ -27,9 +27,7 @@ mod jupyter_message;
 
 fn run(control_file_name: &str) -> Result<()> {
     let config = control_file::Control::parse_file(control_file_name)?;
-    let server = core::Server::start(&config)?;
-    server.wait_for_shutdown();
-    Ok(())
+    core::Server::run(&config)
 }
 
 fn main() -> Result<()> {

@@ -25,131 +25,142 @@ use evcxr::Theme;
 use json::JsonValue;
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
-use std::thread;
-use std::time;
 use std::time::Duration;
+use tokio::sync::Mutex;
 
 // Note, to avoid potential deadlocks, each thread should lock at most one mutex at a time.
 #[derive(Clone)]
 pub(crate) struct Server {
-    iopub: Arc<Mutex<Connection>>,
-    stdin: Arc<Mutex<Connection>>,
+    iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
+    stdin: Arc<Mutex<Connection<zeromq::RouterSocket>>>,
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
-    shutdown_requested_receiver: Arc<Mutex<crossbeam_channel::Receiver<()>>>,
-    shutdown_requested_sender: Arc<Mutex<crossbeam_channel::Sender<()>>>,
+    shutdown_sender: Arc<Mutex<Option<crossbeam_channel::Sender<()>>>>,
+    tokio_handle: tokio::runtime::Handle,
+}
+
+struct ShutdownReceiver {
+    recv: crossbeam_channel::Receiver<()>,
 }
 
 impl Server {
-    pub(crate) fn start(config: &control_file::Control) -> Result<Server> {
-        use zmq::SocketType;
+    pub(crate) fn run(config: &control_file::Control) -> Result<()> {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let handle = runtime.handle().clone();
+        runtime.block_on(async {
+            let shutdown_receiver = Self::start(config, handle).await?;
+            shutdown_receiver.wait_for_shutdown().await;
+            let result: Result<()> = Ok(());
+            result
+        })?;
+        Ok(())
+    }
 
-        let zmq_context = zmq::Context::new();
-        let heartbeat = bind_socket(config, config.hb_port, zmq_context.socket(SocketType::REP)?)?;
-        let shell_socket = bind_socket(
-            config,
-            config.shell_port,
-            zmq_context.socket(SocketType::ROUTER)?,
-        )?;
-        let control_socket = bind_socket(
-            config,
-            config.control_port,
-            zmq_context.socket(SocketType::ROUTER)?,
-        )?;
-        let stdin_socket = bind_socket(
-            config,
-            config.stdin_port,
-            zmq_context.socket(SocketType::ROUTER)?,
-        )?;
-        let iopub = Arc::new(Mutex::new(bind_socket(
-            config,
-            config.iopub_port,
-            zmq_context.socket(SocketType::PUB)?,
-        )?));
+    async fn start(
+        config: &control_file::Control,
+        tokio_handle: tokio::runtime::Handle,
+    ) -> Result<ShutdownReceiver> {
+        let mut heartbeat = bind_socket::<zeromq::RepSocket>(config, config.hb_port).await?;
+        let shell_socket = bind_socket::<zeromq::RouterSocket>(config, config.shell_port).await?;
+        let control_socket =
+            bind_socket::<zeromq::RouterSocket>(config, config.control_port).await?;
+        let stdin_socket = bind_socket::<zeromq::RouterSocket>(config, config.stdin_port).await?;
+        let iopub_socket = bind_socket::<zeromq::PubSocket>(config, config.iopub_port).await?;
+        let iopub = Arc::new(Mutex::new(iopub_socket));
 
-        let (shutdown_requested_sender, shutdown_requested_receiver) =
-            crossbeam_channel::unbounded();
+        let (shutdown_sender, shutdown_receiver) = crossbeam_channel::unbounded();
 
         let server = Server {
             iopub,
             latest_execution_request: Arc::new(Mutex::new(None)),
             stdin: Arc::new(Mutex::new(stdin_socket)),
-            shutdown_requested_receiver: Arc::new(Mutex::new(shutdown_requested_receiver)),
-            shutdown_requested_sender: Arc::new(Mutex::new(shutdown_requested_sender)),
+            shutdown_sender: Arc::new(Mutex::new(Some(shutdown_sender))),
+            tokio_handle,
         };
 
         let (execution_sender, execution_receiver) = crossbeam_channel::unbounded();
         let (execution_response_sender, execution_response_receiver) =
             crossbeam_channel::unbounded();
 
-        thread::spawn(move || Self::handle_hb(&heartbeat));
-        server.start_thread(move |server: Server| server.handle_control(control_socket));
+        tokio::spawn(async move {
+            if let Err(error) = Self::handle_hb(&mut heartbeat).await {
+                eprintln!("hb error: {error:?}");
+            }
+        });
+        {
+            let server = server.clone();
+            tokio::spawn(async move {
+                if let Err(error) = server.handle_control(control_socket).await {
+                    eprintln!("control error: {error:?}");
+                }
+            });
+        }
         let (mut context, outputs) = CommandContext::new()?;
         context.execute(":load_config")?;
         let context = Arc::new(Mutex::new(context));
-        server.start_thread({
-            let context = Arc::clone(&context);
-            move |server: Server| {
-                server.handle_shell(
-                    shell_socket,
-                    &execution_sender,
-                    &execution_response_receiver,
-                    context,
-                )
-            }
-        });
-        server.start_thread(move |server: Server| {
-            server.handle_execution_requests(
-                context,
-                &execution_receiver,
-                &execution_response_sender,
+        {
+            let context = context.clone();
+            let server = server.clone();
+            tokio::spawn(async move {
+                let result = server
+                    .handle_shell(
+                        shell_socket,
+                        &execution_sender,
+                        &execution_response_receiver,
+                        context,
+                    )
+                    .await;
+                if let Err(error) = result {
+                    eprintln!("shell error: {error:?}");
+                }
+            });
+        }
+        {
+            let server = server.clone();
+            tokio::spawn(async move {
+                let result = server
+                    .handle_execution_requests(
+                        context,
+                        &execution_receiver,
+                        &execution_response_sender,
+                    )
+                    .await;
+                if let Err(error) = result {
+                    eprintln!("execution error: {error:?}");
+                }
+            });
+        }
+        server
+            .clone()
+            .start_output_pass_through_thread(
+                vec![("stdout", outputs.stdout), ("stderr", outputs.stderr)],
+                shutdown_receiver.clone(),
             )
-        });
-        server.clone().start_output_pass_through_thread(vec![
-            ("stdout", outputs.stdout),
-            ("stderr", outputs.stderr),
-        ]);
-        Ok(server)
+            .await;
+        Ok(ShutdownReceiver {
+            recv: shutdown_receiver,
+        })
     }
 
-    pub(crate) fn wait_for_shutdown(&self) {
-        self.shutdown_requested_receiver
-            .lock()
-            .unwrap()
-            .recv()
-            .unwrap();
+    async fn signal_shutdown(&mut self) {
+        self.shutdown_sender.lock().await.take();
     }
 
-    fn signal_shutdown(&self) {
-        self.shutdown_requested_sender
-            .lock()
-            .unwrap()
-            .send(())
-            .unwrap();
-    }
-
-    fn start_thread<F>(&self, body: F)
-    where
-        F: FnOnce(Server) -> Result<()> + std::marker::Send + 'static,
-    {
-        let server_clone = self.clone();
-        thread::spawn(|| {
-            if let Err(error) = body(server_clone) {
-                eprintln!("{:?}", error);
-            }
-        });
-    }
-
-    fn handle_hb(connection: &Connection) -> Result<()> {
-        let mut message = zmq::Message::new();
-        let ping: &[u8] = b"ping";
+    async fn handle_hb(connection: &mut Connection<zeromq::RepSocket>) -> Result<()> {
+        use zeromq::SocketRecv;
+        use zeromq::SocketSend;
         loop {
-            connection.socket.recv(&mut message, 0)?;
-            connection.socket.send(ping, 0)?;
+            connection.socket.recv().await?;
+            connection
+                .socket
+                .send(zeromq::ZmqMessage::from(b"ping".to_vec()))
+                .await?;
         }
     }
 
-    fn handle_execution_requests(
+    async fn handle_execution_requests(
         self,
         context: Arc<Mutex<CommandContext>>,
         receiver: &crossbeam_channel::Receiver<JupyterMessage>,
@@ -157,11 +168,18 @@ impl Server {
     ) -> Result<()> {
         let mut execution_count = 1;
         loop {
-            let message = receiver.recv()?;
+            let message = match receiver.recv() {
+                Ok(x) => x,
+                Err(_) => {
+                    // Other end has closed. This is expected when we're shuting
+                    // down.
+                    return Ok(());
+                }
+            };
 
             // If we want this clone to be cheaper, we probably only need the header, not the
             // whole message.
-            *self.latest_execution_request.lock().unwrap() = Some(message.clone());
+            *self.latest_execution_request.lock().await = Some(message.clone());
             let src = message.code();
             execution_count += 1;
             message
@@ -170,26 +188,32 @@ impl Server {
                     "execution_count" => execution_count,
                     "code" => src
                 })
-                .send(&self.iopub.lock().unwrap())?;
-            let mut callbacks = evcxr::EvalCallbacks {
-                input_reader: &|prompt, is_password| {
-                    self.request_input(&message, prompt, is_password)
-                        .unwrap_or_default()
-                },
-            };
+                .send(&mut *self.iopub.lock().await)
+                .await?;
 
-            #[allow(unknown_lints, clippy::significant_drop_in_scrutinee)]
-            match context
-                .lock()
-                .unwrap()
-                .execute_with_callbacks(src, &mut callbacks)
-            {
+            let eval_result = context.lock().await.execute_with_callbacks(
+                src,
+                &mut evcxr::EvalCallbacks {
+                    input_reader: &|input_request| {
+                        self.tokio_handle.block_on(async {
+                            self.request_input(
+                                &message,
+                                &input_request.prompt,
+                                input_request.is_password,
+                            )
+                            .await
+                            .unwrap_or_default()
+                        })
+                    },
+                },
+            );
+            match eval_result {
                 Ok(output) => {
                     if !output.is_empty() {
                         // Increase the odds that stdout will have been finished being sent. A
                         // less hacky alternative would be to add a print statement, then block
                         // waiting for it.
-                        thread::sleep(time::Duration::from_millis(1));
+                        tokio::time::sleep(Duration::from_millis(1)).await;
                         let mut data = HashMap::new();
                         // At the time of writing the json crate appears to have a generic From
                         // implementation for a Vec<T> where T implements Into<JsonValue>. It also
@@ -210,7 +234,8 @@ impl Server {
                                 "data" => data,
                                 "metadata" => object!(),
                             })
-                            .send(&self.iopub.lock().unwrap())?;
+                            .send(&mut *self.iopub.lock().await)
+                            .await?;
                     }
                     if let Some(duration) = output.timing {
                         // TODO replace by duration.as_millis() when stable
@@ -230,7 +255,8 @@ impl Server {
                                 "data" => data,
                                 "metadata" => object!(),
                             })
-                            .send(&self.iopub.lock().unwrap())?;
+                            .send(&mut *self.iopub.lock().await)
+                            .await?;
                     }
                     execution_reply_sender.send(message.new_reply().with_content(object! {
                         "status" => "ok",
@@ -238,7 +264,8 @@ impl Server {
                     }))?;
                 }
                 Err(errors) => {
-                    self.emit_errors(&errors, &message, src, execution_count)?;
+                    self.emit_errors(&errors, &message, src, execution_count)
+                        .await?;
                     execution_reply_sender.send(message.new_reply().with_content(object! {
                         "status" => "error",
                         "execution_count" => execution_count
@@ -248,7 +275,7 @@ impl Server {
         }
     }
 
-    fn request_input(
+    async fn request_input(
         &self,
         current_request: &JupyterMessage,
         prompt: &str,
@@ -257,7 +284,7 @@ impl Server {
         if current_request.get_content()["allow_stdin"].as_bool() != Some(true) {
             return None;
         }
-        let stdin = self.stdin.lock().unwrap();
+        let mut stdin = self.stdin.lock().await;
         let stdin_request = current_request
             .new_reply()
             .with_message_type("input_request")
@@ -265,37 +292,38 @@ impl Server {
                 "prompt" => prompt,
                 "password" => password,
             });
-        stdin_request.send(&stdin).ok()?;
+        stdin_request.send(&mut *stdin).await.ok()?;
 
-        let input_response = JupyterMessage::read(&stdin).ok()?;
+        let input_response = JupyterMessage::read(&mut *stdin).await.ok()?;
         input_response.get_content()["value"]
             .as_str()
             .map(|value| value.to_owned())
     }
 
-    fn handle_shell(
+    async fn handle_shell<S: zeromq::SocketRecv + zeromq::SocketSend>(
         self,
-        connection: Connection,
+        mut connection: Connection<S>,
         execution_channel: &crossbeam_channel::Sender<JupyterMessage>,
         execution_reply_receiver: &crossbeam_channel::Receiver<JupyterMessage>,
         context: Arc<Mutex<CommandContext>>,
     ) -> Result<()> {
         loop {
-            let message = JupyterMessage::read(&connection)?;
+            let message = JupyterMessage::read(&mut connection).await?;
             self.handle_shell_message(
                 message,
-                &connection,
+                &mut connection,
                 execution_channel,
                 execution_reply_receiver,
                 &context,
-            )?;
+            )
+            .await?;
         }
     }
 
-    fn handle_shell_message(
+    async fn handle_shell_message<S: zeromq::SocketRecv + zeromq::SocketSend>(
         &self,
         message: JupyterMessage,
-        connection: &Connection,
+        connection: &mut Connection<S>,
         execution_channel: &crossbeam_channel::Sender<JupyterMessage>,
         execution_reply_receiver: &crossbeam_channel::Receiver<JupyterMessage>,
         context: &Arc<Mutex<CommandContext>>,
@@ -306,7 +334,8 @@ impl Server {
         message
             .new_message("status")
             .with_content(object! {"execution_state" => "busy"})
-            .send(&self.iopub.lock().unwrap())?;
+            .send(&mut *self.iopub.lock().await)
+            .await?;
         let idle = message
             .new_message("status")
             .with_content(object! {"execution_state" => "idle"});
@@ -314,24 +343,26 @@ impl Server {
             message
                 .new_reply()
                 .with_content(kernel_info())
-                .send(connection)?;
+                .send(connection)
+                .await?;
         } else if message.message_type() == "is_complete_request" {
             message
                 .new_reply()
                 .with_content(object! {"status" => "complete"})
-                .send(connection)?;
+                .send(connection)
+                .await?;
         } else if message.message_type() == "execute_request" {
             execution_channel.send(message)?;
-            execution_reply_receiver.recv()?.send(connection)?;
+            execution_reply_receiver.recv()?.send(connection).await?;
         } else if message.message_type() == "comm_open" {
-            comm_open(message, context, Arc::clone(&self.iopub))?;
+            comm_open(message, context, Arc::clone(&self.iopub)).await?;
         } else if message.message_type() == "comm_msg"
             || message.message_type() == "comm_info_request"
         {
             // We don't handle this yet.
         } else if message.message_type() == "complete_request" {
             let reply = message.new_reply().with_content(
-                match handle_completion_request(context, message) {
+                match handle_completion_request(context, message).await {
                     Ok(response_content) => response_content,
                     Err(error) => object! {
                         "status" => "error",
@@ -340,24 +371,30 @@ impl Server {
                     },
                 },
             );
-            reply.send(connection)?;
+            reply.send(connection).await?;
+        } else if message.message_type() == "history_request" {
+            // We don't yet support history requests, but we don't want to print
+            // a message in jupyter console.
         } else {
             eprintln!(
                 "Got unrecognized message type on shell channel: {}",
                 message.message_type()
             );
         }
-        idle.send(&self.iopub.lock().unwrap())?;
+        idle.send(&mut *self.iopub.lock().await).await?;
         Ok(())
     }
 
-    fn handle_control(self, connection: Connection) -> Result<()> {
+    async fn handle_control(
+        mut self,
+        mut connection: Connection<zeromq::RouterSocket>,
+    ) -> Result<()> {
         loop {
-            let message = JupyterMessage::read(&connection)?;
+            let message = JupyterMessage::read(&mut connection).await?;
             match message.message_type() {
-                "shutdown_request" => self.signal_shutdown(),
+                "shutdown_request" => self.signal_shutdown().await,
                 "interrupt_request" => {
-                    message.new_reply().send(&connection)?;
+                    message.new_reply().send(&mut connection).await?;
                     eprintln!(
                         "Rust doesn't support interrupting execution. Perhaps restart kernel?"
                     );
@@ -372,18 +409,25 @@ impl Server {
         }
     }
 
-    fn start_output_pass_through_thread(
+    async fn start_output_pass_through_thread(
         self,
         channels: Vec<(&'static str, crossbeam_channel::Receiver<String>)>,
+        shutdown_recv: crossbeam_channel::Receiver<()>,
     ) {
-        thread::spawn(move || {
+        tokio::task::spawn_blocking(move || {
             let mut select = Select::new();
             for (_, channel) in &channels {
                 select.recv(channel);
             }
+            let shutdown_index = select.recv(&shutdown_recv);
             loop {
                 let index = select.ready();
+                if index == shutdown_index {
+                    return;
+                }
                 let (output_name, channel) = &channels[index];
+                // Needed in order to make the borrow checker happy.
+                let output_name: &'static str = output_name;
                 // Read from the channel that has output until it has been idle
                 // for 1ms before we return to checking other channels. This
                 // reduces the extent to which outputs interleave. e.g. a
@@ -392,15 +436,18 @@ impl Server {
                 // but we'd like to try to make sure that we don't interleave
                 // their lines if possible.
                 while let Ok(line) = channel.recv_timeout(Duration::from_millis(1)) {
-                    self.pass_output_line(output_name, line);
+                    let server = self.clone();
+                    tokio::task::spawn(async move {
+                        server.pass_output_line(output_name, line).await;
+                    });
                 }
             }
         });
     }
 
-    fn pass_output_line(&self, output_name: &'static str, line: String) {
+    async fn pass_output_line(&self, output_name: &'static str, line: String) {
         let mut message = None;
-        if let Some(exec_request) = &*self.latest_execution_request.lock().unwrap() {
+        if let Some(exec_request) = &*self.latest_execution_request.lock().await {
             message = Some(exec_request.new_message("stream"));
         }
         if let Some(message) = message {
@@ -409,14 +456,15 @@ impl Server {
                     "name" => output_name,
                     "text" => format!("{}\n", line),
                 })
-                .send(&self.iopub.lock().unwrap())
+                .send(&mut *self.iopub.lock().await)
+                .await
             {
-                eprintln!("{}", error);
+                eprintln!("output {output_name} error: {}", error);
             }
         }
     }
 
-    fn emit_errors(
+    async fn emit_errors(
         &self,
         errors: &evcxr::Error,
         parent_message: &JupyterMessage,
@@ -473,7 +521,8 @@ impl Server {
                                 "evalue" => error.message(),
                                 "traceback" => traceback,
                             })
-                            .send(&self.iopub.lock().unwrap())?;
+                            .send(&mut *self.iopub.lock().await)
+                            .await?;
                     } else {
                         parent_message
                             .new_message("error")
@@ -484,7 +533,8 @@ impl Server {
                                     message
                                 ],
                             })
-                            .send(&self.iopub.lock().unwrap())?;
+                            .send(&mut *self.iopub.lock().await)
+                            .await?;
                     }
                 }
             }
@@ -497,23 +547,30 @@ impl Server {
                         "evalue" => displayed_error.clone(),
                         "traceback" => array![displayed_error],
                     })
-                    .send(&self.iopub.lock().unwrap())?;
+                    .send(&mut *self.iopub.lock().await)
+                    .await?;
             }
         }
         Ok(())
     }
 }
 
-fn comm_open(
+impl ShutdownReceiver {
+    async fn wait_for_shutdown(self) {
+        let _ = tokio::task::spawn_blocking(move || self.recv.recv()).await;
+    }
+}
+
+async fn comm_open(
     message: JupyterMessage,
     context: &Arc<Mutex<CommandContext>>,
-    iopub: Arc<Mutex<Connection>>,
+    iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
 ) -> Result<()> {
     if message.target_name() == "evcxr-cargo-check" {
         let context = Arc::clone(context);
-        std::thread::spawn(move || {
+        tokio::spawn(async move {
             if let Some(code) = message.data()["code"].as_str() {
-                let data = cargo_check(code, &context);
+                let data = cargo_check(code, &context).await;
                 let response_content = object! {
                     "comm_id" => message.comm_id(),
                     "data" => data,
@@ -522,23 +579,28 @@ fn comm_open(
                     .new_message("comm_msg")
                     .without_parent_header()
                     .with_content(response_content)
-                    .send(&iopub.lock().unwrap())
+                    .send(&mut *iopub.lock().await)
+                    .await
                     .unwrap();
             }
             message
                 .comm_close_message()
-                .send(&iopub.lock().unwrap())
+                .send(&mut *iopub.lock().await)
+                .await
                 .unwrap();
         });
         Ok(())
     } else {
         // Unrecognised comm target, just close the comm.
-        message.comm_close_message().send(&iopub.lock().unwrap())
+        message
+            .comm_close_message()
+            .send(&mut *iopub.lock().await)
+            .await
     }
 }
 
-fn cargo_check(code: &str, context: &Mutex<CommandContext>) -> JsonValue {
-    let problems = context.lock().unwrap().check(code).unwrap_or_default();
+async fn cargo_check(code: &str, context: &Mutex<CommandContext>) -> JsonValue {
+    let problems = context.lock().await.check(code).unwrap_or_default();
     let problems_json: Vec<JsonValue> = problems
         .iter()
         .filter_map(|problem| {
@@ -571,13 +633,13 @@ fn cargo_check(code: &str, context: &Mutex<CommandContext>) -> JsonValue {
     }
 }
 
-fn bind_socket(
+async fn bind_socket<S: zeromq::Socket>(
     config: &control_file::Control,
     port: u16,
-    socket: zmq::Socket,
-) -> Result<Connection> {
+) -> Result<Connection<S>> {
     let endpoint = format!("{}://{}:{}", config.transport, config.ip, port);
-    socket.bind(&endpoint)?;
+    let mut socket = S::new();
+    socket.bind(&endpoint).await?;
     Connection::new(socket, &config.key)
 }
 
@@ -609,12 +671,12 @@ fn kernel_info() -> JsonValue {
     }
 }
 
-fn handle_completion_request(
+async fn handle_completion_request(
     context: &Mutex<CommandContext>,
     message: JupyterMessage,
 ) -> Result<JsonValue> {
     let code = message.code();
-    let completions = context.lock().unwrap().completions(
+    let completions = context.lock().await.completions(
         code,
         grapheme_offset_to_byte_offset(code, message.cursor_pos()),
     )?;
