@@ -13,7 +13,8 @@ rust-version = "1.57"
 evcxr = { version = "=0.13.0", path = "../evcxr" }
 json = "0.12.4"
 anyhow = "1.0.33"
-zmq = { version = "0.9.1", default-features = false }
+bytes = "1.2.1"
+tokio = "1.20.1"
 uuid = { version = "1.1.2", features = [ "v4" ] }
 hmac = "0.12.0"
 sha2 = "0.10.0"
@@ -27,6 +28,10 @@ mimalloc = { version = "0.1", default-features = false, optional = true }
 crossbeam-channel = "0.5.5"
 ariadne = "0.1.5"
 
+[dependencies.zeromq]
+version = "0.3.3"
+default_features = false
+features = [ "tokio-runtime", "tcp-transport" ]
+
 [features]
-default = ["vendored-zmq", "mimalloc"]
-vendored-zmq = ["zmq/vendored"]
+default = ["mimalloc"]

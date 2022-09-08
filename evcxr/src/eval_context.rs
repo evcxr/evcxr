@@ -212,12 +212,18 @@ pub struct EvalContextOutputs {
     pub stderr: crossbeam_channel::Receiver<String>,
 }
 
-//#[non_exhaustive]
-pub struct EvalCallbacks<'a> {
-    pub input_reader: &'a dyn Fn(&str, bool) -> String,
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub struct InputRequest {
+    pub prompt: String,
+    pub is_password: bool,
 }
 
-fn default_input_reader(_: &str, _: bool) -> String {
+pub struct EvalCallbacks<'a> {
+    pub input_reader: &'a dyn Fn(InputRequest) -> String,
+}
+
+fn default_input_reader(_: InputRequest) -> String {
     String::new()
 }
 
@@ -718,9 +724,12 @@ impl EvalContext {
                 got_panic = true;
             } else if line.starts_with(evcxr_input::GET_CMD) {
                 let is_password = line.starts_with(evcxr_input::GET_CMD_PASSWORD);
-                let prompt = line.split(':').nth(1).unwrap_or_default();
+                let prompt = line.split(':').nth(1).unwrap_or_default().to_owned();
                 self.child_process
-                    .send(&(callbacks.input_reader)(prompt, is_password))?;
+                    .send(&(callbacks.input_reader)(InputRequest {
+                        prompt,
+                        is_password,
+                    }))?;
             } else if line == evcxr_internal_runtime::USER_ERROR_OCCURRED {
                 // A question mark operator in user code triggered an early
                 // return. Any newly defined variables won't have been stored.

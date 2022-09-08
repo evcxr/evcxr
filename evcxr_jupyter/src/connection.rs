@@ -19,14 +19,14 @@ use sha2::Sha256;
 
 pub(crate) type HmacSha256 = Hmac<Sha256>;
 
-pub(crate) struct Connection {
-    pub(crate) socket: zmq::Socket,
+pub(crate) struct Connection<S> {
+    pub(crate) socket: S,
     /// Will be None if our key was empty (digest authentication disabled).
     pub(crate) mac: Option<HmacSha256>,
 }
 
-impl Connection {
-    pub(crate) fn new(socket: zmq::Socket, key: &str) -> Result<Connection> {
+impl<S: zeromq::Socket> Connection<S> {
+    pub(crate) fn new(socket: S, key: &str) -> Result<Self> {
         let mac = if key.is_empty() {
             None
         } else {

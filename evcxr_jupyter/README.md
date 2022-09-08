@@ -20,7 +20,7 @@ version of rustc.
 
 ```sh
 rustup component add rust-src
-sudo apt install jupyter-notebook cmake build-essential
+sudo apt install jupyter-notebook
 cargo install evcxr_jupyter
 evcxr_jupyter --install
 ```
@@ -44,21 +44,9 @@ link for you to open. From this tab you can select File -> New Notebook -> Rust.
 ### Mac OS X
 
 * Install jupyter or jupyterlab (eg. via anaconda)
-* Install cmake. [These
-  instructions](https://stackoverflow.com/questions/30668601/installing-cmake-command-line-tools-on-a-mac)
-  might help.
 
 ```sh
 cargo install evcxr_jupyter
-evcxr_jupyter --install
-```
-
-Alternative instructions if you want to use libzmq from your system. Note, if
-following these instructions, then you shouldn't need to install cmake.
-
-```sh
-brew install zeromq pkg-config
-cargo install evcxr_jupyter --no-default-features
 evcxr_jupyter --install
 ```
 
@@ -68,7 +56,6 @@ Note that Evcxr on Windows appears to be substantially slower than on other
 platforms. We're not yet sure why.
 
 * Install jupyter or jupyterlab (eg. via anaconda)
-* Install [CMake](https://cmake.org/download/)
 ```sh
 cargo install evcxr_jupyter
 evcxr_jupyter --install
