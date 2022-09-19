@@ -41,5 +41,5 @@ cargo publish
 cd ../evcxr_jupyter
 cargo publish
 git tag "v$VERSION"
-git push
-git push --tags
+git push origin
+git push origin refs/tags/v$VERSION
