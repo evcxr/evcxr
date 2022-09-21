@@ -62,6 +62,12 @@ pub(crate) fn install() -> Result<()> {
 /// version.txt. If it is out of date, then updates it.
 pub(crate) fn update_if_necessary() -> Result<()> {
     let kernel_dir = get_kernel_dir()?;
+    // If the kernel directory doesn't exist, then we're probably being run from
+    // a wrapper, so we shouldn't "update", since that would in effect be
+    // installing ourselves when we weren't already installed.
+    if !kernel_dir.exists() {
+        return Ok(());
+    }
     let installed_version = std::fs::read(kernel_dir.join("version.txt")).unwrap_or_default();
     if installed_version != VERSION_TXT {
         install()?;
