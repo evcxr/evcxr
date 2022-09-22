@@ -1,3 +1,27 @@
+# Version 0.14.0 (unreleased)
+* `:dep` lines can now be commented out without breaking subsequent `:dep`
+  lines. Thanks JohnScience!
+* Reduced interleaving of stdout and stderr.
+* Errors now render using ariadne, giving a much nicer presentation. Thanks
+  HKalbasi!
+* Small speedup in execution time by bypassing rustup.
+* `preserve_vars_on_panic` is now true by default (as it used to be). It now
+  works much better than before, with all variables being preserved if a panic
+  occurs.
+* By using rustyline's new external printer API, stderr output that hasn't been
+  displayed before we return to the prompt no longer messes up the prompt. In
+  fact, you can now spawn a thread that writes to stderr in the background and
+  the output now appears above your prompt.
+* Jupyter kernel now uses a native Rust library for ZMQ, so no longer requires
+  cmake to build.
+* The last bit of code that tried to use rustc error messages to determine
+  variable types has been deleted. Now if rust-analyzer can't determine the type
+  of a variable, we ask the user to add an explicit type annotation.
+* Update rust-analyzer
+* Building evcxr now requires rust 1.63 or higher.
+* Added a release workflow so that binaries for the latest Linux (built on
+  Ubuntu), Windows and Mac are available for download on the releases page.
+
 # Version 0.13.0
 * Now uses Rust edition 2021.
 * MSRV is now 1.59.
