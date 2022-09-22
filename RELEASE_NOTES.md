@@ -1,4 +1,4 @@
-# Version 0.14.0 (unreleased)
+# Version 0.14.0
 * `:dep` lines can now be commented out without breaking subsequent `:dep`
   lines. Thanks JohnScience!
 * Reduced interleaving of stdout and stderr.
