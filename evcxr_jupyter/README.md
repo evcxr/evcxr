@@ -1,4 +1,4 @@
-# EvCxR Jupyter Kernel
+# Evcxr Jupyter Kernel
 
 [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/google/evcxr/main?filepath=evcxr_jupyter%2Fsamples%2Fevcxr_jupyter_tour.ipynb)
 
@@ -11,60 +11,40 @@ A [Jupyter](https://jupyter.org/) Kernel for the Rust programming language.
 If you don't already have Rust installed, [follow these
 instructions](https://www.rust-lang.org/tools/install).
 
-Make sure you've got a recent version of rust installed. Evcxr's dependencies
-often make use of new Rust features shortly after they're stabilized, so it's
-not uncommon that the latest release of Evcxr will end up requiring the latest
-version of rustc.
+You can either download a pre-built binary from the
+[Releases](https://github.com/google/evcxr/releases) page, extract it from the
+archive and put it somewhere on your path, or build from source by running:
+```sh
+cargo install evcxr_jupyter
+```
 
-### Linux (Debian/Ubuntu)
+If your operating system is an older version, or has a different libc than what
+the pre-built binaries were compiled with, then you'll need to build from source
+using the command above.
 
+To actually use evcxr_jupyter, you'll need Jupyter notbook to be installed.
+* Debian or Ubuntu Linux: `sudo apt install jupyter-notebook`
+* Mac: You might be able to `brew install jupyter`
+* Windows, or if the above options don't work for you, see
+  https://jupyter.org/install
+
+You'll also need the source for the Rust standard library installed. If you
+already use rust-analyzer, you'll likely have this installed. To install this
+using rustup, run:
 ```sh
 rustup component add rust-src
-sudo apt install jupyter-notebook
-cargo install evcxr_jupyter
-evcxr_jupyter --install
 ```
 
-Alternative instructions if you want to use libzmq from your system:
-```sh
-sudo apt install libzmq3-dev jupyter-notebook
-cargo install evcxr_jupyter --no-default-features
-evcxr_jupyter --install
-```
+## Running
 
-Once installed, you should be able to start Juypter notebook with:
+To start Jupyter Notebook, run:
 
 ```sh
-jupyter-notebook
+jupyter notebook
 ```
 
-Once it starts, it should open a new tab in your browser, or at least print a
-link for you to open. From this tab you can select File -> New Notebook -> Rust.
-
-### Mac OS X
-
-* Install jupyter or jupyterlab (eg. via anaconda)
-
-```sh
-cargo install evcxr_jupyter
-evcxr_jupyter --install
-```
-
-### Windows
-
-Note that Evcxr on Windows appears to be substantially slower than on other
-platforms. We're not yet sure why.
-
-* Install jupyter or jupyterlab (eg. via anaconda)
-```sh
-cargo install evcxr_jupyter
-evcxr_jupyter --install
-```
-
-If you'd like to install ZMQ yourself, rather than having cargo install build it
-for you, then [These
-instructions](https://github.com/google/evcxr/issues/53#issuecomment-530050850)
-might help.
+Once started, it should open a page in your web browser. Look for the "New" menu
+on the right and from it, select "Rust".
 
 ## Usage information
 

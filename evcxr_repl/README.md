@@ -6,22 +6,42 @@
 
 A Rust REPL (Read-Eval-Print loop) built using the [`evcxr`](https://github.com/google/evcxr/blob/main/evcxr/README.md) evaluation context.
 
-## Installation and Usage
+## Installation
+
+Before you can use the REPL, you must download a local copy of Rust's source
+code:
+```sh
+$ rustup component add rust-src
+```
+
+Once that's done, you have a choice of using pre-built binaries, or building
+from source.
+
+### Pre-built binaries
+
+Pre-built binaries are available from the
+[Releases](https://github.com/google/evcxr/releases) page. These are currently
+built for Linux, Mac and Windows. In each case they are built with the latest
+version of each operating system. In the case of Linux, they're built on the
+latest Ubuntu. If your version of libc is different, they might not work, in
+which case you'll need to build yourself. See below.
+
+### Building yourself
+
+If you can't, or don't want to use the pre-built binaries, you can build from
+source.
 
 Make sure you've got a recent version of rust installed. Evcxr's dependencies
 often make use of new Rust features shortly after they're stabilized, so it's
 not uncommon that the latest release of Evcxr will end up requiring the latest
 version of rustc.
 
-Before you install the REPL, you must download a local copy of Rust's source code:
-```sh
-$ rustup component add rust-src
-```
-
 Now you can go ahead and install the binary:
 ```
 $ cargo install evcxr_repl
 ```
+
+## Usage
 
 And start the REPL:
 ```sh
