@@ -39,12 +39,15 @@ pub(crate) struct Server {
 }
 
 struct ShutdownReceiver {
+    // Note, this needs to be a crossbeam channel because
+    // start_output_pass_through_thread selects on this and other crossbeam
+    // channels.
     recv: crossbeam_channel::Receiver<()>,
 }
 
 impl Server {
     pub(crate) fn run(config: &control_file::Control) -> Result<()> {
-        let runtime = tokio::runtime::Builder::new_multi_thread()
+        let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .unwrap();
@@ -80,9 +83,9 @@ impl Server {
             tokio_handle,
         };
 
-        let (execution_sender, execution_receiver) = crossbeam_channel::unbounded();
-        let (execution_response_sender, execution_response_receiver) =
-            crossbeam_channel::unbounded();
+        let (execution_sender, mut execution_receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (execution_response_sender, mut execution_response_receiver) =
+            tokio::sync::mpsc::unbounded_channel();
 
         tokio::spawn(async move {
             if let Err(error) = Self::handle_hb(&mut heartbeat).await {
@@ -92,7 +95,7 @@ impl Server {
         let (mut context, outputs) = CommandContext::new()?;
         context.execute(":load_config")?;
         let process_handle = context.process_handle();
-        let context = Arc::new(Mutex::new(context));
+        let context = Arc::new(std::sync::Mutex::new(context));
         {
             let server = server.clone();
             tokio::spawn(async move {
@@ -109,7 +112,7 @@ impl Server {
                     .handle_shell(
                         shell_socket,
                         &execution_sender,
-                        &execution_response_receiver,
+                        &mut execution_response_receiver,
                         context,
                     )
                     .await;
@@ -123,8 +126,8 @@ impl Server {
             tokio::spawn(async move {
                 let result = server
                     .handle_execution_requests(
-                        context,
-                        &execution_receiver,
+                        &context,
+                        &mut execution_receiver,
                         &execution_response_sender,
                     )
                     .await;
@@ -163,15 +166,15 @@ impl Server {
 
     async fn handle_execution_requests(
         self,
-        context: Arc<Mutex<CommandContext>>,
-        receiver: &crossbeam_channel::Receiver<JupyterMessage>,
-        execution_reply_sender: &crossbeam_channel::Sender<JupyterMessage>,
+        context: &Arc<std::sync::Mutex<CommandContext>>,
+        receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
+        execution_reply_sender: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
     ) -> Result<()> {
         let mut execution_count = 1;
         loop {
-            let message = match receiver.recv() {
-                Ok(x) => x,
-                Err(_) => {
+            let message = match receiver.recv().await {
+                Some(x) => x,
+                None => {
                     // Other end has closed. This is expected when we're shuting
                     // down.
                     return Ok(());
@@ -181,7 +184,7 @@ impl Server {
             // If we want this clone to be cheaper, we probably only need the header, not the
             // whole message.
             *self.latest_execution_request.lock().await = Some(message.clone());
-            let src = message.code();
+            let src = message.code().to_owned();
             execution_count += 1;
             message
                 .new_message("execute_input")
@@ -192,22 +195,29 @@ impl Server {
                 .send(&mut *self.iopub.lock().await)
                 .await?;
 
-            let eval_result = context.lock().await.execute_with_callbacks(
-                src,
-                &mut evcxr::EvalCallbacks {
-                    input_reader: &|input_request| {
-                        self.tokio_handle.block_on(async {
-                            self.request_input(
-                                &message,
-                                &input_request.prompt,
-                                input_request.is_password,
-                            )
-                            .await
-                            .unwrap_or_default()
-                        })
+            let context = Arc::clone(context);
+            let server = self.clone();
+            let (eval_result, message) = tokio::task::spawn_blocking(move || {
+                let eval_result = context.lock().unwrap().execute_with_callbacks(
+                    message.code(),
+                    &mut evcxr::EvalCallbacks {
+                        input_reader: &|input_request| {
+                            server.tokio_handle.block_on(async {
+                                server
+                                    .request_input(
+                                        &message,
+                                        &input_request.prompt,
+                                        input_request.is_password,
+                                    )
+                                    .await
+                                    .unwrap_or_default()
+                            })
+                        },
                     },
-                },
-            );
+                );
+                (eval_result, message)
+            })
+            .await?;
             match eval_result {
                 Ok(output) => {
                     if !output.is_empty() {
@@ -265,7 +275,7 @@ impl Server {
                     }))?;
                 }
                 Err(errors) => {
-                    self.emit_errors(&errors, &message, src, execution_count)
+                    self.emit_errors(&errors, &message, message.code(), execution_count)
                         .await?;
                     execution_reply_sender.send(message.new_reply().with_content(object! {
                         "status" => "error",
@@ -304,9 +314,9 @@ impl Server {
     async fn handle_shell<S: zeromq::SocketRecv + zeromq::SocketSend>(
         self,
         mut connection: Connection<S>,
-        execution_channel: &crossbeam_channel::Sender<JupyterMessage>,
-        execution_reply_receiver: &crossbeam_channel::Receiver<JupyterMessage>,
-        context: Arc<Mutex<CommandContext>>,
+        execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
+        execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
+        context: Arc<std::sync::Mutex<CommandContext>>,
     ) -> Result<()> {
         loop {
             let message = JupyterMessage::read(&mut connection).await?;
@@ -325,9 +335,9 @@ impl Server {
         &self,
         message: JupyterMessage,
         connection: &mut Connection<S>,
-        execution_channel: &crossbeam_channel::Sender<JupyterMessage>,
-        execution_reply_receiver: &crossbeam_channel::Receiver<JupyterMessage>,
-        context: &Arc<Mutex<CommandContext>>,
+        execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
+        execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
+        context: &Arc<std::sync::Mutex<CommandContext>>,
     ) -> Result<()> {
         // Processing of every message should be enclosed between "busy" and "idle"
         // see https://jupyter-client.readthedocs.io/en/latest/messaging.html#messages-on-the-shell-router-dealer-channel
@@ -354,7 +364,9 @@ impl Server {
                 .await?;
         } else if message.message_type() == "execute_request" {
             execution_channel.send(message)?;
-            execution_reply_receiver.recv()?.send(connection).await?;
+            if let Some(reply) = execution_reply_receiver.recv().await {
+                reply.send(connection).await?;
+            }
         } else if message.message_type() == "comm_open" {
             comm_open(message, context, Arc::clone(&self.iopub)).await?;
         } else if message.message_type() == "comm_msg"
@@ -569,14 +581,14 @@ impl ShutdownReceiver {
 
 async fn comm_open(
     message: JupyterMessage,
-    context: &Arc<Mutex<CommandContext>>,
+    context: &Arc<std::sync::Mutex<CommandContext>>,
     iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
 ) -> Result<()> {
     if message.target_name() == "evcxr-cargo-check" {
         let context = Arc::clone(context);
         tokio::spawn(async move {
             if let Some(code) = message.data()["code"].as_str() {
-                let data = cargo_check(code, &context).await;
+                let data = cargo_check(code.to_owned(), context).await;
                 let response_content = object! {
                     "comm_id" => message.comm_id(),
                     "data" => data,
@@ -605,8 +617,12 @@ async fn comm_open(
     }
 }
 
-async fn cargo_check(code: &str, context: &Mutex<CommandContext>) -> JsonValue {
-    let problems = context.lock().await.check(code).unwrap_or_default();
+async fn cargo_check(code: String, context: Arc<std::sync::Mutex<CommandContext>>) -> JsonValue {
+    let problems = tokio::task::spawn_blocking(move || {
+        context.lock().unwrap().check(&code).unwrap_or_default()
+    })
+    .await
+    .unwrap_or_default();
     let problems_json: Vec<JsonValue> = problems
         .iter()
         .filter_map(|problem| {
@@ -678,26 +694,30 @@ fn kernel_info() -> JsonValue {
 }
 
 async fn handle_completion_request(
-    context: &Mutex<CommandContext>,
+    context: &Arc<std::sync::Mutex<CommandContext>>,
     message: JupyterMessage,
 ) -> Result<JsonValue> {
-    let code = message.code();
-    let completions = context.lock().await.completions(
-        code,
-        grapheme_offset_to_byte_offset(code, message.cursor_pos()),
-    )?;
-    let matches: Vec<String> = completions
-        .completions
-        .into_iter()
-        .map(|completion| completion.code)
-        .collect();
-    Ok(object! {
-        "status" => "ok",
-        "matches" => matches,
-        "cursor_start" => byte_offset_to_grapheme_offset(code, completions.start_offset)?,
-        "cursor_end" => byte_offset_to_grapheme_offset(code, completions.end_offset)?,
-        "metadata" => object!{},
+    let context = Arc::clone(context);
+    tokio::task::spawn_blocking(move || {
+        let code = message.code();
+        let completions = context.lock().unwrap().completions(
+            code,
+            grapheme_offset_to_byte_offset(code, message.cursor_pos()),
+        )?;
+        let matches: Vec<String> = completions
+            .completions
+            .into_iter()
+            .map(|completion| completion.code)
+            .collect();
+        Ok(object! {
+            "status" => "ok",
+            "matches" => matches,
+            "cursor_start" => byte_offset_to_grapheme_offset(code, completions.start_offset)?,
+            "cursor_end" => byte_offset_to_grapheme_offset(code, completions.end_offset)?,
+            "metadata" => object!{},
+        })
     })
+    .await?
 }
 
 /// Returns the byte offset for the start of the specified grapheme. Any grapheme beyond the last
