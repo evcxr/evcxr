@@ -13,6 +13,8 @@
 // limitations under the License.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
@@ -78,6 +80,10 @@ impl CommandContext {
             return Ok(errors);
         }
         self.eval_context.check(non_command_code, state, &code_info)
+    }
+
+    pub fn process_handle(&self) -> Arc<Mutex<std::process::Child>> {
+        self.eval_context.process_handle()
     }
 
     pub fn variables_and_types(&self) -> impl Iterator<Item = (&str, &str)> {

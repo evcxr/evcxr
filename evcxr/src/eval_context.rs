@@ -46,6 +46,8 @@ use std::collections::HashSet;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use std::time::Instant;
 
@@ -509,6 +511,10 @@ impl EvalContext {
 
     pub fn reset_config(&mut self) {
         self.committed_state.config = self.initial_config.clone();
+    }
+
+    pub fn process_handle(&self) -> Arc<Mutex<std::process::Child>> {
+        self.child_process.process_handle()
     }
 
     fn restart_child_process(&mut self) -> Result<(), Error> {

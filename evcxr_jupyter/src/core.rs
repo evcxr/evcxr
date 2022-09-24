@@ -89,17 +89,18 @@ impl Server {
                 eprintln!("hb error: {error:?}");
             }
         });
+        let (mut context, outputs) = CommandContext::new()?;
+        context.execute(":load_config")?;
+        let process_handle = context.process_handle();
+        let context = Arc::new(Mutex::new(context));
         {
             let server = server.clone();
             tokio::spawn(async move {
-                if let Err(error) = server.handle_control(control_socket).await {
+                if let Err(error) = server.handle_control(control_socket, process_handle).await {
                     eprintln!("control error: {error:?}");
                 }
             });
         }
-        let (mut context, outputs) = CommandContext::new()?;
-        context.execute(":load_config")?;
-        let context = Arc::new(Mutex::new(context));
         {
             let context = context.clone();
             let server = server.clone();
@@ -388,16 +389,21 @@ impl Server {
     async fn handle_control(
         mut self,
         mut connection: Connection<zeromq::RouterSocket>,
+        process_handle: Arc<std::sync::Mutex<std::process::Child>>,
     ) -> Result<()> {
         loop {
             let message = JupyterMessage::read(&mut connection).await?;
             match message.message_type() {
                 "shutdown_request" => self.signal_shutdown().await,
                 "interrupt_request" => {
+                    let process_handle = process_handle.clone();
+                    tokio::task::spawn_blocking(move || {
+                        if let Err(error) = process_handle.lock().unwrap().kill() {
+                            eprintln!("Failed to restart subprocess: {}", error);
+                        }
+                    })
+                    .await?;
                     message.new_reply().send(&mut connection).await?;
-                    eprintln!(
-                        "Rust doesn't support interrupting execution. Perhaps restart kernel?"
-                    );
                 }
                 _ => {
                     eprintln!(
