@@ -83,6 +83,7 @@ impl Repl {
                 // Ignore failure
                 command_context.set_opt_level(&opt).ok();
             }
+            setup_ctrlc_handler(&command_context);
             Ok(command_context)
         };
         let command_context = Arc::new(BgInitMutex::new(initialize));
@@ -311,6 +312,7 @@ fn main() -> Result<()> {
         editor.load_history(&history_file).ok();
         opt_history_file = Some(history_file);
     }
+    let mut interrupted = false;
     loop {
         let prompt = format!("{}", PROMPT.yellow());
         let readline = if options.disable_readline {
@@ -320,10 +322,21 @@ fn main() -> Result<()> {
         };
         match readline {
             Ok(line) => {
+                interrupted = false;
                 editor.add_history_entry(line.clone());
                 repl.execute(&line)?;
             }
-            Err(ReadlineError::Interrupted) | Err(ReadlineError::Eof) => break,
+            Err(ReadlineError::Interrupted) => {
+                // If the user presses ctrl-c once, then perhaps they meant to
+                // interrupt a long-running task, but it finished just before
+                // they pressed it. However if they press it twice in a row,
+                // then they probably want to exit.
+                if interrupted {
+                    break;
+                }
+                interrupted = true;
+            }
+            Err(ReadlineError::Eof) => break,
             Err(err) => {
                 eprintln!("Error: {:?}", err);
                 break;
@@ -334,6 +347,16 @@ fn main() -> Result<()> {
         editor.save_history(&history_file).ok();
     }
     Ok(())
+}
+
+fn setup_ctrlc_handler(command_context: &CommandContext) {
+    let subprocess = command_context.process_handle();
+    // If we can't register a ctrl-c handler for some reason, then we just don't
+    // support catching ctrl-c. The user probably wouldn't want to see an error
+    // printed every time, so we ignore it.
+    let _ = ctrlc::set_handler(move || {
+        let _ = subprocess.lock().unwrap().kill();
+    });
 }
 
 fn parse_edit_mode(src: &str) -> Result<EditMode, &str> {
