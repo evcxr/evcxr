@@ -23,11 +23,13 @@ use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
 use ra_ap_ide_db::imports::insert_use::ImportGranularity;
 use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
+use ra_ap_ide_db::FxHashMap;
 use ra_ap_ide_db::SnippetCap;
 use ra_ap_paths::AbsPathBuf;
 use ra_ap_project_model::CargoConfig;
 use ra_ap_project_model::ProjectManifest;
 use ra_ap_project_model::ProjectWorkspace;
+use ra_ap_project_model::RustcSource;
 use ra_ap_syntax::ast::AstNode;
 use ra_ap_syntax::ast::{self};
 use ra_ap_vfs as ra_vfs;
@@ -191,8 +193,13 @@ impl RustAnalyzer {
 
     fn load_cargo_toml(&mut self, change: &mut ra_ide::Change) -> Result<()> {
         let manifest = ProjectManifest::from_manifest_file(self.cargo_toml_filename())?;
+        let sysroot = if self.with_sysroot {
+            Some(RustcSource::Discover)
+        } else {
+            None
+        };
         let config = CargoConfig {
-            no_sysroot: !self.with_sysroot,
+            sysroot,
             ..CargoConfig::default()
         };
         let workspace = ProjectWorkspace::load(manifest, &config, &|_| {})?;
@@ -253,11 +260,11 @@ impl RustAnalyzer {
                 .map(SourceRoot::new_local)
                 .collect(),
         );
-        change.set_crate_graph(
-            workspace.to_crate_graph(&mut |_, _| Ok(Vec::new()), &mut |path| {
-                self.vfs.file_id(&path.to_path_buf().into())
-            }),
-        );
+        change.set_crate_graph(workspace.to_crate_graph(
+            &mut |_, _| Ok(Vec::new()),
+            &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
+            &FxHashMap::default(),
+        ));
         Ok(())
     }
 
@@ -274,6 +281,7 @@ impl RustAnalyzer {
             enable_imports_on_the_fly: false,
             enable_self_on_the_fly: true,
             enable_private_editable: true,
+            prefer_no_std: false,
             snippets: vec![],
             insert_use: InsertUseConfig {
                 prefix_kind: ra_hir::PrefixKind::ByCrate,
