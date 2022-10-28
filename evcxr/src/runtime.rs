@@ -88,7 +88,7 @@ impl Runtime {
                 .get::<extern "C" fn(*mut c_void) -> *mut c_void>(fn_name.as_bytes())?;
             self.variable_store_ptr = user_fn(self.variable_store_ptr);
         }
-        println!("{}", EVCXR_EXECUTION_COMPLETE);
+        println!("{EVCXR_EXECUTION_COMPLETE}");
         self.shared_objects.push(shared_object);
         Ok(())
     }

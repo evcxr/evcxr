@@ -22,7 +22,7 @@ fn send_output<T: io::Write + Send + 'static>(
 ) {
     std::thread::spawn(move || {
         while let Ok(line) = channel.recv() {
-            if writeln!(output, "{}", line).is_err() {
+            if writeln!(output, "{line}").is_err() {
                 break;
             }
         }

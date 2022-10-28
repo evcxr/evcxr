@@ -27,11 +27,11 @@ use std::process::Command;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     if cfg!(target_os = "macos") {
-        format!("lib{}.dylib", crate_name)
+        format!("lib{crate_name}.dylib")
     } else if cfg!(target_os = "windows") {
-        format!("{}.dll", crate_name)
+        format!("{crate_name}.dll")
     } else {
-        format!("lib{}.so", crate_name)
+        format!("lib{crate_name}.so")
     }
 }
 
@@ -195,7 +195,7 @@ impl Module {
         let cargo_output = run_cargo(command, code_block)?;
         if config.time_passes {
             let output = String::from_utf8_lossy(&cargo_output.stderr);
-            eprintln!("{}", output);
+            eprintln!("{output}");
         }
         self.build_num += 1;
         let copied_so_file = self

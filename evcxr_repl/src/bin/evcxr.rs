@@ -55,13 +55,13 @@ fn send_output<T: io::Write + Send + 'static>(
             let to_print = if let Some(color) = color {
                 format!("{}\n", line.color(color))
             } else {
-                format!("{}\n", line)
+                format!("{line}\n")
             };
             if let Some(printer) = printer.as_mut() {
                 if printer.print(to_print).is_err() {
                     break;
                 }
-            } else if write!(fallback_output, "{}", to_print).is_err() {
+            } else if write!(fallback_output, "{to_print}").is_err() {
                 break;
             }
         }
@@ -100,7 +100,7 @@ impl Repl {
         let success = match execution_result {
             Ok(output) => {
                 if let Some(text) = output.get("text/plain") {
-                    println!("{}", text);
+                    println!("{text}");
                 }
                 if let Some(duration) = output.timing {
                     println!("{}", format!("Took {}ms", duration.as_millis()).blue());
@@ -119,14 +119,14 @@ impl Repl {
                 false
             }
             Err(err) => {
-                eprintln!("{}", format!("{}", err).bright_red());
+                eprintln!("{}", format!("{err}").bright_red());
                 false
             }
         };
 
         if self.ide_mode {
             let success_marker = if success { "\u{0091}" } else { "\u{0092}" };
-            print!("{}", success_marker);
+            print!("{success_marker}");
         }
         Ok(())
     }
@@ -166,7 +166,7 @@ impl Repl {
                             // for multi line source code, print the lines
                             if last_span_lines != &spanned_message.lines {
                                 for line in &spanned_message.lines {
-                                    println!("{}", line);
+                                    println!("{line}");
                                 }
                             }
                             last_span_lines = &spanned_message.lines;
@@ -189,10 +189,10 @@ impl Repl {
                 }
                 println!("{}", error.message().bright_red());
                 for help in error.help() {
-                    println!("{} {}", "help:".bold(), help);
+                    println!("{} {help}", "help:".bold());
                 }
                 if let Some(extra_hint) = error.evcxr_extra_hint() {
-                    println!("{}", extra_hint);
+                    println!("{extra_hint}");
                 }
             } else {
                 println!(
@@ -338,7 +338,7 @@ fn main() -> Result<()> {
             }
             Err(ReadlineError::Eof) => break,
             Err(err) => {
-                eprintln!("Error: {:?}", err);
+                eprintln!("Error: {err:?}");
                 break;
             }
         }

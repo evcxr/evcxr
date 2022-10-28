@@ -239,7 +239,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             let config_file = config_dir.join("init.evcxr");
             if config_file.exists() {
                 if !quiet {
-                    println!("Loading startup commands from {:?}", config_file);
+                    println!("Loading startup commands from {config_file:?}");
                 }
                 let contents = std::fs::read_to_string(config_file)?;
                 for line in contents.lines() {
@@ -251,7 +251,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             let prelude_file = config_dir.join("prelude.rs");
             if prelude_file.exists() {
                 if !quiet {
-                    println!("Executing prelude from {:?}", prelude_file);
+                    println!("Executing prelude from {prelude_file:?}");
                 }
                 let prelude = std::fs::read_to_string(prelude_file)?;
                 outputs.merge(self.execute(&prelude)?);
@@ -348,7 +348,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 |_ctx, state, _args| {
                     let debug_mode = !state.debug_mode();
                     state.set_debug_mode(debug_mode);
-                    text_output(format!("Internals debugging: {}", debug_mode))
+                    text_output(format!("Internals debugging: {debug_mode}"))
                 },
             ),
             AvailableCommand::new(

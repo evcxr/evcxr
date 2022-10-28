@@ -71,7 +71,7 @@ impl CompilationError {
             return None;
         }
         let mut builder =
-            Report::build(ReportKind::Error, file_name.clone(), 0).with_message(&error.message());
+            Report::build(ReportKind::Error, file_name.clone(), 0).with_message(error.message());
         let mut next_color = {
             let mut colors = ColorGenerator::new();
             move || {
@@ -582,7 +582,7 @@ impl fmt::Display for Error {
                 )?;
             }
             Error::Message(message) | Error::SubprocessTerminated(message) => {
-                write!(f, "{}", message)?
+                write!(f, "{message}")?
             }
         }
         Ok(())

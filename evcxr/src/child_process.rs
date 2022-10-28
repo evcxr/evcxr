@@ -138,7 +138,7 @@ impl ChildProcess {
 
     pub(crate) fn send(&mut self, command: &str) -> Result<(), Error> {
         use std::io::Write;
-        writeln!(self.stdin.as_mut().unwrap(), "{}", command)
+        writeln!(self.stdin.as_mut().unwrap(), "{command}")
             .map_err(|_| self.get_termination_error())?;
         self.stdin.as_mut().unwrap().flush()?;
         Ok(())
@@ -181,7 +181,7 @@ impl ChildProcess {
                     content, exit_status
                 )
             }
-            Err(wait_error) => format!("Subprocess didn't start: {}", wait_error),
+            Err(wait_error) => format!("Subprocess didn't start: {wait_error}"),
         })
     }
 }

@@ -242,7 +242,7 @@ impl EvalContext {
         fix_path();
 
         let current_exe = std::env::current_exe()?;
-        Self::with_subprocess_command(std::process::Command::new(&current_exe))
+        Self::with_subprocess_command(std::process::Command::new(current_exe))
     }
 
     #[cfg(windows)]
@@ -278,7 +278,7 @@ impl EvalContext {
             .unwrap()
             .join("testing_runtime");
         let (mut context, outputs) =
-            EvalContext::with_subprocess_command(std::process::Command::new(&testing_runtime_path))
+            EvalContext::with_subprocess_command(std::process::Command::new(testing_runtime_path))
                 .unwrap();
         let mut state = context.state();
         state.set_offline_mode(true);
@@ -445,7 +445,7 @@ impl EvalContext {
         if state.config.debug_mode {
             let mut s = code.code_string();
             s.insert_str(wrapped_offset, "<|>");
-            println!("=========\n{}\n==========", s);
+            println!("=========\n{s}\n==========");
         }
 
         self.analyzer.set_source(code.code_string())?;
@@ -1309,7 +1309,7 @@ impl ContextState {
         for var_name in self.variable_states.keys() {
             code.pack_variable(
                 var_name.clone(),
-                format!("evcxr_variable_store({});", var_name),
+                format!("evcxr_variable_store({var_name});"),
             );
         }
 
@@ -1453,14 +1453,14 @@ impl ContextState {
                     .generated("})) { ")
                     .generated("  Ok(_) => {}")
                     .generated("  Err(_) => {")
-                    .generated(format!("    println!(\"{}\");", PANIC_NOTIFICATION))
+                    .generated(format!("    println!(\"{PANIC_NOTIFICATION}\");"))
                     .generated("}}");
             } else {
                 code = code
                     .generated("if std::panic::catch_unwind(||{")
                     .add_all(user_code)
                     .generated("}).is_err() {")
-                    .generated(format!("    println!(\"{}\");", PANIC_NOTIFICATION))
+                    .generated(format!("    println!(\"{PANIC_NOTIFICATION}\");"))
                     .generated("}");
             }
         } else {
@@ -1482,8 +1482,8 @@ impl ContextState {
                     format!(
                         // Note, we use stringify instead of quoting ourselves since it results in
                         // better errors if the user forgets to close a double-quote in their code.
-                        "evcxr_variable_store.put_variable::<{}>(stringify!({}), {});",
-                        var_state.type_name, var_name, var_name
+                        "evcxr_variable_store.put_variable::<{}>(stringify!({var_name}), {var_name});",
+                        var_state.type_name
                     ),
                 );
             }
@@ -1495,8 +1495,8 @@ impl ContextState {
         let mut statements = CodeBlock::new().generated("{let mut vars_ok = true;");
         for (var_name, var_state) in &self.stored_variable_states {
             statements = statements.generated(format!(
-                "vars_ok &= evcxr_variable_store.check_variable::<{}>(stringify!({}));",
-                var_state.type_name, var_name
+                "vars_ok &= evcxr_variable_store.check_variable::<{}>(stringify!({var_name}));",
+                var_state.type_name
             ));
         }
         statements.generated("if !vars_ok {return evcxr_variable_store;}}")
@@ -1581,7 +1581,7 @@ impl ContextState {
                             // If that fails, we try debug format.
                             CodeBlock::new()
                                 .generated(SEND_TEXT_PLAIN_DEF)
-                                .generated(&format!(
+                                .generated(format!(
                                     "evcxr_send_text_plain(&format!(\"{}\",&(\n",
                                     self.config.output_format
                                 ))
@@ -1859,7 +1859,7 @@ mod tests {
         let source_file = SourceFile::parse(&final_code.code_string()).ok().unwrap();
         let mut attrs: Vec<String> = source_file
             .attrs()
-            .map(|attr| attr.syntax().text().to_string().replace(" ", ""))
+            .map(|attr| attr.syntax().text().to_string().replace(' ', ""))
             .collect();
         attrs.sort();
         assert_eq!(

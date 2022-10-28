@@ -82,7 +82,7 @@ impl RustAnalyzer {
         // files existence when determining the crate structure.
         let src_dir = root_directory.join("src");
         std::fs::create_dir_all(&src_dir)
-            .with_context(|| format!("Failed to create directory `{:?}`", src_dir))?;
+            .with_context(|| format!("Failed to create directory `{src_dir:?}`"))?;
         // Pre-allocate an ID for our main source file.
         let vfs_source_file: ra_vfs::VfsPath = source_file.clone().into();
         vfs.set_file_contents(vfs_source_file.clone(), Some(vec![]));
@@ -417,7 +417,7 @@ pub struct Completion {
 /// instead of `[i32, 5]`, we get `[i32, _]`.
 pub(crate) fn is_type_valid(type_name: &str) -> bool {
     use ra_ap_syntax::SyntaxKind;
-    let wrapped_source = format!("const _: {} = foo();", type_name);
+    let wrapped_source = format!("const _: {type_name} = foo();");
     let parsed = ast::SourceFile::parse(&wrapped_source);
     if !parsed.errors().is_empty() {
         return false;
@@ -436,7 +436,6 @@ mod test {
     use super::RustAnalyzer;
     use super::TypeName;
     use anyhow::Result;
-    use tempfile;
 
     impl TypeName {
         fn named(name: &str) -> TypeName {

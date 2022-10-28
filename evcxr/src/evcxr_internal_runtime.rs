@@ -41,7 +41,7 @@ impl VariableStore {
                     "The type of the variable {} was redefined, so was lost.",
                     name
                 );
-                println!("{}{}", VARIABLE_CHANGED_TYPE, name);
+                println!("{VARIABLE_CHANGED_TYPE}{name}");
                 return false;
             }
         }
@@ -58,7 +58,7 @@ impl VariableStore {
                     panic!("Variable changed type");
                 }
             }
-            None => panic!("Variable '{}' has gone missing", name),
+            None => panic!("Variable '{name}' has gone missing"),
         }
     }
 
@@ -75,7 +75,7 @@ impl VariableStore {
         {
             std::sync::Arc::clone(value)
         } else {
-            panic!("lazy_arc {} changed type", name);
+            panic!("lazy_arc {name} changed type");
         }
     }
 

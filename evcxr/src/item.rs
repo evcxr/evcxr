@@ -16,7 +16,7 @@ use ra_ap_syntax::ast;
 
 /// Returns the name of an item if it has one.
 pub(crate) fn item_name(item: &ast::Item) -> Option<String> {
-    item_ident(item).map(|ident| format!("{}", ident))
+    item_ident(item).map(|ident| format!("{ident}"))
 }
 
 /// Returns the ident of an item if it has one.
