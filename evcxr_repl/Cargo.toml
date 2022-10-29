@@ -1,6 +1,6 @@
 [package]
 name = "evcxr_repl"
-version = "0.14.0"
+version = "0.14.1"
 license = "Apache-2.0"
 description = "A REPL for Rust"
 repository = "https://github.com/google/evcxr"
@@ -12,7 +12,7 @@ edition = "2021"
 default = ["mimalloc"]
 
 [dependencies]
-evcxr = { version = "=0.14.0", path = "../evcxr" }
+evcxr = { version = "=0.14.1", path = "../evcxr" }
 rustyline = "10.0.0"
 colored = "2.0.0"
 once_cell = "1.5.2"
