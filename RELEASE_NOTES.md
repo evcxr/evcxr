@@ -1,3 +1,10 @@
+# Version 0.14.1 (unreleased)
+* Fixed thread starvation in Jupyter integration on systems with few CPUs.
+* Support interrupting execution in Jupyter notebook. Process gets terminated,
+  so variables are lost, but other state is preserved.
+* Support interrupting execution in REPL by pressing ctrl-c.
+* Updated rust-analyzer.
+
 # Version 0.14.0
 * `:dep` lines can now be commented out without breaking subsequent `:dep`
   lines. Thanks JohnScience!
