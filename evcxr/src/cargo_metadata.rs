@@ -132,13 +132,10 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::eval_context::Config;
-
-    use super::get_library_names;
-    use super::library_names_from_metadata;
     use anyhow::Result;
     use std::path::Path;
-    use tempfile;
 
     #[test]
     fn test_library_names_from_metadata() {
@@ -171,7 +168,7 @@ mod tests {
     }
 
     fn path_to_string(path: &Path) -> String {
-        path.to_string_lossy().replace("\\", "\\\\")
+        path.to_string_lossy().replace('\\', "\\\\")
     }
 
     #[test]
@@ -186,7 +183,7 @@ mod tests {
             &format!(r#"crate1 = {{ path = "{}" }}"#, path_to_string(&crate1)),
         )?;
         assert_eq!(
-            get_library_names(&Config::new(crate2.to_owned())).unwrap(),
+            get_library_names(&Config::new(crate2)).unwrap(),
             vec!["crate1".to_owned()]
         );
         Ok(())
@@ -208,7 +205,7 @@ mod tests {
         )?;
         // Make sure that the problematic feature "no_such_feature" is mentioned
         // somewhere in the error message.
-        assert!(get_library_names(&Config::new(crate2.to_owned()))
+        assert!(get_library_names(&Config::new(crate2))
             .unwrap_err()
             .to_string()
             .contains("no_such_feature"));

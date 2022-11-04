@@ -23,7 +23,6 @@ use std::io;
 use std::ops::Deref;
 use std::ops::DerefMut;
 use std::sync::Mutex;
-use tempfile;
 
 #[track_caller]
 fn eval_and_unwrap(ctxt: &mut CommandContext, code: &str) -> HashMap<String, String> {
@@ -211,7 +210,7 @@ fn missing_semicolon_on_let_stmt() {
     eval_and_unwrap(&mut e, "mod foo {pub mod bar { pub struct Baz {} }}");
     match e.execute("let v1 = foo::bar::Baz {}") {
         Err(Error::CompilationErrors(e)) => {
-            assert!(e.first().unwrap().message().contains(";"));
+            assert!(e.first().unwrap().message().contains(';'));
         }
         x => {
             panic!("Unexpected result: {:?}", x);
@@ -394,7 +393,7 @@ impl TmpCrate {
         format!(
             ":dep {} = {{ path = \"{}\"{}{} }}",
             self.name,
-            self.tempdir.path().to_string_lossy().replace("\\", "\\\\"),
+            self.tempdir.path().to_string_lossy().replace('\\', "\\\\"),
             if extra_options.is_empty() { "" } else { ", " },
             extra_options
         )

@@ -374,7 +374,7 @@ static MIMALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[cfg(test)]
 mod tests {
-    use super::character_column_to_grapheme_number;
+    use super::*;
 
     #[test]
     fn test_character_column_to_grapheme_number() {
