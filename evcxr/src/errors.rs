@@ -198,17 +198,14 @@ impl CompilationError {
             json = user_error_json;
         }
 
-        let message = if let Some(message) = json["message"].as_str() {
-            if message.starts_with("aborting due to")
-                || message.starts_with("For more information about")
-                || message.starts_with("Some errors occurred")
-            {
-                return None;
-            }
-            sanitize_message(message)
-        } else {
+        let message = json["message"].as_str()?;
+        if message.starts_with("aborting due to")
+            || message.starts_with("For more information about")
+            || message.starts_with("Some errors occurred")
+        {
             return None;
-        };
+        }
+        let message = sanitize_message(message);
 
         Some(CompilationError {
             spanned_messages: build_spanned_messages(&json, code_block),

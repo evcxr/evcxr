@@ -593,9 +593,7 @@ fn process_dep_command(
     args: &Option<String>,
 ) -> Result<EvalOutputs, Error> {
     use regex::Regex;
-    let args = if let Some(v) = args {
-        v
-    } else {
+    let Some(args) = args else {
         bail!(":dep requires arguments")
     };
     static DEP_RE: OnceCell<Regex> = OnceCell::new();

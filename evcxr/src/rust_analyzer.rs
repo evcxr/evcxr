@@ -145,9 +145,7 @@ impl RustAnalyzer {
                     .map(|n| n.text() == function_name)
                     .unwrap_or(false)
                 {
-                    let body = if let Some(b) = function.body() {
-                        b
-                    } else {
+                    let Some(body) = function.body() else {
                         continue;
                     };
                     let module = sema
