@@ -13,6 +13,8 @@ env:
 
 jobs:
   ci-linux:
+    # Avoid running on people's forks, especially the scheduled runs.
+    if: github.repository == 'google/evcxr'
     runs-on: ubuntu-latest
     strategy:
       matrix:
