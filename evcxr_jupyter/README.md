@@ -16,6 +16,7 @@ You can either download a pre-built binary from the
 archive and put it somewhere on your path, or build from source by running:
 ```sh
 cargo install evcxr_jupyter
+evcxr_jupyter --install
 ```
 
 If your operating system is an older version, or has a different libc than what
