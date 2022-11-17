@@ -18,6 +18,13 @@ archive and put it somewhere on your path, or build from source by running:
 cargo install evcxr_jupyter
 ```
 
+Whether using a prebuilt binary or one you built yourself, you'll need to run
+the following command in order to register the kernel with Jupyter.
+
+```sh
+evcxr_jupyter --install
+```
+
 If your operating system is an older version, or has a different libc than what
 the pre-built binaries were compiled with, then you'll need to build from source
 using the command above.
