@@ -42,6 +42,15 @@ package `unicode-xid`, but refer to it locally as `unicode_xid`, you could do th
 use unicode_xid;
 ```
 
+You can use the local work-in-progress crate like this:
+
+```rust
+>> :dep my_crate = { path = "." }
+>> use my_crate::*;
+```
+
+It will even automatically update when you save your files!
+
 There are many other options that can be specified. See Cargo's [official dependency
 documentation](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html) for details.
 
