@@ -120,8 +120,5 @@ fn wrong_state<T>(st: &BgInitState<T>, wanted: &str) -> ! {
         BgInitState::Pending(_) => "Pending",
         BgInitState::Failed => "Failed",
     };
-    panic!(
-        "bug: BgInitState should be {:?}, but is {:?}",
-        wanted, actual
-    );
+    panic!("bug: BgInitState should be {wanted:?}, but is {actual:?}",);
 }

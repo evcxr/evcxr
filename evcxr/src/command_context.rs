@@ -111,12 +111,11 @@ impl CommandContext {
 =============================================================================
 Panic detected. Here's some useful information if you're filing a bug report.
 <CODE>
-{}
+{to_run}
 </CODE>
 <STATE>
-{:?}
-</STATE>"#,
-                to_run, state
+{state:?}
+</STATE>"#
             );
         });
         let result = self.execute_with_callbacks_internal(to_run, callbacks);

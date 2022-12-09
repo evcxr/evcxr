@@ -176,10 +176,7 @@ impl ChildProcess {
                         );
                     }
                 }
-                format!(
-                    "{}Subprocess terminated with status: {}",
-                    content, exit_status
-                )
+                format!("{content}Subprocess terminated with status: {exit_status}",)
             }
             Err(wait_error) => format!("Subprocess didn't start: {wait_error}"),
         })

@@ -58,10 +58,7 @@ impl Runtime {
         #[allow(unknown_lints, clippy::significant_drop_in_scrutinee)]
         for line in stdin.lock().lines() {
             if let Err(error) = self.handle_line(&line) {
-                eprintln!(
-                    "While processing instruction `{:?}`, got error: {:?}",
-                    line, error
-                );
+                eprintln!("While processing instruction `{line:?}`, got error: {error:?}",);
                 std::process::exit(99);
             }
         }

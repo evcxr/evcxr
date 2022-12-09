@@ -1233,10 +1233,9 @@ impl ContextState {
             }
             "E0597" => {
                 format!(
-                    "The variable `{}` contains a reference with a non-static lifetime so\n\
+                    "The variable `{variable_name}` contains a reference with a non-static lifetime so\n\
                     can't be persisted. You can prevent this error by making sure that the\n\
-                    variable goes out of scope - i.e. wrapping the code in {{}}.",
-                    variable_name
+                    variable goes out of scope - i.e. wrapping the code in {{}}."
                 )
             }
             _ => {

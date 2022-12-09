@@ -57,9 +57,8 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
     path = "lib.rs"
 
     [dependencies]
-    {} = {}
-    "#,
-            dep, dep_config
+    {dep} = {dep_config}
+    "#
         ),
     )?;
     let mut cmd = config.cargo_command("metadata");
@@ -153,14 +152,13 @@ mod tests {
             format!(
                 r#"
             [package]
-            name = "{}"
+            name = "{name}"
             version = "0.0.1"
             edition = "2021"
 
             [dependencies]
-            {}
-        "#,
-                name, deps
+            {deps}
+        "#
             ),
         )?;
         std::fs::write(src_dir.join("lib.rs"), "")?;
