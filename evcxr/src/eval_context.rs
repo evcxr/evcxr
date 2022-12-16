@@ -215,7 +215,7 @@ const SEND_TEXT_PLAIN_DEF: &str = stringify!(
         let mut buf = String::new();
         // The position after the last "::" in buf - upon a successful match, only what's
         // after that should be used.
-        let mut pos_after_last_double_colon : Option<usize> = None;
+        let mut pos_after_last_double_colon: Option<usize> = None;
 
         for c in t.chars() {
             let mut match_ended = false;
@@ -265,7 +265,7 @@ const SEND_TEXT_PLAIN_DEF: &str = stringify!(
         }
         r
     }
-    
+
     fn evcxr_get_type_name<T>(_: &T) -> String {
         evcxr_shorten_type(std::any::type_name::<T>())
         //std::any::type_name::<T>().to_string()
