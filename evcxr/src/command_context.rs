@@ -437,6 +437,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 },
             ),
             AvailableCommand::new(
+                ":t",
+                "Toggle printing of types",
+                |_ctx, state, _args| {
+                    state.set_display_type(!state.display_type());
+                    text_output(format!("Types: {}", state.display_type()))
+                },
+            ),
+            AvailableCommand::new(
                 ":efmt",
                 "Set the formatter for errors returned by ?",
                 |_ctx, state, args| {

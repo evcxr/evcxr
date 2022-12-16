@@ -688,6 +688,29 @@ fn print_then_assign_variable() {
 }
 
 #[test]
+fn display_type() {
+    let mut e = new_context();
+    assert_eq!(e.execute(":t").unwrap().get("text/plain").unwrap().trim(), "Types: true");
+    assert_eq!(eval!(e, 42), text_plain(": i32 = 42"));
+    assert_eq!(eval!(e, Some("hello".to_string())), text_plain(": Option<String> = Some(\"hello\")"));
+    assert_eq!(e.execute(":t").unwrap().get("text/plain").unwrap().trim(), "Types: false");
+    assert_eq!(eval!(e, 42), text_plain("42"));
+}
+
+#[test]
+fn shorten_type_name() {
+    // This is a way to test the evcxr_shorten_type() function, evaluated in the child
+    let mut e = new_context();
+    e.execute(":fmt {}").unwrap();
+    assert_eq!(eval!(e, evcxr_shorten_type("alloc::string::String")), text_plain("String"));
+    assert_eq!(eval!(e, evcxr_shorten_type("core::option::Option<alloc::string::String>")), text_plain("Option<String>"));
+    assert_eq!(eval!(e, evcxr_shorten_type("c::o::O::<a::s::S>")), text_plain("c::o::O::<S>"));
+    assert_eq!(eval!(e, evcxr_shorten_type("c::o::O<a::s::S::>")), text_plain("O<a::s::S::>"));
+    assert_eq!(eval!(e, evcxr_shorten_type("core::3x")), text_plain("core::3x"));
+    assert_eq!(eval!(e, evcxr_shorten_type("i32")), text_plain("i32"));
+}
+
+#[test]
 fn question_mark_operator() {
     let mut e = new_context();
     // Make sure question mark works without variables.
