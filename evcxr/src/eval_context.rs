@@ -71,6 +71,7 @@ pub(crate) struct Config {
     // attempt to determine if the type of the variable is copy.
     preserve_vars_on_panic: bool,
     output_format: String,
+    display_type: bool,
     /// Whether to try to display the final expression. Currently this needs to
     /// be turned off when doing tab completion or cargo check, but otherwise it
     /// should always be on.
@@ -113,6 +114,7 @@ impl Config {
             debug_mode: false,
             preserve_vars_on_panic: true,
             output_format: "{:?}".to_owned(),
+            display_type: false,
             display_final_expression: true,
             expand_use_statements: true,
             opt_level: "2".to_owned(),
@@ -202,6 +204,71 @@ const SEND_TEXT_PLAIN_DEF: &str = stringify!(
             eprintln!("Failed to send content to parent: {:?}", error);
             std::process::exit(1);
         }
+    }
+
+    /// Shorten a type name. Convert "core::option::Option::<alloc::string::String>" into "Option<String>".
+    pub fn evcxr_shorten_type(t: &str) -> String {
+        // This could have been done easily with regex, but we must only depend on stdlib.
+        let mut r = String::new();
+        // buf holds the chars that may be a part of a long identifier.
+        // This is a string like: "ID1::ID2:"
+        let mut buf = String::new();
+        // The position after the last "::" in buf - upon a successful match, only what's
+        // after that should be used.
+        let mut pos_after_last_double_colon : Option<usize> = None;
+
+        for c in t.chars() {
+            let mut match_ended = false;
+            if buf.len() == 0 || pos_after_last_double_colon == Some(buf.len()) {
+                // Expecting the start of an identified
+                if c.is_alphabetic() || c == '_' {
+                    buf.push(c);
+                } else {
+                    match_ended = true;
+                }
+            } else if buf.chars().last().unwrap() == ':' {
+                // After a ':', we must have another ':'.
+                if c == ':' {
+                    buf.push(c);
+                    pos_after_last_double_colon = Some(buf.len());
+                } else {
+                    match_ended = true;
+                }
+            } else if c == ':' {
+                if buf.len() != 0 {
+                    buf.push(c);
+                } else {
+                    match_ended = true;
+                }
+            } else {
+                if c.is_alphanumeric() || c == '_' {
+                    buf.push(c);
+                } else {
+                    match_ended = true;
+                }
+            }
+            if match_ended {
+                if pos_after_last_double_colon.is_some() && buf.chars().last() != Some(':') {
+                    r.push_str(&buf[pos_after_last_double_colon.unwrap()..]);
+                } else {
+                    r.push_str(&buf);
+                }
+                buf.clear();
+                pos_after_last_double_colon = None;
+                r.push(c);
+            }
+        }
+        if pos_after_last_double_colon.is_some() && buf.chars().last() != Some(':') {
+            r.push_str(&buf[pos_after_last_double_colon.unwrap()..]);
+        } else {
+            r.push_str(&buf);
+        }
+        r
+    }
+    
+    fn evcxr_get_type_name<T>(_: &T) -> String {
+        evcxr_shorten_type(std::any::type_name::<T>())
+        //std::any::type_name::<T>().to_string()
     }
 );
 
@@ -1143,6 +1210,14 @@ impl ContextState {
         self.config.output_format = output_format;
     }
 
+    pub fn display_type(&self) -> bool {
+        self.config.display_type
+    }
+
+    pub fn set_display_type(&mut self, display_type: bool) {
+        self.config.display_type = display_type;
+    }
+
     pub fn set_toolchain(&mut self, value: &str) {
         self.config.toolchain = value.to_owned();
     }
@@ -1578,15 +1653,26 @@ impl ContextState {
                                 .generated(").evcxr_display();")
                                 .code_string(),
                             // If that fails, we try debug format.
-                            CodeBlock::new()
+                            if self.config.display_type {
+                                CodeBlock::new()
+                                .generated(SEND_TEXT_PLAIN_DEF)
+                                .generated("{ let r = &(")
+                                .with_segment(segment)
+                                .generated(format!(
+                                    "); evcxr_send_text_plain(&format!(\": {{}} = {}\", evcxr_get_type_name(r), r)); }};",
+                                    self.config.output_format
+                                ))
+                            } else {
+                                CodeBlock::new()
                                 .generated(SEND_TEXT_PLAIN_DEF)
                                 .generated(format!(
                                     "evcxr_send_text_plain(&format!(\"{}\",&(\n",
                                     self.config.output_format
                                 ))
                                 .with_segment(segment)
-                                .generated(")));"),
-                        );
+                                .generated(")));")
+                                },
+                            );
                     } else {
                         code_out = code_out
                             .generated("let _ = ")

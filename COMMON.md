@@ -182,6 +182,7 @@ Here is a complete list of the configuration options you can set to customize yo
 
 * `:opt [level]`      Toggle/set optimization level
 * `:fmt [format]`     Set output formatter (default: `{:?}`). 
+* `:t`                Toggle printing of the type of the output
 * `:efmt [format]`    Set the formatter for errors returned by `?`
 * `:sccache [0|1]`    Set whether to use sccache.
 * `:linker [linker]`  Set/print linker. Supported: `system`, `lld`, `mold`
