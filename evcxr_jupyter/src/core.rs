@@ -47,7 +47,17 @@ struct ShutdownReceiver {
 
 impl Server {
     pub(crate) fn run(config: &control_file::Control) -> Result<()> {
-        let runtime = tokio::runtime::Builder::new_current_thread()
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            // We only technically need 1 thread. However we've observed that
+            // when using vscode's jupyter extension, we can get requests on the
+            // shell socket before we have any subscribers on iopub. The iopub
+            // subscription then completes, but the execution_state="idle"
+            // message(s) have already been sent to a channel that at the time
+            // had no subscriptions. The vscode extension then waits
+            // indefinitely for an execution_state="idle" message that will
+            // never come. Having multiple threads at least reduces the chances
+            // of this happening.
+            .worker_threads(4)
             .enable_all()
             .build()
             .unwrap();
