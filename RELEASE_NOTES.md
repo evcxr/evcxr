@@ -1,4 +1,4 @@
-# Version 0.14.2 (unreleased)
+# Version 0.14.2
 * Fixed jupyter kernel running from vscode. Thanks TethysSvensson for bisecting
   the cause.
 * Updated rust-analyzer
