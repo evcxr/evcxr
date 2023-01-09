@@ -416,6 +416,13 @@ impl Server {
         loop {
             let message = JupyterMessage::read(&mut connection).await?;
             match message.message_type() {
+                "kernel_info_request" => {
+                    message
+                        .new_reply()
+                        .with_content(kernel_info())
+                        .send(&mut connection)
+                        .await?
+                }
                 "shutdown_request" => self.signal_shutdown().await,
                 "interrupt_request" => {
                     let process_handle = process_handle.clone();
