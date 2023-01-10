@@ -691,7 +691,11 @@ fn print_then_assign_variable() {
 fn display_type() {
     let mut e = new_context();
     assert_eq!(
-        e.execute(":t").unwrap().get("text/plain").unwrap().trim(),
+        e.execute(":types")
+            .unwrap()
+            .get("text/plain")
+            .unwrap()
+            .trim(),
         "Types: true"
     );
     assert_eq!(eval!(e, 42), text_plain(": i32 = 42"));
@@ -700,7 +704,11 @@ fn display_type() {
         text_plain(": Option<String> = Some(\"hello\")")
     );
     assert_eq!(
-        e.execute(":t").unwrap().get("text/plain").unwrap().trim(),
+        e.execute(":types")
+            .unwrap()
+            .get("text/plain")
+            .unwrap()
+            .trim(),
         "Types: false"
     );
     assert_eq!(eval!(e, 42), text_plain("42"));
@@ -711,30 +719,23 @@ fn shorten_type_name() {
     // This is a way to test the evcxr_shorten_type() function, evaluated in the child
     let mut e = new_context();
     e.execute(":fmt {}").unwrap();
+    // We need to enable types, so evcxr_shorten_type() will be defined.
+    e.execute(":types").unwrap();
     assert_eq!(
         eval!(e, evcxr_shorten_type("alloc::string::String")),
-        text_plain("String")
+        text_plain(": String = String")
     );
     assert_eq!(
         eval!(
             e,
             evcxr_shorten_type("core::option::Option<alloc::string::String>")
         ),
-        text_plain("Option<String>")
+        text_plain(": String = Option<String>")
     );
     assert_eq!(
-        eval!(e, evcxr_shorten_type("c::o::O::<a::s::S>")),
-        text_plain("c::o::O::<S>")
+        eval!(e, evcxr_shorten_type("i32")),
+        text_plain(": String = i32")
     );
-    assert_eq!(
-        eval!(e, evcxr_shorten_type("c::o::O<a::s::S::>")),
-        text_plain("O<a::s::S::>")
-    );
-    assert_eq!(
-        eval!(e, evcxr_shorten_type("core::3x")),
-        text_plain("core::3x")
-    );
-    assert_eq!(eval!(e, evcxr_shorten_type("i32")), text_plain("i32"));
 }
 
 #[test]
