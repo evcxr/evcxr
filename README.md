@@ -23,6 +23,13 @@ To see what it can do, it's probably best to start with a [tour of the Jupyter
 kernel](evcxr_jupyter/samples/evcxr_jupyter_tour.ipynb). Github should allow you
 to preview this, or you can load it from Jupyter Notebook and run it yourself.
 
+## License
+
+This software is distributed under the terms of both the MIT license and the
+Apache License (Version 2.0).
+
+See LICENSE for details.
+
 ## Disclaimer
 
 This is not an officially supported Google product. It's released by Google only

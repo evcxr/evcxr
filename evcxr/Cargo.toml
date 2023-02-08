@@ -1,7 +1,7 @@
 [package]
 name = "evcxr"
 version = "0.14.2"
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
 description = "An Evaluation Context for Rust"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"

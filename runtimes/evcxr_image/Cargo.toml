@@ -1,7 +1,7 @@
 [package]
 name = "evcxr_image"
 version = "1.1.0"
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
 description = "Displays images from the image crate in Evcxr Jupyter"
 repository = "https://github.com/google/evcxr"
 readme = "README.md"
