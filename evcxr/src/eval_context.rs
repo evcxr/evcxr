@@ -989,13 +989,18 @@ impl EvalOutputs {
         self.content_by_mime_type.get(mime_type).map(String::as_str)
     }
 
-    pub fn merge(&mut self, other: EvalOutputs) {
+    pub fn merge(&mut self, mut other: EvalOutputs) {
         for (mime_type, content) in other.content_by_mime_type {
             self.content_by_mime_type
                 .entry(mime_type)
                 .or_default()
                 .push_str(&content);
         }
+        self.timing = match (self.timing.take(), other.timing) {
+            (Some(t1), Some(t2)) => Some(t1 + t2),
+            (t1, t2) => t1.or(t2),
+        };
+        self.phases.append(&mut other.phases);
     }
 }
 
