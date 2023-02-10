@@ -14,11 +14,15 @@ use crate::eval_context::ContextState;
 use once_cell::sync::OnceCell;
 use regex::Regex;
 use std::fs;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
+
+use std::thread;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     if cfg!(target_os = "macos") {
@@ -268,18 +272,19 @@ overflow-checks = true
     }
 }
 fn tee(mut stream: impl Read) -> Result<String, Error> {
+    let mut buf_stream = BufReader::new(&mut stream);
     let mut out: String = String::new();
-    let mut buff: [u8; 1024] = [0; 1024];
+    let mut buff = String::new();
     // I dont like infinite loops
     loop {
-        let bytes_read = stream.read(&mut buff)?;
+        let bytes_read = buf_stream.read_line(&mut buff)?;
         if bytes_read == 0 {
             return Ok(out);
         }
-        let partial_out = std::str::from_utf8(&buff)?;
         //TODO: maybe pass a callback here
-        print!("{partial_out}");
-        out.push_str(partial_out);
+        print!("{}", buff);
+        out.push_str(&buff);
+        buff.clear();
     }
 }
 
@@ -297,17 +302,14 @@ fn run_cargo(
     };
     let child_out = child_process.stdout.take().unwrap();
     let child_err = child_process.stderr.take().unwrap();
-    let out = match tee(child_out) {
-        Ok(out) => out,
-        Err(err) => bail!("oouch : {}", err),
-    };
-    // TODO: both streams should be processed concurrently.
-    let err = match tee(child_err) {
-        Ok(out) => out,
-        Err(err) => bail!("oouch 2 :{}", err),
-    };
-    child_process.wait()?;
+    let out_handle = thread::spawn(|| tee(child_out));
+    let err_handle = thread::spawn(|| tee(child_err));
+    //TODO: might have to change err handling.
+    let err = err_handle.join().unwrap()?;
+    let out = out_handle.join().unwrap()?;
     println!("out is : {out} \n err is : {err}");
+    child_process.wait()?;
+
     let cargo_output = match command.output() {
         Ok(out) => out,
         Err(err) => bail!("Error running 'cargo rustc': {}", err),
