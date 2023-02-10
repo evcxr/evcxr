@@ -301,12 +301,12 @@ fn run_cargo(
         Ok(out) => out,
         Err(err) => bail!("oouch : {}", err),
     };
-
+    // TODO: both streams should be processed concurrently.
     let err = match tee(child_err) {
         Ok(out) => out,
         Err(err) => bail!("oouch 2 :{}", err),
     };
-
+    child_process.wait()?;
     println!("out is : {out} \n err is : {err}");
     let cargo_output = match command.output() {
         Ok(out) => out,
