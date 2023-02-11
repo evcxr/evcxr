@@ -20,6 +20,7 @@ use std::io::Read;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
+use std::process::Output;
 use std::process::Stdio;
 
 use std::thread;
@@ -271,7 +272,7 @@ overflow-checks = true
         )
     }
 }
-fn tee(mut stream: impl Read) -> Result<String, Error> {
+fn tee(mut stream: impl Read, callback: fn(partial_out: &String)) -> Result<String, Error> {
     let mut buf_stream = BufReader::new(&mut stream);
     let mut out: String = String::new();
     let mut buff = String::new();
@@ -281,11 +282,17 @@ fn tee(mut stream: impl Read) -> Result<String, Error> {
         if bytes_read == 0 {
             return Ok(out);
         }
-        //TODO: maybe pass a callback here
-        print!("{}", buff);
+        //TODO: maybe pass a callback here.
+        //Is state variable needed for the callback, incase the callback needs to buffer some info?
+        callback(&buff);
         out.push_str(&buff);
         buff.clear();
     }
+}
+
+// TODO: remove this
+fn callback(buff: &String) {
+    print!("{}", buff);
 }
 
 fn run_cargo(
@@ -302,22 +309,24 @@ fn run_cargo(
     };
     let child_out = child_process.stdout.take().unwrap();
     let child_err = child_process.stderr.take().unwrap();
-    let out_handle = thread::spawn(|| tee(child_out));
-    let err_handle = thread::spawn(|| tee(child_err));
+    let out_handle = thread::spawn(|| tee(child_out, |_: &String| {}));
+    let err_handle = thread::spawn(|| tee(child_err, callback));
     //TODO: might have to change err handling.
     let err = err_handle.join().unwrap()?;
     let out = out_handle.join().unwrap()?;
-    println!("out is : {out} \n err is : {err}");
-    child_process.wait()?;
 
-    let cargo_output = match command.output() {
+    let exit_status = match child_process.wait() {
         Ok(out) => out,
         Err(err) => bail!("Error running 'cargo rustc': {}", err),
     };
-    if cargo_output.status.success() {
-        Ok(cargo_output)
+    if exit_status.success() {
+        Ok(Output {
+            status: exit_status,
+            stdout: out.into(),
+            stderr: err.into(),
+        })
     } else {
-        let (errors, non_json_error) = errors_from_cargo_output(&cargo_output, code_block);
+        let (errors, non_json_error) = errors_from_cargo_output_string(&out, &err, code_block);
         if errors.is_empty() {
             if let Some(error) = non_json_error {
                 bail!(Error::Message(error));
@@ -325,8 +334,7 @@ fn run_cargo(
                 bail!(Error::Message(format!(
                     "Compilation failed, but no parsable errors were found. STDERR:\n\
                      {}\nSTDOUT:{}\n",
-                    String::from_utf8_lossy(&cargo_output.stderr),
-                    String::from_utf8_lossy(&cargo_output.stdout)
+                    err, out
                 )));
             }
         } else {
@@ -339,15 +347,22 @@ fn errors_from_cargo_output(
     cargo_output: &std::process::Output,
     code_block: &CodeBlock,
 ) -> (Vec<CompilationError>, Option<String>) {
+    let stderr: String = String::from_utf8_lossy(&cargo_output.stderr).into();
+    let stdout: String = String::from_utf8_lossy(&cargo_output.stdout).into();
+    errors_from_cargo_output_string(&stdout, &stderr, code_block)
+}
+
+fn errors_from_cargo_output_string(
+    stdout: &str,
+    stderr: &str,
+    code_block: &CodeBlock,
+) -> (Vec<CompilationError>, Option<String>) {
     // Our compiler errors should all be in JSON format, but for errors from
     // Cargo errors, we need to add explicit matching for those errors that we
     // expect we might see.
     static KNOWN_NON_JSON_ERRORS: OnceCell<Regex> = OnceCell::new();
     let known_non_json_errors = KNOWN_NON_JSON_ERRORS
         .get_or_init(|| Regex::new("(error: no matching package named)").unwrap());
-
-    let stderr = String::from_utf8_lossy(&cargo_output.stderr);
-    let stdout = String::from_utf8_lossy(&cargo_output.stdout);
     let mut non_json_error = None;
     let errors = stderr
         .lines()
