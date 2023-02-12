@@ -22,7 +22,6 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::Output;
 use std::process::Stdio;
-
 use std::thread;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
@@ -272,7 +271,8 @@ overflow-checks = true
         )
     }
 }
-fn tee(mut stream: impl Read, callback: fn(partial_out: &String)) -> Result<String, Error> {
+
+fn tee(mut stream: impl Read, callback: impl Fn(&str)) -> Result<String, Error> {
     let mut buf_stream = BufReader::new(&mut stream);
     let mut out: String = String::new();
     let mut buff = String::new();
@@ -282,17 +282,22 @@ fn tee(mut stream: impl Read, callback: fn(partial_out: &String)) -> Result<Stri
         if bytes_read == 0 {
             return Ok(out);
         }
-        //TODO: maybe pass a callback here.
-        //Is state variable needed for the callback, incase the callback needs to buffer some info?
+        //TODO:Is state variable needed for the callback, incase the callback needs to buffer some info?
         callback(&buff);
         out.push_str(&buff);
         buff.clear();
     }
 }
 
-// TODO: remove this
-fn callback(buff: &String) {
-    print!("{}", buff);
+fn get_callback(code_block: &CodeBlock) -> impl Fn(&str) {
+    //Idea is to add some check on the code_block to decide if additional logging is necessary
+    if let Some(_first_segement) = code_block.segments.get(0) {
+        move |s: &str| {
+            println!("{s}");
+        }
+    } else {
+        move |_: &str| {}
+    }
 }
 
 fn run_cargo(
@@ -309,7 +314,9 @@ fn run_cargo(
     };
     let child_out = child_process.stdout.take().unwrap();
     let child_err = child_process.stderr.take().unwrap();
-    let out_handle = thread::spawn(|| tee(child_out, |_: &String| {}));
+    // adding `callback` as a parameter of the function, makes the signature look complex.
+    let callback = get_callback(code_block);
+    let out_handle = thread::spawn(|| tee(child_out, |_: &str| {}));
     let err_handle = thread::spawn(|| tee(child_err, callback));
     //TODO: might have to change err handling.
     let err = err_handle.join().unwrap()?;
@@ -363,6 +370,7 @@ fn errors_from_cargo_output_string(
     static KNOWN_NON_JSON_ERRORS: OnceCell<Regex> = OnceCell::new();
     let known_non_json_errors = KNOWN_NON_JSON_ERRORS
         .get_or_init(|| Regex::new("(error: no matching package named)").unwrap());
+
     let mut non_json_error = None;
     let errors = stderr
         .lines()
