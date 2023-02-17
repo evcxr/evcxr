@@ -666,6 +666,7 @@ impl EvalContext {
 
     pub(crate) fn write_cargo_toml(&self, state: &ContextState) -> Result<()> {
         self.module.write_cargo_toml(state)?;
+        self.module.write_config_toml(state)?;
         Ok(())
     }
 
@@ -1137,7 +1138,7 @@ impl ContextState {
         self.config.preserve_vars_on_panic
     }
 
-    pub fn offline_mode(&mut self) -> bool {
+    pub fn offline_mode(&self) -> bool {
         self.config.offline_mode
     }
 
