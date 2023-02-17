@@ -29,8 +29,3 @@ This software is distributed under the terms of both the MIT license and the
 Apache License (Version 2.0).
 
 See LICENSE for details.
-
-## Disclaimer
-
-This is not an officially supported Google product. It's released by Google only
-because the (original) author happens to work there.
