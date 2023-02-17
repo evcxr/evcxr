@@ -134,6 +134,17 @@ impl Module {
             &self.get_cargo_toml_contents(state),
         )
     }
+    
+    // Writes .cargo/config.toml. Should be called before compile.
+    pub(crate) fn write_config_toml(&self, state: &ContextState) -> Result<(), Error> {
+        let dot_config_dir = self.crate_dir().join(".cargo");
+        fs::create_dir_all(dot_config_dir.as_path())?;
+        write_file(
+           dot_config_dir.as_path(),
+            "config.toml",
+            &self.get_config_toml_contents(state),
+        )
+    }
 
     pub(crate) fn check(
         &mut self,
@@ -264,8 +275,18 @@ overflow-checks = true
             crate_imports
         )
     }
-}
 
+    // Pass offline mode to cargo through .cargo/config.toml
+    fn get_config_toml_contents(&self, state: &ContextState) -> String {
+        format!(
+            r#"
+[net]
+offline = {}
+"#,
+            state.offline_mode()
+        )
+    }
+}
 fn run_cargo(
     mut command: std::process::Command,
     code_block: &CodeBlock,
