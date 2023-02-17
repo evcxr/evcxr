@@ -12,7 +12,7 @@ if ! git diff-index --quiet HEAD --; then
   echo "Please commit all changes first" >&2
   exit 1
 fi
-MIN_RUST_VER=$(grep MSRV .github/workflows/ci.yml | awk '{print $2}')
+MIN_RUST_VER=$(grep ^rust-version evcxr/Cargo.toml | cut -d'"' -f2)
 if [ -z "$MIN_RUST_VER" ]; then
   echo "Failed to determine minimum rust version" >&2
   exit 1

@@ -16,12 +16,13 @@ really to provide functionality to evcxr\_jupyter and evcxr\_repl. If you'd like
 to try using this crate for something else, drop me an email, or file an issue
 on the repository and we can figure out your use case.
 
-## MSRV
+## MSRV (Minimum supported Rust version)
 
-See .github/workflows/ci.yml for the current minimum supported rust version.
-Generally rare that we support much older versions than the latest stable, since
-- mostly because our upstream dependencies make use of new rust features pretty
-quickly after they stabilize.
+Should work with the latest stable release. May sometimes work with one or two
+older version. See evcxr/Cargo.toml for the current minimum supported rust
+version. If you're stuck on an older version of rustc, your best bet is either
+to use a precompiled binary or use an older version of Evcxr. The release notes
+might give clues as to when MSRV bumps occurred.
 
 ## How it works
 
