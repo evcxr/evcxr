@@ -1,6 +1,6 @@
 # Evcxr Jupyter Kernel
 
-[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/google/evcxr/main?filepath=evcxr_jupyter%2Fsamples%2Fevcxr_jupyter_tour.ipynb)
+[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/evcxr/evcxr/main?filepath=evcxr_jupyter%2Fsamples%2Fevcxr_jupyter_tour.ipynb)
 
 [![Latest Version](https://img.shields.io/crates/v/evcxr_jupyter.svg)](https://crates.io/crates/evcxr_jupyter)
 
@@ -12,7 +12,7 @@ If you don't already have Rust installed, [follow these
 instructions](https://www.rust-lang.org/tools/install).
 
 You can either download a pre-built binary from the
-[Releases](https://github.com/google/evcxr/releases) page, extract it from the
+[Releases](https://github.com/evcxr/evcxr/releases) page, extract it from the
 archive and put it somewhere on your path, or build from source by running:
 ```sh
 cargo install evcxr_jupyter
@@ -56,7 +56,7 @@ on the right and from it, select "Rust".
 ## Usage information
 
 Evcxr is both a REPL and a Jupyter kernel. See [Evcxr common
-usage](https://github.com/google/evcxr/blob/main/COMMON.md) for information that is common
+usage](https://github.com/evcxr/evcxr/blob/main/COMMON.md) for information that is common
 to both.
 
 ## Custom output
@@ -117,7 +117,7 @@ If there's a bugfix in git that you'd like to try out, you can install directly
 from git with the command:
 
 ```sh
-cargo install --force --git https://github.com/google/evcxr.git evcxr_jupyter
+cargo install --force --git https://github.com/evcxr/evcxr.git evcxr_jupyter
 ```
 
 ## 3rd party integrations

@@ -3,7 +3,7 @@ name = "evcxr_runtime"
 version = "1.1.0"
 license = "MIT OR Apache-2.0"
 description = "Runtime core for the evcxr crate"
-repository = "https://github.com/google/evcxr"
+repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
 

@@ -4,7 +4,7 @@
 [![Downloads](https://img.shields.io/crates/d/evcxr_repl)](https://crates.io/crates/evcxr_repl)
 [![License](https://img.shields.io/crates/l/evcxr_repl)](https://crates.io/crates/evcxr_repl)
 
-A Rust REPL (Read-Eval-Print loop) built using the [`evcxr`](https://github.com/google/evcxr/blob/main/evcxr/README.md) evaluation context.
+A Rust REPL (Read-Eval-Print loop) built using the [`evcxr`](https://github.com/evcxr/evcxr/blob/main/evcxr/README.md) evaluation context.
 
 ## Installation
 
@@ -20,7 +20,7 @@ from source.
 ### Pre-built binaries
 
 Pre-built binaries are available from the
-[Releases](https://github.com/google/evcxr/releases) page. These are currently
+[Releases](https://github.com/evcxr/evcxr/releases) page. These are currently
 built for Linux, Mac and Windows. In each case they are built with the latest
 version of each operating system. In the case of Linux, they're built on the
 latest Ubuntu. If your version of libc is different, they might not work, in
@@ -65,7 +65,7 @@ Evcxr supports two modes of tab completion:
 ## Usage information
 
 Evcxr is both a REPL and a Jupyter kernel. See [Evcxr common
-usage](https://github.com/google/evcxr/blob/main/COMMON.md) for usage information that is
+usage](https://github.com/evcxr/evcxr/blob/main/COMMON.md) for usage information that is
 common to both.
 
 ## Manual Installation
@@ -73,7 +73,7 @@ common to both.
 You can install the REPL manually with git:
 
 ```sh
-$ cargo install --force --git https://github.com/google/evcxr.git evcxr_repl
+$ cargo install --force --git https://github.com/evcxr/evcxr.git evcxr_repl
 ```
 
 ## Similar projects

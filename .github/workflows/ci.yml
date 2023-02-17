@@ -14,7 +14,7 @@ env:
 jobs:
   ci-linux:
     # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'google/evcxr'
+    if: github.repository == 'evcxr/evcxr'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -65,7 +65,7 @@ jobs:
 
   ci-windows:
     # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'google/evcxr'
+    if: github.repository == 'evcxr/evcxr'
     runs-on: windows-2019
     strategy:
       matrix:
@@ -92,7 +92,7 @@ jobs:
 
   ci-mac:
     # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'google/evcxr'
+    if: github.repository == 'evcxr/evcxr'
     runs-on: macos-latest
     strategy:
       matrix:
