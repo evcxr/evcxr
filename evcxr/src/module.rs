@@ -134,13 +134,13 @@ impl Module {
             &self.get_cargo_toml_contents(state),
         )
     }
-    
+
     // Writes .cargo/config.toml. Should be called before compile.
     pub(crate) fn write_config_toml(&self, state: &ContextState) -> Result<(), Error> {
         let dot_config_dir = self.crate_dir().join(".cargo");
         fs::create_dir_all(dot_config_dir.as_path())?;
         write_file(
-           dot_config_dir.as_path(),
+            dot_config_dir.as_path(),
             "config.toml",
             &self.get_config_toml_contents(state),
         )
