@@ -66,12 +66,21 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
         let primary_error_pattern = PRIMARY_ERROR_PATTERN
             .get_or_init(|| Regex::new("(.*) as a dependency of package `[^`]*`").unwrap());
         let mut message = Vec::new();
+        let mut suggest_offline_mode = false;
         for line in String::from_utf8_lossy(&output.stderr).lines() {
             if let Some(captures) = primary_error_pattern.captures(line) {
                 message.push(captures[1].to_string());
             } else if !ignored_lines_pattern.is_match(line) {
                 message.push(line.to_owned());
             }
+
+            if line.contains("failed to fetch `https://github.com/rust-lang/crates.io-index`") {
+                suggest_offline_mode = true;
+            }
+        }
+
+        if suggest_offline_mode {
+            message.push("\nTip: Enable offline mode with `:offline 1`".to_owned());
         }
         bail!(message.join("\n"));
     }
