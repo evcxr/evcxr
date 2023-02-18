@@ -36,7 +36,7 @@ fn make_paths_absolute(config: String) -> Result<String, Error> {
                 Ok(path) => {
                     return Ok(captures[1].to_owned()
                         + "path = \""
-                        + &path.to_string_lossy()
+                        + &escape_toml_string(&path.to_string_lossy())
                         + "\""
                         + &captures[3]);
                 }
@@ -49,6 +49,33 @@ fn make_paths_absolute(config: String) -> Result<String, Error> {
     Ok(config)
 }
 
+/// Escapes a TOML string, see https://toml.io/en/v1.0.0#string
+fn escape_toml_string(string: &str) -> String {
+    let mut escaped = String::new();
+
+    for char in string.chars() {
+        match char {
+            '"' | '\\' => {
+                escaped.push('\\');
+                escaped.push(char);
+            }
+            // Control characters with special escape sequences
+            '\u{0008}' => escaped.push_str("\\b"),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\u{000C}' => escaped.push_str("\\f"),
+            '\r' => escaped.push_str("\\r"),
+            // Control characters using \uXXXX escape sequence
+            '\0'..='\u{001F}' | '\u{007F}' => {
+                escaped.push_str(&format!("\\u{:04X}", char as u32));
+            }
+            _ => escaped.push(char),
+        }
+    }
+
+    escaped
+}
+
 impl ExternalCrate {
     pub(crate) fn new(name: String, config: String) -> Result<ExternalCrate, Error> {
         let config = make_paths_absolute(config)?;
@@ -58,23 +85,40 @@ impl ExternalCrate {
 
 #[cfg(test)]
 mod tests {
+    use super::escape_toml_string;
     use super::ExternalCrate;
     use std::path::Path;
+
+    #[test]
+    fn test_escape_toml_string() {
+        let string = "test \" \\ \\u1234 \u{10FFFF}";
+        assert_eq!(
+            escape_toml_string(string),
+            "test \\\" \\\\ \\\\u1234 \u{10FFFF}"
+        );
+
+        let string = "\u{0000} \u{0008} \t \n \u{000C} \r \u{001F} \u{007F}";
+        assert_eq!(
+            escape_toml_string(string),
+            r#"\u0000 \b \t \n \f \r \u001F \u007F"#
+        );
+    }
 
     #[test]
     fn make_paths_absolute() {
         let krate =
             ExternalCrate::new("foo".to_owned(), "{ path = \"src/testdata\" }".to_owned()).unwrap();
         assert_eq!(krate.name, "foo");
+
+        let expected_path_string = &escape_toml_string(
+            &Path::new("src/testdata")
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy(),
+        );
         assert_eq!(
             krate.config,
-            format!(
-                "{{ path = \"{}\" }}",
-                Path::new("src/testdata")
-                    .canonicalize()
-                    .unwrap()
-                    .to_string_lossy()
-            )
+            format!("{{ path = \"{expected_path_string}\" }}")
         );
     }
 }
