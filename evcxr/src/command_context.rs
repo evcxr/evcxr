@@ -463,7 +463,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             ),
             AvailableCommand::new(
                 ":offline",
-                "Set offline mode when invoking cargo",
+                "Set offline mode when invoking cargo (0/1)",
                 |_ctx, state, args| {
                     state.set_offline_mode(args.as_ref().map(String::as_str) == Some("1"));
                     text_output(format!("Offline mode: {}", state.offline_mode()))
