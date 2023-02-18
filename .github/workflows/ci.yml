@@ -91,8 +91,9 @@ jobs:
 
 
   ci-mac:
-    # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'evcxr/evcxr'
+    # Avoid running on people's forks, especially the scheduled runs. Disabled
+    # for now, since github actions on macos is 10x the cost of Linux.
+    if: github.repository == 'evcxr/evcxr-disabled'
     runs-on: macos-latest
     strategy:
       matrix:
