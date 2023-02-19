@@ -45,11 +45,15 @@ use std::time::Duration;
 use std::time::Instant;
 
 pub struct EvalContext {
+    // Order is important here. We need to drop child_process before _tmpdir,
+    // since if the subprocess hasn't terminted before we clean up the temporary
+    // directory, then on some platforms (e.g. Windows), files in the temporary
+    // directory will still be locked, so won't be deleted.
+    child_process: ChildProcess,
     // Our tmpdir if EVCXR_TMPDIR wasn't set - Drop causes tmpdir to be cleaned up.
     _tmpdir: Option<tempfile::TempDir>,
     module: Module,
     committed_state: ContextState,
-    child_process: ChildProcess,
     stdout_sender: crossbeam_channel::Sender<String>,
     analyzer: RustAnalyzer,
     initial_config: Config,
