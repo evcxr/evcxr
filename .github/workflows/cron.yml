@@ -2,7 +2,7 @@ on:
   schedule:
     - cron: '07 12 5,20 * *'
 
-name: Weekly continuous integration
+name: Cron continuous integration
 
 env:
   CARGO_INCREMENTAL: 0

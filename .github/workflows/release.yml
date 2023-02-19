@@ -4,6 +4,8 @@ on:
     tags:
       - 'v[0-9]+.*'
 
+name: Release
+
 jobs:
   release:
     name: Release
