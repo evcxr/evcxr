@@ -91,20 +91,36 @@ pub enum FragmentValidity {
 pub fn validate_source_fragment(source: &str) -> FragmentValidity {
     use Bracket::*;
     let mut stack: Vec<Bracket> = vec![];
+    // The expected depth `stack` should have after the closing ']' of the attribute
+    // is read; None if closing ']' has already been read or currently not reading
+    // attribute
+    let mut attr_end_stack_depth: Option<usize> = None;
+    // Whether the item after an attribute is expected; is set to true after the
+    // expected attr_end_stack_depth was reached
+    let mut expects_attr_item = false;
 
     let mut input = source.char_indices().peekable();
     while let Some((i, c)) = input.next() {
+        // For simplicity set `expects_attr_item = false` and only for all cases where next
+        // char is not start of an item (e.g. comment or whitespace) restore its old value
+        let expected_attr_item = expects_attr_item;
+        expects_attr_item = false;
+
         match c {
             // Possibly a comment.
             '/' => match input.peek() {
                 Some((_, '/')) => {
                     eat_comment_line(&mut input);
+                    // Comment is not the target of the attribute
+                    expects_attr_item = expected_attr_item;
                 }
                 Some((_, '*')) => {
                     input.next();
                     if !eat_comment_block(&mut input) {
                         return FragmentValidity::Incomplete;
                     }
+                    // Comment is not the target of the attribute
+                    expects_attr_item = expected_attr_item;
                 }
                 _ => {}
             },
@@ -113,8 +129,19 @@ pub fn validate_source_fragment(source: &str) -> FragmentValidity {
             '{' => stack.push(Curly),
             ')' | ']' | '}' => {
                 match (stack.pop(), c) {
-                    (Some(Round), ')') | (Some(Square), ']') | (Some(Curly), '}') => {
+                    (Some(Round), ')') | (Some(Curly), '}') => {
                         // good.
+                    }
+                    (Some(Square), ']') => {
+                        if let Some(end_stack_depth) = attr_end_stack_depth {
+                            // Check if end of attribute has been reached
+                            if stack.len() == end_stack_depth {
+                                attr_end_stack_depth = None;
+                                expects_attr_item = true;
+                            }
+                        }
+
+                        // for non-attribute there is nothing else to do
                     }
                     _ => {
                         // Either the bracket stack was empty or mismatched. In
@@ -151,11 +178,29 @@ pub fn validate_source_fragment(source: &str) -> FragmentValidity {
                     return FragmentValidity::Invalid;
                 }
             }
-            _ => {}
+            // Possibly an attribute.
+            '#' => {
+                // Only handle outer attribute (`#[...]`); for inner attribute (`#![...]`) there is
+                // no need to report Incomplete because the enclosing item to which the attribute
+                // applies (e.g. a function) is probably already returning Incomplete, if necessary
+                if let Some((_, '[')) = input.peek() {
+                    attr_end_stack_depth = Some(stack.len());
+                    // Don't consume '[' here, let the general bracket handling code above do that
+                }
+            }
+            _ => {
+                // This differs from Rust grammar which only considers `Pattern_White_Space`
+                // (see https://doc.rust-lang.org/reference/whitespace.html), whereas `char::is_whitespace`
+                // checks for `White_Space` char property; but might not matter in most cases
+                if c.is_whitespace() {
+                    // Whitespace is not the target of the attribute
+                    expects_attr_item = expected_attr_item;
+                }
+            }
         }
     }
     // Seems good to me if we get here!
-    if stack.is_empty() {
+    if stack.is_empty() && !expects_attr_item {
         FragmentValidity::Valid
     } else {
         FragmentValidity::Incomplete
@@ -542,5 +587,20 @@ mod test {
         // This is invalid, but the important thing is that we don't say
         // incomplete.
         invalid("foo('a ')\n");
+
+        invalid("#[]]");
+        partial("#[");
+        partial("#[derive(Debug)]");
+        partial("#[derive(Debug)]\n#[cfg(target_os = \"linux\")]");
+        partial("#[derive(Debug)]\nstruct S;\n#[derive(Debug)]");
+        partial("#[derive(Debug)] // comment");
+        partial("#[derive(Debug)] /* comment */");
+
+        valid("#[derive(Debug)] struct S;");
+        valid("#[cfg(target_os = \"linux\")]\n#[allow(unused_variables)]\nfn test() {}");
+        valid("#[doc = \"example # ]]] [[[\"] struct S;");
+        // Inner attributes are considered complete because they apply to
+        // the enclosing item
+        valid("#![derive(Debug)]");
     }
 }
