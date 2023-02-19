@@ -184,6 +184,9 @@ impl Module {
             .arg("prefer-dynamic")
             .env("CARGO_TARGET_DIR", "target")
             .env("RUSTC", &config.rustc_path);
+        if cfg!(target_os = "windows") {
+            command.arg("-Clink-arg=/DEBUG:NONE");
+        }
         if config.linker == "lld" {
             command
                 .arg("-C")
