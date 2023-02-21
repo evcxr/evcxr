@@ -101,26 +101,24 @@ pub fn validate_source_fragment(source: &str) -> FragmentValidity {
 
     let mut input = source.char_indices().peekable();
     while let Some((i, c)) = input.next() {
-        // For simplicity set `expects_attr_item = false` and only for all cases where next
-        // char is not start of an item (e.g. comment or whitespace) restore its old value
-        let expected_attr_item = expects_attr_item;
-        expects_attr_item = false;
+        // Whether the next char is the start of an attribute target; for simplicity this
+        // is initially set to true and only set below to false for chars which are not
+        // an attribute target, such as comments and whitespace
+        let mut is_attr_target = true;
 
         match c {
             // Possibly a comment.
             '/' => match input.peek() {
                 Some((_, '/')) => {
                     eat_comment_line(&mut input);
-                    // Comment is not the target of the attribute
-                    expects_attr_item = expected_attr_item;
+                    is_attr_target = false;
                 }
                 Some((_, '*')) => {
                     input.next();
                     if !eat_comment_block(&mut input) {
                         return FragmentValidity::Incomplete;
                     }
-                    // Comment is not the target of the attribute
-                    expects_attr_item = expected_attr_item;
+                    is_attr_target = false;
                 }
                 _ => {}
             },
@@ -138,6 +136,9 @@ pub fn validate_source_fragment(source: &str) -> FragmentValidity {
                             if stack.len() == end_stack_depth {
                                 attr_end_stack_depth = None;
                                 expects_attr_item = true;
+                                // Prevent considering ']' as attribute target, and therefore
+                                // directly setting `expects_attr_item = false` again below
+                                is_attr_target = false;
                             }
                         }
 
@@ -193,10 +194,13 @@ pub fn validate_source_fragment(source: &str) -> FragmentValidity {
                 // (see https://doc.rust-lang.org/reference/whitespace.html), whereas `char::is_whitespace`
                 // checks for `White_Space` char property; but might not matter in most cases
                 if c.is_whitespace() {
-                    // Whitespace is not the target of the attribute
-                    expects_attr_item = expected_attr_item;
+                    is_attr_target = false;
                 }
             }
+        }
+
+        if is_attr_target {
+            expects_attr_item = false;
         }
     }
     // Seems good to me if we get here!
