@@ -1,31 +1,30 @@
 # How to Contribute
 
-We'd love to accept your patches and contributions to this project. There are
-just a few small guidelines you need to follow.
+We'd love to accept your patches and contributions to this project. All
+contributions must be dual licensed Apache2/MIT unless otherwise stated. If you
+copy someone else's code, please make sure they are credited and any license
+requirements are met.
 
-## Contributor License Agreement
+## Git workflow
 
-Contributions to this project must be accompanied by a Contributor License
-Agreement. You (or your employer) retain the copyright to your contribution;
-this simply gives us permission to use and redistribute your contributions as
-part of the project. Head over to <https://cla.developers.google.com/> to see
-your current agreements on file or to sign a new one.
+Feel free to do your pull requests however you like. You're welcome to either
+amend your commits, or add fixup commits. If you add fixup commits, then we'll
+squash and rebase your PR when we merge it. If you've got more than one commit
+and you'd like to keep them separate when they're merged, then it's probably
+best to squash any fixups into the relevant original commit.
 
-You generally only need to submit a CLA once, so if you've already submitted one
-(even if it was for a different project), you probably don't need to do it
-again.
+## Cargo fmt
 
-## Code reviews
-
-All submissions, including submissions by project members, require review. We
-use GitHub pull requests for this purpose. Consult
-[GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
-information on using pull requests.
+When you send a pull request a github action will make sure it builds and passes
+tests. It will also check that the code is formatted according to rustfmt. To
+save extra cycles, it's recommended to run `cargo fmt` before you commit your
+changes.
 
 ## Community Guidelines
 
-This project follows [Google's Open Source Community
-Guidelines](https://opensource.google.com/conduct/).
+This project aims to follow the same [code of
+conduct](https://www.rust-lang.org/policies/code-of-conduct) as Rust. If there's
+a problem, please contact [David Lattimore](https://github.com/davidlattimore).
 
 ## Testing
 
@@ -41,3 +40,8 @@ view it when things go wrong.
 Using only a single test thread is currently necessary. Using multiple
 evaluation contexts simultaneously currently doesn't work. I haven't
 investigated this since in practice it doesn't come up besides in tests.
+
+## Questions?
+
+If you're not sure, feel free to submit a draft PR, file an issue or whatever
+works best.
