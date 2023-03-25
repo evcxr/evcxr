@@ -152,9 +152,6 @@ impl Config {
         if self.linker == "mold" {
             command.arg("-run").arg(&self.cargo_path);
         }
-        if !self.toolchain.is_empty() {
-            command.arg(format!("+{}", self.toolchain));
-        }
         if self.offline_mode {
             command.arg("--offline");
         }
@@ -1186,6 +1183,12 @@ impl ContextState {
     }
 
     pub fn set_toolchain(&mut self, value: &str) {
+        if let Some(rustc_path) = rustup_rustc_path(Some(value)) {
+            self.config.rustc_path = rustc_path;
+        }
+        if let Some(cargo_path) = rustup_cargo_path(Some(value)) {
+            self.config.cargo_path = cargo_path;
+        }
         self.config.toolchain = value.to_owned();
     }
 
@@ -1833,12 +1836,12 @@ impl ContextState {
 // directly, we avoid having rustup decide which binary to invoke each time we
 // compile. This reduces eval time for a trivial bit of code from about 140ms to
 // 109ms.
-fn rustup_cargo_path() -> Option<String> {
-    let output = Command::new("rustup")
-        .arg("which")
-        .arg("cargo")
-        .output()
-        .ok()?;
+fn rustup_cargo_path(toolchain: Option<&str>) -> Option<String> {
+    let mut cmd = Command::new("rustup");
+    if let Some(toolchain) = toolchain {
+        cmd.arg("+".to_owned() + toolchain);
+    }
+    let output = cmd.arg("which").arg("cargo").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -1846,17 +1849,17 @@ fn rustup_cargo_path() -> Option<String> {
 }
 
 fn default_cargo_path() -> String {
-    rustup_cargo_path().unwrap_or_else(|| "cargo".to_owned())
+    rustup_cargo_path(None).unwrap_or_else(|| "cargo".to_owned())
 }
 
 // Similar to the above, this avoids cargo invoking rustup, cutting the eval
 // time for a trivial bit of code to about 75ms.
-fn rustup_rustc_path() -> Option<String> {
-    let output = Command::new("rustup")
-        .arg("which")
-        .arg("rustc")
-        .output()
-        .ok()?;
+fn rustup_rustc_path(toolchain: Option<&str>) -> Option<String> {
+    let mut cmd = Command::new("rustup");
+    if let Some(toolchain) = toolchain {
+        cmd.arg("+".to_owned() + toolchain);
+    }
+    let output = cmd.arg("which").arg("rustc").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -1864,7 +1867,7 @@ fn rustup_rustc_path() -> Option<String> {
 }
 
 fn default_rustc_path() -> String {
-    rustup_rustc_path().unwrap_or_else(|| "rustc".to_owned())
+    rustup_rustc_path(None).unwrap_or_else(|| "rustc".to_owned())
 }
 
 fn replace_reserved_words_in_type(ty: &str) -> String {
