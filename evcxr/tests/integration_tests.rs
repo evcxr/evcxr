@@ -1018,14 +1018,18 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
         vec!["error 1:10-1:13"]
     );
 
-    // Make sure that we can report errors resulting from macro expansions.
-    assert_eq!(
-        strs(&check(
-            &mut ctx,
-            r#"let mut s = String::new(); write!(s, "foo").unwrap();"#
-        )),
-        vec!["error 1:28-1:44"]
+    // Make sure that we can report errors resulting from macro expansions. The first span is the
+    // whole macro, the second span, which is what appears in later versions of rustc, is just the
+    // variable `s`.
+    let allowed = ["error 1:28-1:44", "error 1:35-1:36"];
+    let actual = check(
+        &mut ctx,
+        r#"let mut s = String::new(); write!(s, "foo").unwrap();"#,
     );
+    let actual = &strs(&actual)[0];
+    if !allowed.contains(actual) {
+        panic!("Found '{actual}', but expected one of {allowed:?}");
+    }
 
     // Check that errors adding crates are reported.
     assert_eq!(
