@@ -139,6 +139,8 @@ There are several Rust crates that provide Evcxr integration:
   Notebooks](https://datacrayon.com/shop/product/data-analysis-with-rust-notebooks/). He's also put
   up a great [getting started video](https://www.youtube.com/watch?v=0UEMn3yUoLo).
 
+* Eng. Mahmoud Harmouch has written an article [Rust: The Next Big Thing in Data Science](https://towardsdatascience.com/rust-the-next-big-thing-in-data-science-319a03305883). He also crafted a [jupyter notebook doing EDA on the Iris Dataset](https://github.com/wiseaidev/rust-data-analysis/blob/main/iris-data-analysis-rust.ipynb).
+
 ## Limitations
 
 * Don't ask Jupyter to "interrupt kernel", it won't work. Rust threads can't be
