@@ -686,8 +686,7 @@ impl EvalContext {
             },
         ) in self.analyzer.top_level_variables("evcxr_analysis_wrapper")
         {
-            // We don't want to try to store record evcxr_variable_store into itself, so we ignore
-            // it.
+            // We don't want to try to store evcxr_variable_store into itself, so we ignore it.
             if variable_name == "evcxr_variable_store" {
                 continue;
             }

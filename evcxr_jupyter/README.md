@@ -138,11 +138,14 @@ There are several Rust crates that provide Evcxr integration:
 
 ## 3rd party resources
 
-* Dr. Shahin Rostami has written a book [Data Analysis with Rust
-  Notebooks](https://datacrayon.com/shop/product/data-analysis-with-rust-notebooks/). He's also put
-  up a great [getting started video](https://www.youtube.com/watch?v=0UEMn3yUoLo).
+* Eng. Mahmoud Harmouch has written a series of articles and developed a list of Jupyter notebooks
+  equipped with all the tools needed for various data analysis tasks that are documented in [this
+  repository](https://github.com/wiseaidev/rust-data-analysis).
 
-* Eng. Mahmoud Harmouch has written a series of articles and developed a list of Jupyter notebooks equipped with all the tools needed for various data analysis tasks that are documented in [this repository](https://github.com/wiseaidev/rust-data-analysis).
+* Dr. Shahin Rostami has written a book [Data Analysis with Rust
+  Notebooks](https://datacrayon.com/shop/product/data-analysis-with-rust-notebooks/). It uses
+  library versions that are a bit out of date now, but the examples still work. He's also put up a
+  great [getting started video](https://www.youtube.com/watch?v=0UEMn3yUoLo).
 
 ## Limitations
 
