@@ -368,6 +368,20 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 },
             ),
             AvailableCommand::new(
+                ":type",
+                "Show variable type",
+                |ctx, _state, args| {
+                    ctx.var_type(args)
+                },
+            ),
+            AvailableCommand::new(
+                ":t",
+                "Short version of :type",
+                |ctx, _state, args| {
+                    ctx.var_type(args)
+                },
+            ),
+            AvailableCommand::new(
                 ":preserve_vars_on_panic",
                 "Try to keep vars on panic (0/1)",
                 |_ctx, state, args| {
@@ -585,6 +599,29 @@ Panic detected. Here's some useful information if you're filing a bug report.
         }
         out.push_str("</table>");
         out
+    }
+
+    fn var_type(&self, args: &Option<String>) -> Result<EvalOutputs, Error> {
+        let args = if let Some(x) = args {
+            x.trim()
+        } else {
+            bail!("Variable name required")
+        };
+
+        let mut out = None;
+        for (var, ty) in self.eval_context.variables_and_types() {
+            if var == args {
+                out = Some(ty.to_owned());
+                break;
+            }
+        }
+
+        if let Some(out) = out {
+            let out = format!("{args}: {out}");
+            Ok(EvalOutputs::text_html(out.clone(), out))
+        } else {
+            bail!(format!("Variable does not exist: {}", args))
+        }
     }
 }
 
