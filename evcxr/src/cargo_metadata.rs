@@ -131,6 +131,55 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
     Ok(library_names)
 }
 
+/// Match the pattern or return an error.
+macro_rules! prism {
+    ($pattern:path, $rhs:expr, $msg:literal) => {
+        if let $pattern(x) = $rhs {
+            x
+        } else {
+            bail!("Parse error in Cargo.toml: {}", $msg)
+        }
+    };
+}
+
+/// Parse the crate at given path, producing crate name. If the path is a
+/// workspace of crates, will recurse into each.
+pub fn parse_crate_names(path: &str) -> Result<Vec<(String, String)>> {
+    use std::io::Read;
+    use toml::Value;
+
+    let config_path = format!("{}/Cargo.toml", path);
+    let mut content = String::new();
+    std::fs::File::open(config_path)?.read_to_string(&mut content)?;
+    let package = content
+        .parse::<toml::Table>()
+        .context("Can't parse Cargo.toml")?;
+
+    if let Some(workspace) = package.get("workspace") {
+        let workspace = prism!(Value::Table, workspace, "expected workspace to be a table");
+        let members = prism!(Some, workspace.get("members"), "no 'members' in workspace");
+        let members = prism!(Value::Array, members, "expected 'members' to be an array");
+
+        let mut result = Vec::new();
+        for member in members {
+            let path = prism!(
+                Value::String,
+                member,
+                "expected every member to be a string"
+            );
+            result.append(&mut parse_crate_names(path)?);
+        }
+        Ok(result)
+    } else if let Some(package) = package.get("package") {
+        let package = prism!(Value::Table, package, "expected 'package' to be a table");
+        let name = prism!(Some, package.get("name"), "no 'name' in package");
+        let name = prism!(Value::String, name, "expected 'name' to be a string");
+        Ok(vec![(name.clone(), path.to_owned())])
+    } else {
+        bail!("Unexpected Cargo.toml format: not package or workspace")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
