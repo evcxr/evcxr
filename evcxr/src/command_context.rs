@@ -620,7 +620,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             let out = format!("{args}: {out}");
             Ok(EvalOutputs::text_html(out.clone(), out))
         } else {
-            bail!(format!("Variable does not exist: {}", args))
+            bail!("Variable does not exist: {}", args)
         }
     }
 }

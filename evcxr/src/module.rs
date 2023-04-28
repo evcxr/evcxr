@@ -288,13 +288,41 @@ offline = {}
         )
     }
 }
+
+/// Run a cargo command prepared for the provided `code_block`, processing the
+/// command's output.
 fn run_cargo(
     mut command: std::process::Command,
     code_block: &CodeBlock,
 ) -> Result<std::process::Output, Error> {
-    let cargo_output = match command.output() {
+    let mb_child = command
+        .stderr(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn();
+    let mut child = match mb_child {
         Ok(out) => out,
         Err(err) => bail!("Error running 'cargo rustc': {}", err),
+    };
+
+    let mut stdout = child.stdout.take().unwrap();
+    let stderr = std::io::BufReader::new(child.stderr.take().unwrap());
+    let mut all_output = Vec::new();
+    let mut all_errors = Vec::new();
+
+    use std::io::{BufRead, Read};
+    for mb_line in stderr.split(10) {
+        let mut line = mb_line?;
+        tee_error_line(&line);
+        all_errors.append(&mut line);
+    }
+    stdout.read_to_end(&mut all_output)?;
+
+    let status = child.wait()?;
+
+    let cargo_output = std::process::Output {
+        status,
+        stdout: all_output,
+        stderr: all_errors,
     };
     if cargo_output.status.success() {
         Ok(cargo_output)
@@ -313,6 +341,26 @@ fn run_cargo(
             }
         } else {
             bail!(Error::CompilationErrors(errors));
+        }
+    }
+}
+
+/// Process one line from cargo, either copying it to stderr or ignoring.
+///
+/// At this point it looks for messages about compiling dependency crates.
+fn tee_error_line(line: &[u8]) {
+    use std::io::Write;
+    static CRATE_COMPILING: OnceCell<regex::bytes::Regex> = OnceCell::new();
+    let crate_compiling = CRATE_COMPILING
+        .get_or_init(|| regex::bytes::Regex::new("^\\s*Compiling (\\w+)(?:\\s+.*)?$").unwrap());
+    if let Some(captures) = crate_compiling.captures(line) {
+        let crate_name = captures.get(1).unwrap().as_bytes();
+        if crate_name != CRATE_NAME.as_bytes() {
+            // write line and the following nl symbol as it was stripped before
+            std::io::stderr()
+                .write_all(line)
+                .expect("Writing to stderr should not fail");
+            eprintln!();
         }
     }
 }
