@@ -295,6 +295,8 @@ fn run_cargo(
     mut command: std::process::Command,
     code_block: &CodeBlock,
 ) -> Result<std::process::Output, Error> {
+    use std::io::{BufRead, Read};
+
     let mb_child = command
         .stderr(std::process::Stdio::piped())
         .stdout(std::process::Stdio::piped())
@@ -304,20 +306,26 @@ fn run_cargo(
         Err(err) => bail!("Error running 'cargo rustc': {}", err),
     };
 
+    // Collect stdout in a parallel thread
     let mut stdout = child.stdout.take().unwrap();
-    let stderr = std::io::BufReader::new(child.stderr.take().unwrap());
-    let mut all_output = Vec::new();
-    let mut all_errors = Vec::new();
+    let output_thread = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        stdout.read_to_end(&mut buf)?;
+        Ok::<_, Error>(buf)
+    });
 
-    use std::io::{BufRead, Read};
+    // Collect stderr synchronously
+    let stderr = std::io::BufReader::new(child.stderr.take().unwrap());
+    let mut all_errors = Vec::new();
     for mb_line in stderr.split(10) {
         let mut line = mb_line?;
         tee_error_line(&line);
         all_errors.append(&mut line);
+        all_errors.push(10);
     }
-    stdout.read_to_end(&mut all_output)?;
 
     let status = child.wait()?;
+    let all_output = output_thread.join().expect("Panic in child thread")?;
 
     let cargo_output = std::process::Output {
         status,
