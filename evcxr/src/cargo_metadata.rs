@@ -144,7 +144,7 @@ macro_rules! prism {
 
 /// Parse the crate at given path, producing crate name. If the path is a
 /// workspace of crates, will recurse into each.
-pub fn parse_crate_names(path: &str) -> Result<Vec<(String, String)>> {
+pub fn parse_crate_names(path: &str) -> Result<(String, String)> {
     use std::io::Read;
     use toml::Value;
 
@@ -155,26 +155,13 @@ pub fn parse_crate_names(path: &str) -> Result<Vec<(String, String)>> {
         .parse::<toml::Table>()
         .context("Can't parse Cargo.toml")?;
 
-    if let Some(workspace) = package.get("workspace") {
-        let workspace = prism!(Value::Table, workspace, "expected workspace to be a table");
-        let members = prism!(Some, workspace.get("members"), "no 'members' in workspace");
-        let members = prism!(Value::Array, members, "expected 'members' to be an array");
-
-        let mut result = Vec::new();
-        for member in members {
-            let path = prism!(
-                Value::String,
-                member,
-                "expected every member to be a string"
-            );
-            result.append(&mut parse_crate_names(path)?);
-        }
-        Ok(result)
+    if let Some(_workspace) = package.get("workspace") {
+        bail!("Workspaces are not supported");
     } else if let Some(package) = package.get("package") {
         let package = prism!(Value::Table, package, "expected 'package' to be a table");
         let name = prism!(Some, package.get("name"), "no 'name' in package");
         let name = prism!(Value::String, name, "expected 'name' to be a string");
-        Ok(vec![(name.clone(), path.to_owned())])
+        Ok((name.clone(), path.to_owned()))
     } else {
         bail!("Unexpected Cargo.toml format: not package or workspace")
     }
