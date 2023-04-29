@@ -155,13 +155,15 @@ pub fn parse_crate_names(path: &str) -> Result<(String, String)> {
         .parse::<toml::Table>()
         .context("Can't parse Cargo.toml")?;
 
-    if let Some(_workspace) = package.get("workspace") {
-        bail!("Workspaces are not supported");
-    } else if let Some(package) = package.get("package") {
+    // https://doc.rust-lang.org/cargo/reference/manifest.html
+    // The fields to define a package are 'package' and 'workspace'
+    if let Some(package) = package.get("package") {
         let package = prism!(Value::Table, package, "expected 'package' to be a table");
         let name = prism!(Some, package.get("name"), "no 'name' in package");
         let name = prism!(Value::String, name, "expected 'name' to be a string");
         Ok((name.clone(), path.to_owned()))
+    } else if let Some(_workspace) = package.get("workspace") {
+        bail!("Workspaces are not supported");
     } else {
         bail!("Unexpected Cargo.toml format: not package or workspace")
     }
