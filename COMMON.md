@@ -203,5 +203,6 @@ And here are the supported Evcxr commands:
 * `:last_error_json`  Print the last compilation error as JSON (for debugging)
 * `:load_config`      Reloads startup configuration files. Accepts optional flag `--quiet` to suppress logging.
 * `:quit`             Quit evaluation and exit
+* `:type` | `:t`      Show variable type
 * `:vars`             List bound variables and their types
 * `:version`          Print Evcxr version
