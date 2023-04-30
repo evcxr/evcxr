@@ -49,6 +49,14 @@ You can use the local work-in-progress crate like this:
 >> use my_crate::*;
 ```
 
+Alternatively you can use a shorter form:
+
+```rust
+>> :dep .
+>> :dep ../another_crate
+>> :dep /path/to/crate
+```
+
 It will even automatically update when you save your files!
 
 There are many other options that can be specified. See Cargo's [official dependency
