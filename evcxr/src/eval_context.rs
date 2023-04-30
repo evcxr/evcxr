@@ -1213,8 +1213,8 @@ impl ContextState {
 
     /// Adds a crate dependency at the specified local path
     pub fn add_local_dep(&mut self, dep: &str) -> Result<(), Error> {
-        let (name, path) = cargo_metadata::parse_crate_names(dep)?;
-        self.add_dep(&name, &format!("{{ path = \"{}\" }}", path))
+        let name = cargo_metadata::parse_crate_name(dep)?;
+        self.add_dep(&name, &format!("{{ path = \"{}\" }}", dep))
     }
 
     /// Clears fields that aren't useful for inclusion in bug reports and which might give away

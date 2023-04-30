@@ -142,9 +142,8 @@ macro_rules! prism {
     };
 }
 
-/// Parse the crate at given path, producing crate name. If the path is a
-/// workspace of crates, will recurse into each.
-pub fn parse_crate_names(path: &str) -> Result<(String, String)> {
+/// Parse the crate at given path, producing crate name
+pub fn parse_crate_name(path: &str) -> Result<String> {
     use std::io::Read;
     use toml::Value;
 
@@ -161,7 +160,7 @@ pub fn parse_crate_names(path: &str) -> Result<(String, String)> {
         let package = prism!(Value::Table, package, "expected 'package' to be a table");
         let name = prism!(Some, package.get("name"), "no 'name' in package");
         let name = prism!(Value::String, name, "expected 'name' to be a string");
-        Ok((name.clone(), path.to_owned()))
+        Ok(name.clone())
     } else if let Some(_workspace) = package.get("workspace") {
         bail!("Workspaces are not supported");
     } else {
