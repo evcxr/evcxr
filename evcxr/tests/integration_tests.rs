@@ -1,16 +1,9 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use evcxr::CommandContext;
 use evcxr::Error;
@@ -688,6 +681,57 @@ fn print_then_assign_variable() {
 }
 
 #[test]
+fn display_type() {
+    let mut e = new_context();
+    assert_eq!(
+        e.execute(":types")
+            .unwrap()
+            .get("text/plain")
+            .unwrap()
+            .trim(),
+        "Types: true"
+    );
+    assert_eq!(eval!(e, 42), text_plain(": i32 = 42"));
+    assert_eq!(
+        eval!(e, Some("hello".to_string())),
+        text_plain(": Option<String> = Some(\"hello\")")
+    );
+    assert_eq!(
+        e.execute(":types")
+            .unwrap()
+            .get("text/plain")
+            .unwrap()
+            .trim(),
+        "Types: false"
+    );
+    assert_eq!(eval!(e, 42), text_plain("42"));
+}
+
+#[test]
+fn shorten_type_name() {
+    // This is a way to test the evcxr_shorten_type() function, evaluated in the child
+    let mut e = new_context();
+    e.execute(":fmt {}").unwrap();
+    // We need to enable types, so evcxr_shorten_type() will be defined.
+    e.execute(":types").unwrap();
+    assert_eq!(
+        eval!(e, evcxr_shorten_type("alloc::string::String")),
+        text_plain(": String = String")
+    );
+    assert_eq!(
+        eval!(
+            e,
+            evcxr_shorten_type("core::option::Option<alloc::string::String>")
+        ),
+        text_plain(": String = Option<String>")
+    );
+    assert_eq!(
+        eval!(e, evcxr_shorten_type("i32")),
+        text_plain(": String = i32")
+    );
+}
+
+#[test]
 fn question_mark_operator() {
     let mut e = new_context();
     // Make sure question mark works without variables.
@@ -974,14 +1018,18 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
         vec!["error 1:10-1:13"]
     );
 
-    // Make sure that we can report errors resulting from macro expansions.
-    assert_eq!(
-        strs(&check(
-            &mut ctx,
-            r#"let mut s = String::new(); write!(s, "foo").unwrap();"#
-        )),
-        vec!["error 1:28-1:44"]
+    // Make sure that we can report errors resulting from macro expansions. The first span is the
+    // whole macro, the second span, which is what appears in later versions of rustc, is just the
+    // variable `s`.
+    let allowed = ["error 1:28-1:44", "error 1:35-1:36"];
+    let actual = check(
+        &mut ctx,
+        r#"let mut s = String::new(); write!(s, "foo").unwrap();"#,
     );
+    let actual = &strs(&actual)[0];
+    if !allowed.contains(actual) {
+        panic!("Found '{actual}', but expected one of {allowed:?}");
+    }
 
     // Check that errors adding crates are reported.
     assert_eq!(

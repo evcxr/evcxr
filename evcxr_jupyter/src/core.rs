@@ -1,16 +1,9 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use crate::connection::Connection;
 use crate::control_file;
@@ -47,7 +40,17 @@ struct ShutdownReceiver {
 
 impl Server {
     pub(crate) fn run(config: &control_file::Control) -> Result<()> {
-        let runtime = tokio::runtime::Builder::new_current_thread()
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            // We only technically need 1 thread. However we've observed that
+            // when using vscode's jupyter extension, we can get requests on the
+            // shell socket before we have any subscribers on iopub. The iopub
+            // subscription then completes, but the execution_state="idle"
+            // message(s) have already been sent to a channel that at the time
+            // had no subscriptions. The vscode extension then waits
+            // indefinitely for an execution_state="idle" message that will
+            // never come. Having multiple threads at least reduces the chances
+            // of this happening.
+            .worker_threads(4)
             .enable_all()
             .build()
             .unwrap();
@@ -406,6 +409,13 @@ impl Server {
         loop {
             let message = JupyterMessage::read(&mut connection).await?;
             match message.message_type() {
+                "kernel_info_request" => {
+                    message
+                        .new_reply()
+                        .with_content(kernel_info())
+                        .send(&mut connection)
+                        .await?
+                }
                 "shutdown_request" => self.signal_shutdown().await,
                 "interrupt_request" => {
                     let process_handle = process_handle.clone();

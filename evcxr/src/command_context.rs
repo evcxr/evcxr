@@ -1,16 +1,9 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -111,12 +104,11 @@ impl CommandContext {
 =============================================================================
 Panic detected. Here's some useful information if you're filing a bug report.
 <CODE>
-{}
+{to_run}
 </CODE>
 <STATE>
-{:?}
-</STATE>"#,
-                to_run, state
+{state:?}
+</STATE>"#
             );
         });
         let result = self.execute_with_callbacks_internal(to_run, callbacks);
@@ -376,6 +368,20 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 },
             ),
             AvailableCommand::new(
+                ":type",
+                "Show variable type",
+                |ctx, _state, args| {
+                    ctx.var_type(args)
+                },
+            ),
+            AvailableCommand::new(
+                ":t",
+                "Short version of :type",
+                |ctx, _state, args| {
+                    ctx.var_type(args)
+                },
+            ),
+            AvailableCommand::new(
                 ":preserve_vars_on_panic",
                 "Try to keep vars on panic (0/1)",
                 |_ctx, state, args| {
@@ -438,6 +444,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 },
             ),
             AvailableCommand::new(
+                ":types",
+                "Toggle printing of types",
+                |_ctx, state, _args| {
+                    state.set_display_types(!state.display_types());
+                    text_output(format!("Types: {}", state.display_types()))
+                },
+            ),
+            AvailableCommand::new(
                 ":efmt",
                 "Set the formatter for errors returned by ?",
                 |_ctx, state, args| {
@@ -463,7 +477,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             ),
             AvailableCommand::new(
                 ":offline",
-                "Set offline mode when invoking cargo",
+                "Set offline mode when invoking cargo (0/1)",
                 |_ctx, state, args| {
                     state.set_offline_mode(args.as_ref().map(String::as_str) == Some("1"));
                     text_output(format!("Offline mode: {}", state.offline_mode()))
@@ -585,6 +599,29 @@ Panic detected. Here's some useful information if you're filing a bug report.
         }
         out.push_str("</table>");
         out
+    }
+
+    fn var_type(&self, args: &Option<String>) -> Result<EvalOutputs, Error> {
+        let args = if let Some(x) = args {
+            x.trim()
+        } else {
+            bail!("Variable name required")
+        };
+
+        let mut out = None;
+        for (var, ty) in self.eval_context.variables_and_types() {
+            if var == args {
+                out = Some(ty.to_owned());
+                break;
+            }
+        }
+
+        if let Some(out) = out {
+            let out = format!("{args}: {out}");
+            Ok(EvalOutputs::text_html(out.clone(), out))
+        } else {
+            bail!("Variable does not exist: {}", args)
+        }
     }
 }
 

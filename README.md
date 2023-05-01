@@ -1,6 +1,6 @@
 # Evcxr
 
-[![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/google/evcxr/main?filepath=evcxr_jupyter%2Fsamples%2Fevcxr_jupyter_tour.ipynb)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/evcxr/evcxr/main?filepath=evcxr_jupyter%2Fsamples%2Fevcxr_jupyter_tour.ipynb)
 
 An evaluation context for Rust.
 
@@ -23,7 +23,9 @@ To see what it can do, it's probably best to start with a [tour of the Jupyter
 kernel](evcxr_jupyter/samples/evcxr_jupyter_tour.ipynb). Github should allow you
 to preview this, or you can load it from Jupyter Notebook and run it yourself.
 
-## Disclaimer
+## License
 
-This is not an officially supported Google product. It's released by Google only
-because the (original) author happens to work there.
+This software is distributed under the terms of both the MIT license and the
+Apache License (Version 2.0).
+
+See LICENSE for details.

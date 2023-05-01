@@ -1,16 +1,9 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use crate::code_block::CodeBlock;
 use crate::errors::bail;
@@ -142,6 +135,17 @@ impl Module {
         )
     }
 
+    // Writes .cargo/config.toml. Should be called before compile.
+    pub(crate) fn write_config_toml(&self, state: &ContextState) -> Result<(), Error> {
+        let dot_config_dir = self.crate_dir().join(".cargo");
+        fs::create_dir_all(dot_config_dir.as_path())?;
+        write_file(
+            dot_config_dir.as_path(),
+            "config.toml",
+            &self.get_config_toml_contents(state),
+        )
+    }
+
     pub(crate) fn check(
         &mut self,
         code_block: &CodeBlock,
@@ -255,6 +259,7 @@ path = "src/lib.rs"
 [profile.dev]
 opt-level = {}
 debug = false
+strip = "debuginfo"
 rpath = true
 lto = false
 debug-assertions = true
@@ -271,15 +276,61 @@ overflow-checks = true
             crate_imports
         )
     }
+
+    // Pass offline mode to cargo through .cargo/config.toml
+    fn get_config_toml_contents(&self, state: &ContextState) -> String {
+        format!(
+            r#"
+[net]
+offline = {}
+"#,
+            state.offline_mode()
+        )
+    }
 }
 
+/// Run a cargo command prepared for the provided `code_block`, processing the
+/// command's output.
 fn run_cargo(
     mut command: std::process::Command,
     code_block: &CodeBlock,
 ) -> Result<std::process::Output, Error> {
-    let cargo_output = match command.output() {
+    use std::io::{BufRead, Read};
+
+    let mb_child = command
+        .stderr(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn();
+    let mut child = match mb_child {
         Ok(out) => out,
         Err(err) => bail!("Error running 'cargo rustc': {}", err),
+    };
+
+    // Collect stdout in a parallel thread
+    let mut stdout = child.stdout.take().unwrap();
+    let output_thread = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        stdout.read_to_end(&mut buf)?;
+        Ok::<_, Error>(buf)
+    });
+
+    // Collect stderr synchronously
+    let stderr = std::io::BufReader::new(child.stderr.take().unwrap());
+    let mut all_errors = Vec::new();
+    for mb_line in stderr.split(10) {
+        let mut line = mb_line?;
+        tee_error_line(&line);
+        all_errors.append(&mut line);
+        all_errors.push(10);
+    }
+
+    let status = child.wait()?;
+    let all_output = output_thread.join().expect("Panic in child thread")?;
+
+    let cargo_output = std::process::Output {
+        status,
+        stdout: all_output,
+        stderr: all_errors,
     };
     if cargo_output.status.success() {
         Ok(cargo_output)
@@ -298,6 +349,26 @@ fn run_cargo(
             }
         } else {
             bail!(Error::CompilationErrors(errors));
+        }
+    }
+}
+
+/// Process one line from cargo, either copying it to stderr or ignoring.
+///
+/// At this point it looks for messages about compiling dependency crates.
+fn tee_error_line(line: &[u8]) {
+    use std::io::Write;
+    static CRATE_COMPILING: OnceCell<regex::bytes::Regex> = OnceCell::new();
+    let crate_compiling = CRATE_COMPILING
+        .get_or_init(|| regex::bytes::Regex::new("^\\s*Compiling (\\w+)(?:\\s+.*)?$").unwrap());
+    if let Some(captures) = crate_compiling.captures(line) {
+        let crate_name = captures.get(1).unwrap().as_bytes();
+        if crate_name != CRATE_NAME.as_bytes() {
+            // write line and the following nl symbol as it was stripped before
+            std::io::stderr()
+                .write_all(line)
+                .expect("Writing to stderr should not fail");
+            eprintln!();
         }
     }
 }

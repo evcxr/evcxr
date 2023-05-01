@@ -1,3 +1,8 @@
+# Version 0.14.2
+* Fixed jupyter kernel running from vscode. Thanks TethysSvensson for bisecting
+  the cause.
+* Updated rust-analyzer
+
 # Version 0.14.1
 * Fixed thread starvation in Jupyter integration on systems with few CPUs.
 * Support interrupting execution in Jupyter notebook. Process gets terminated,

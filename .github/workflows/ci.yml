@@ -3,8 +3,6 @@ on:
   push:
     branches:
       - main
-  schedule:
-    - cron: '07 12 * * 5'
 
 name: Continuous integration
 
@@ -14,15 +12,12 @@ env:
 jobs:
   ci-linux:
     # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'google/evcxr'
+    if: github.repository == 'evcxr/evcxr'
     runs-on: ubuntu-latest
     strategy:
       matrix:
         rust:
           - stable
-          - beta
-          - nightly
-          - 1.65.0  # MSRV
 
     steps:
       - uses: actions/checkout@v2
@@ -62,57 +57,3 @@ jobs:
         with:
           command: clippy
           args: -- -D warnings
-
-
-  ci-windows:
-    # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'google/evcxr'
-    runs-on: windows-2019
-    strategy:
-      matrix:
-        rust:
-          - stable
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          override: true
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-
-
-  ci-mac:
-    # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'google/evcxr'
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-
-    steps:
-      - uses: actions/checkout@v2
-
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          override: true
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test

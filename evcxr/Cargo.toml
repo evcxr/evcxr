@@ -1,9 +1,9 @@
 [package]
 name = "evcxr"
-version = "0.14.1"
-license = "Apache-2.0"
+version = "0.14.2"
+license = "MIT OR Apache-2.0"
 description = "An Evaluation Context for Rust"
-repository = "https://github.com/google/evcxr"
+repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
 edition = "2021"
@@ -17,22 +17,21 @@ json = "0.12.4"
 regex = { version = "1.3.1", default-features = false, features = [ "std" ] }
 once_cell = "1.5.2"
 libloading = "0.7.0"
-backtrace = "0.3.35"
 dirs = "4.0.0"
 which = "4.0.2"
 evcxr_input = "1.0.0"
 unicode-segmentation = "1.7.1"
 crossbeam-channel = "0.5.5"
 
-ra_ap_ide = "=0.0.137"
-ra_ap_ide_db = "=0.0.137"
-ra_ap_project_model = "=0.0.137"
-ra_ap_paths = "=0.0.137"
-ra_ap_vfs = "=0.0.137"
-ra_ap_vfs-notify = "=0.0.137"
-ra_ap_hir = "=0.0.137"
-ra_ap_base_db = "=0.0.137"
-ra_ap_syntax = "=0.0.137"
+ra_ap_ide = "=0.0.149"
+ra_ap_ide_db = "=0.0.149"
+ra_ap_project_model = "=0.0.149"
+ra_ap_paths = "=0.0.149"
+ra_ap_vfs = "=0.0.149"
+ra_ap_vfs-notify = "=0.0.149"
+ra_ap_hir = "=0.0.149"
+ra_ap_base_db = "=0.0.149"
+ra_ap_syntax = "=0.0.149"
 
 # Rust-analyzer depends on pre-release versions of salsa which make breaking changes without a
 # semver bump. So we pin salsa to an exact version and update as needed together with the ra_ap_*
@@ -41,6 +40,7 @@ salsa = "=0.17.0-pre.2"
 ariadne = "0.1.5"
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
+backtrace = "0.3.35"
 sig = "1.0.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]

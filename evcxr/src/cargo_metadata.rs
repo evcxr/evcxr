@@ -1,16 +1,9 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use anyhow::bail;
 use anyhow::Context;
@@ -57,9 +50,8 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
     path = "lib.rs"
 
     [dependencies]
-    {} = {}
-    "#,
-            dep, dep_config
+    {dep} = {dep_config}
+    "#
         ),
     )?;
     let mut cmd = config.cargo_command("metadata");
@@ -74,12 +66,21 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
         let primary_error_pattern = PRIMARY_ERROR_PATTERN
             .get_or_init(|| Regex::new("(.*) as a dependency of package `[^`]*`").unwrap());
         let mut message = Vec::new();
+        let mut suggest_offline_mode = false;
         for line in String::from_utf8_lossy(&output.stderr).lines() {
             if let Some(captures) = primary_error_pattern.captures(line) {
                 message.push(captures[1].to_string());
             } else if !ignored_lines_pattern.is_match(line) {
                 message.push(line.to_owned());
             }
+
+            if line.contains("failed to fetch `https://github.com/rust-lang/crates.io-index`") {
+                suggest_offline_mode = true;
+            }
+        }
+
+        if suggest_offline_mode {
+            message.push("\nTip: Enable offline mode with `:offline 1`".to_owned());
         }
         bail!(message.join("\n"));
     }
@@ -153,14 +154,13 @@ mod tests {
             format!(
                 r#"
             [package]
-            name = "{}"
+            name = "{name}"
             version = "0.0.1"
             edition = "2021"
 
             [dependencies]
-            {}
-        "#,
-                name, deps
+            {deps}
+        "#
             ),
         )?;
         std::fs::write(src_dir.join("lib.rs"), "")?;

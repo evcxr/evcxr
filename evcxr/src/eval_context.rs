@@ -1,16 +1,9 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use crate::child_process::ChildProcess;
 use crate::code_block::CodeBlock;
@@ -52,11 +45,15 @@ use std::time::Duration;
 use std::time::Instant;
 
 pub struct EvalContext {
+    // Order is important here. We need to drop child_process before _tmpdir,
+    // since if the subprocess hasn't terminted before we clean up the temporary
+    // directory, then on some platforms (e.g. Windows), files in the temporary
+    // directory will still be locked, so won't be deleted.
+    child_process: ChildProcess,
     // Our tmpdir if EVCXR_TMPDIR wasn't set - Drop causes tmpdir to be cleaned up.
     _tmpdir: Option<tempfile::TempDir>,
     module: Module,
     committed_state: ContextState,
-    child_process: ChildProcess,
     stdout_sender: crossbeam_channel::Sender<String>,
     analyzer: RustAnalyzer,
     initial_config: Config,
@@ -71,6 +68,7 @@ pub(crate) struct Config {
     // attempt to determine if the type of the variable is copy.
     preserve_vars_on_panic: bool,
     output_format: String,
+    display_types: bool,
     /// Whether to try to display the final expression. Currently this needs to
     /// be turned off when doing tab completion or cargo check, but otherwise it
     /// should always be on.
@@ -113,6 +111,7 @@ impl Config {
             debug_mode: false,
             preserve_vars_on_panic: true,
             output_format: "{:?}".to_owned(),
+            display_types: false,
             display_final_expression: true,
             expand_use_statements: true,
             opt_level: "2".to_owned(),
@@ -152,9 +151,6 @@ impl Config {
         };
         if self.linker == "mold" {
             command.arg("-run").arg(&self.cargo_path);
-        }
-        if !self.toolchain.is_empty() {
-            command.arg(format!("+{}", self.toolchain));
         }
         if self.offline_mode {
             command.arg("--offline");
@@ -202,6 +198,35 @@ const SEND_TEXT_PLAIN_DEF: &str = stringify!(
             eprintln!("Failed to send content to parent: {:?}", error);
             std::process::exit(1);
         }
+    }
+);
+
+const GET_TYPE_NAME_DEF: &str = stringify!(
+    /// Shorten a type name. Convert "core::option::Option<alloc::string::String>" into "Option<String>".
+    pub fn evcxr_shorten_type(t: &str) -> String {
+        // This could have been done easily with regex, but we must only depend on stdlib.
+        // We go over the string backwards, and remove all alphanumeric and ':' chars following a ':'.
+        let mut r = String::with_capacity(t.len());
+        let mut is_skipping = false;
+        for c in t.chars().rev() {
+            if !is_skipping {
+                if c == ':' {
+                    is_skipping = true;
+                } else {
+                    r.push(c);
+                }
+            } else {
+                if !c.is_alphanumeric() && c != '_' && c != ':' {
+                    is_skipping = false;
+                    r.push(c);
+                }
+            }
+        }
+        r.chars().rev().collect()
+    }
+
+    fn evcxr_get_type_name<T>(_: &T) -> String {
+        evcxr_shorten_type(std::any::type_name::<T>())
     }
 );
 
@@ -642,6 +667,7 @@ impl EvalContext {
 
     pub(crate) fn write_cargo_toml(&self, state: &ContextState) -> Result<()> {
         self.module.write_cargo_toml(state)?;
+        self.module.write_config_toml(state)?;
         Ok(())
     }
 
@@ -965,13 +991,18 @@ impl EvalOutputs {
         self.content_by_mime_type.get(mime_type).map(String::as_str)
     }
 
-    pub fn merge(&mut self, other: EvalOutputs) {
+    pub fn merge(&mut self, mut other: EvalOutputs) {
         for (mime_type, content) in other.content_by_mime_type {
             self.content_by_mime_type
                 .entry(mime_type)
                 .or_default()
                 .push_str(&content);
         }
+        self.timing = match (self.timing.take(), other.timing) {
+            (Some(t1), Some(t2)) => Some(t1 + t2),
+            (t1, t2) => t1.or(t2),
+        };
+        self.phases.append(&mut other.phases);
     }
 }
 
@@ -1108,7 +1139,7 @@ impl ContextState {
         self.config.preserve_vars_on_panic
     }
 
-    pub fn offline_mode(&mut self) -> bool {
+    pub fn offline_mode(&self) -> bool {
         self.config.offline_mode
     }
 
@@ -1143,7 +1174,21 @@ impl ContextState {
         self.config.output_format = output_format;
     }
 
+    pub fn display_types(&self) -> bool {
+        self.config.display_types
+    }
+
+    pub fn set_display_types(&mut self, display_types: bool) {
+        self.config.display_types = display_types;
+    }
+
     pub fn set_toolchain(&mut self, value: &str) {
+        if let Some(rustc_path) = rustup_rustc_path(Some(value)) {
+            self.config.rustc_path = rustc_path;
+        }
+        if let Some(cargo_path) = rustup_cargo_path(Some(value)) {
+            self.config.cargo_path = cargo_path;
+        }
         self.config.toolchain = value.to_owned();
     }
 
@@ -1233,10 +1278,9 @@ impl ContextState {
             }
             "E0597" => {
                 format!(
-                    "The variable `{}` contains a reference with a non-static lifetime so\n\
+                    "The variable `{variable_name}` contains a reference with a non-static lifetime so\n\
                     can't be persisted. You can prevent this error by making sure that the\n\
-                    variable goes out of scope - i.e. wrapping the code in {{}}.",
-                    variable_name
+                    variable goes out of scope - i.e. wrapping the code in {{}}."
                 )
             }
             _ => {
@@ -1579,15 +1623,27 @@ impl ContextState {
                                 .generated(").evcxr_display();")
                                 .code_string(),
                             // If that fails, we try debug format.
-                            CodeBlock::new()
+                            if self.config.display_types {
+                                CodeBlock::new()
+                                .generated(SEND_TEXT_PLAIN_DEF)
+                                .generated(GET_TYPE_NAME_DEF)
+                                .generated("{ let r = &(")
+                                .with_segment(segment)
+                                .generated(format!(
+                                    "); evcxr_send_text_plain(&format!(\": {{}} = {}\", evcxr_get_type_name(r), r)); }};",
+                                    self.config.output_format
+                                ))
+                            } else {
+                                CodeBlock::new()
                                 .generated(SEND_TEXT_PLAIN_DEF)
                                 .generated(format!(
                                     "evcxr_send_text_plain(&format!(\"{}\",&(\n",
                                     self.config.output_format
                                 ))
                                 .with_segment(segment)
-                                .generated(")));"),
-                        );
+                                .generated(")));")
+                                },
+                            );
                     } else {
                         code_out = code_out
                             .generated("let _ = ")
@@ -1780,12 +1836,12 @@ impl ContextState {
 // directly, we avoid having rustup decide which binary to invoke each time we
 // compile. This reduces eval time for a trivial bit of code from about 140ms to
 // 109ms.
-fn rustup_cargo_path() -> Option<String> {
-    let output = Command::new("rustup")
-        .arg("which")
-        .arg("cargo")
-        .output()
-        .ok()?;
+fn rustup_cargo_path(toolchain: Option<&str>) -> Option<String> {
+    let mut cmd = Command::new("rustup");
+    if let Some(toolchain) = toolchain {
+        cmd.arg("+".to_owned() + toolchain);
+    }
+    let output = cmd.arg("which").arg("cargo").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -1793,17 +1849,17 @@ fn rustup_cargo_path() -> Option<String> {
 }
 
 fn default_cargo_path() -> String {
-    rustup_cargo_path().unwrap_or_else(|| "cargo".to_owned())
+    rustup_cargo_path(None).unwrap_or_else(|| "cargo".to_owned())
 }
 
 // Similar to the above, this avoids cargo invoking rustup, cutting the eval
 // time for a trivial bit of code to about 75ms.
-fn rustup_rustc_path() -> Option<String> {
-    let output = Command::new("rustup")
-        .arg("which")
-        .arg("rustc")
-        .output()
-        .ok()?;
+fn rustup_rustc_path(toolchain: Option<&str>) -> Option<String> {
+    let mut cmd = Command::new("rustup");
+    if let Some(toolchain) = toolchain {
+        cmd.arg("+".to_owned() + toolchain);
+    }
+    let output = cmd.arg("which").arg("rustc").output().ok()?;
     if !output.status.success() {
         return None;
     }
@@ -1811,7 +1867,7 @@ fn rustup_rustc_path() -> Option<String> {
 }
 
 fn default_rustc_path() -> String {
-    rustup_rustc_path().unwrap_or_else(|| "rustc".to_owned())
+    rustup_rustc_path(None).unwrap_or_else(|| "rustc".to_owned())
 }
 
 fn replace_reserved_words_in_type(ty: &str) -> String {
