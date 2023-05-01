@@ -1,0 +1,59 @@
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+name: Continuous integration
+
+env:
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  ci-linux:
+    # Avoid running on people's forks, especially the scheduled runs.
+    if: github.repository == 'evcxr/evcxr'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust:
+          - stable
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: actions/cache@v2
+        # https://github.com/actions/cache/blob/main/examples.md#rust---cargo
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
+
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+          components: rustfmt, clippy
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -- -D warnings

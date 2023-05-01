@@ -1,19 +1,29 @@
 [package]
 name = "evcxr_repl"
-version = "0.8.0"
-license = "Apache-2.0"
+version = "0.14.2"
+license = "MIT OR Apache-2.0"
 description = "A REPL for Rust"
-repository = "https://github.com/google/evcxr"
+repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
-edition = "2018"
+edition = "2021"
+
+[features]
+default = ["mimalloc"]
 
 [dependencies]
-evcxr = { version = "=0.8.0", path = "../evcxr" }
-rustyline = "6.3.0"
+evcxr = { version = "=0.14.2", path = "../evcxr" }
+rustyline = "10.0.0"
 colored = "2.0.0"
-lazy_static = "1.4.0"
+once_cell = "1.5.2"
 regex = { version = "1.4.1", default-features = false, features = [ "std" ] }
 structopt = "0.3"
 unicode-xid = "0.2"
 unicode-segmentation = "1.7.1"
+mimalloc = { version = "0.1", default-features = false, optional = true }
+parking_lot = "0.12.1"
+crossbeam-channel = "0.5.5"
+ariadne = "0.1.5"
+yansi = "0.5.1"
+anyhow = "1.0.33"
+ctrlc = "3.2.3"

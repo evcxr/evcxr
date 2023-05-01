@@ -1,16 +1,9 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 //! Sadly, `syn` and friends only handle valid rust -- or at least, `syn` tells
 //! us that an input is invalid, but cannot determine the difference between
@@ -59,7 +52,7 @@ use std::str::CharIndices;
 use unicode_xid::UnicodeXID;
 
 /// Return type for `validate_source_fragment`
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum FragmentValidity {
     /// Note that despite it's name, this really just means "not obviously
     /// invalid". There are many ways the source might still be invalid or
@@ -98,20 +91,34 @@ pub enum FragmentValidity {
 pub fn validate_source_fragment(source: &str) -> FragmentValidity {
     use Bracket::*;
     let mut stack: Vec<Bracket> = vec![];
+    // The expected depth `stack` should have after the closing ']' of the attribute
+    // is read; None if closing ']' has already been read or currently not reading
+    // attribute
+    let mut attr_end_stack_depth: Option<usize> = None;
+    // Whether the item after an attribute is expected; is set to true after the
+    // expected attr_end_stack_depth was reached
+    let mut expects_attr_item = false;
 
     let mut input = source.char_indices().peekable();
     while let Some((i, c)) = input.next() {
+        // Whether the next char is the start of an attribute target; for simplicity this
+        // is initially set to true and only set below to false for chars which are not
+        // an attribute target, such as comments and whitespace
+        let mut is_attr_target = true;
+
         match c {
             // Possibly a comment.
             '/' => match input.peek() {
                 Some((_, '/')) => {
                     eat_comment_line(&mut input);
+                    is_attr_target = false;
                 }
                 Some((_, '*')) => {
                     input.next();
                     if !eat_comment_block(&mut input) {
                         return FragmentValidity::Incomplete;
                     }
+                    is_attr_target = false;
                 }
                 _ => {}
             },
@@ -120,8 +127,22 @@ pub fn validate_source_fragment(source: &str) -> FragmentValidity {
             '{' => stack.push(Curly),
             ')' | ']' | '}' => {
                 match (stack.pop(), c) {
-                    (Some(Round), ')') | (Some(Square), ']') | (Some(Curly), '}') => {
+                    (Some(Round), ')') | (Some(Curly), '}') => {
                         // good.
+                    }
+                    (Some(Square), ']') => {
+                        if let Some(end_stack_depth) = attr_end_stack_depth {
+                            // Check if end of attribute has been reached
+                            if stack.len() == end_stack_depth {
+                                attr_end_stack_depth = None;
+                                expects_attr_item = true;
+                                // Prevent considering ']' as attribute target, and therefore
+                                // directly setting `expects_attr_item = false` again below
+                                is_attr_target = false;
+                            }
+                        }
+
+                        // for non-attribute there is nothing else to do
                     }
                     _ => {
                         // Either the bracket stack was empty or mismatched. In
@@ -158,18 +179,39 @@ pub fn validate_source_fragment(source: &str) -> FragmentValidity {
                     return FragmentValidity::Invalid;
                 }
             }
-            _ => {}
+            // Possibly an attribute.
+            '#' => {
+                // Only handle outer attribute (`#[...]`); for inner attribute (`#![...]`) there is
+                // no need to report Incomplete because the enclosing item to which the attribute
+                // applies (e.g. a function) is probably already returning Incomplete, if necessary
+                if let Some((_, '[')) = input.peek() {
+                    attr_end_stack_depth = Some(stack.len());
+                    // Don't consume '[' here, let the general bracket handling code above do that
+                }
+            }
+            _ => {
+                // This differs from Rust grammar which only considers `Pattern_White_Space`
+                // (see https://doc.rust-lang.org/reference/whitespace.html), whereas `char::is_whitespace`
+                // checks for `White_Space` char property; but might not matter in most cases
+                if c.is_whitespace() {
+                    is_attr_target = false;
+                }
+            }
+        }
+
+        if is_attr_target {
+            expects_attr_item = false;
         }
     }
     // Seems good to me if we get here!
-    if stack.is_empty() {
+    if stack.is_empty() && !expects_attr_item {
         FragmentValidity::Valid
     } else {
         FragmentValidity::Incomplete
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 enum StrKind {
     /// Normal string. Closed on first ", but a backslash can escape a single
     /// quote.
@@ -248,7 +290,7 @@ fn eat_string(iter: &mut Peekable<CharIndices<'_>>, kind: StrKind) -> bool {
 ///
 /// Consumes the entire comment, including the `\n`.
 fn eat_comment_line<I: Iterator<Item = (usize, char)>>(iter: &mut I) {
-    while let Some((_, c)) = iter.next() {
+    for (_, c) in iter {
         if c == '\n' {
             break;
         }
@@ -261,11 +303,8 @@ fn eat_comment_line<I: Iterator<Item = (usize, char)>>(iter: &mut I) {
 fn eat_comment_block(iter: &mut Peekable<CharIndices<'_>>) -> bool {
     let mut depth = 1;
     while depth != 0 {
-        let c = if let Some(next) = iter.next() {
-            next.1
-        } else {
-            return false;
-        };
+        let Some(next) = iter.next() else { return false; };
+        let c = next.1;
         match c {
             '/' => {
                 if let Some((_, '*')) = iter.peek() {
@@ -286,7 +325,7 @@ fn eat_comment_block(iter: &mut Peekable<CharIndices<'_>>) -> bool {
 }
 
 /// Return value of `eat_char`.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum EatCharRes {
     AteChar,
     SawLifetime,
@@ -334,7 +373,7 @@ fn do_eat_char(input: &mut Peekable<CharIndices<'_>>) -> Option<EatCharRes> {
         // Hope for the best, and read until we see a closing quote or something
         // that definitely doesn't belong. This should probably be made smarter,
         // since the actual syntax for the escape sequences is not that bad.
-        while let Some((_, c)) = input.next() {
+        for (_, c) in input {
             if c == '\'' {
                 return Some(EatCharRes::AteChar);
             }
@@ -392,7 +431,7 @@ fn eat_char(input: &mut Peekable<CharIndices<'_>>) -> Option<EatCharRes> {
     res
 }
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 enum Bracket {
     Round,
     Square,
@@ -552,5 +591,20 @@ mod test {
         // This is invalid, but the important thing is that we don't say
         // incomplete.
         invalid("foo('a ')\n");
+
+        invalid("#[]]");
+        partial("#[");
+        partial("#[derive(Debug)]");
+        partial("#[derive(Debug)]\n#[cfg(target_os = \"linux\")]");
+        partial("#[derive(Debug)]\nstruct S;\n#[derive(Debug)]");
+        partial("#[derive(Debug)] // comment");
+        partial("#[derive(Debug)] /* comment */");
+
+        valid("#[derive(Debug)] struct S;");
+        valid("#[cfg(target_os = \"linux\")]\n#[allow(unused_variables)]\nfn test() {}");
+        valid("#[doc = \"example # ]]] [[[\"] struct S;");
+        // Inner attributes are considered complete because they apply to
+        // the enclosing item
+        valid("#![derive(Debug)]");
     }
 }

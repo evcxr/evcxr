@@ -1,36 +1,29 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use anyhow::Result;
-use hmac::{Hmac, Mac};
+use hmac::digest::KeyInit;
+use hmac::Hmac;
 use sha2::Sha256;
-use zmq;
 
 pub(crate) type HmacSha256 = Hmac<Sha256>;
 
-pub(crate) struct Connection {
-    pub(crate) socket: zmq::Socket,
+pub(crate) struct Connection<S> {
+    pub(crate) socket: S,
     /// Will be None if our key was empty (digest authentication disabled).
     pub(crate) mac: Option<HmacSha256>,
 }
 
-impl Connection {
-    pub(crate) fn new(socket: zmq::Socket, key: &str) -> Result<Connection> {
+impl<S: zeromq::Socket> Connection<S> {
+    pub(crate) fn new(socket: S, key: &str) -> Result<Self> {
         let mac = if key.is_empty() {
             None
         } else {
-            Some(HmacSha256::new_varkey(key.as_bytes()).expect("Shouldn't fail with HMAC"))
+            Some(HmacSha256::new_from_slice(key.as_bytes()).expect("Shouldn't fail with HMAC"))
         };
         Ok(Connection { socket, mac })
     }

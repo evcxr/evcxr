@@ -1,18 +1,13 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use crate::errors::{bail, Error};
+use crate::errors::bail;
+use crate::errors::Error;
+use once_cell::sync::OnceCell;
 use regex::Regex;
 use std::path::Path;
 
@@ -32,17 +27,16 @@ fn make_paths_absolute(config: String) -> Result<String, Error> {
     // compiler bug that prevented us from using any crate that used custom
     // derive. That bug is long fixed though, so switching this to use a toml
     // parser would be an option.
-    lazy_static! {
-        static ref PATH_RE: Regex = Regex::new("^(.*)path *= *\"([^\"]+)\"(.*)$").unwrap();
-    }
-    if let Some(captures) = PATH_RE.captures(&config) {
+    static PATH_RE: OnceCell<Regex> = OnceCell::new();
+    let path_re = PATH_RE.get_or_init(|| Regex::new("^(.*)path *= *\"([^\"]+)\"(.*)$").unwrap());
+    if let Some(captures) = path_re.captures(&config) {
         let path = Path::new(&captures[2]);
         if !path.is_absolute() {
             match path.canonicalize() {
                 Ok(path) => {
                     return Ok(captures[1].to_owned()
                         + "path = \""
-                        + &path.to_string_lossy()
+                        + &escape_toml_string(&path.to_string_lossy())
                         + "\""
                         + &captures[3]);
                 }
@@ -55,6 +49,33 @@ fn make_paths_absolute(config: String) -> Result<String, Error> {
     Ok(config)
 }
 
+/// Escapes a TOML string, see https://toml.io/en/v1.0.0#string
+fn escape_toml_string(string: &str) -> String {
+    let mut escaped = String::new();
+
+    for char in string.chars() {
+        match char {
+            '"' | '\\' => {
+                escaped.push('\\');
+                escaped.push(char);
+            }
+            // Control characters with special escape sequences
+            '\u{0008}' => escaped.push_str("\\b"),
+            '\t' => escaped.push_str("\\t"),
+            '\n' => escaped.push_str("\\n"),
+            '\u{000C}' => escaped.push_str("\\f"),
+            '\r' => escaped.push_str("\\r"),
+            // Control characters using \uXXXX escape sequence
+            '\0'..='\u{001F}' | '\u{007F}' => {
+                escaped.push_str(&format!("\\u{:04X}", char as u32));
+            }
+            _ => escaped.push(char),
+        }
+    }
+
+    escaped
+}
+
 impl ExternalCrate {
     pub(crate) fn new(name: String, config: String) -> Result<ExternalCrate, Error> {
         let config = make_paths_absolute(config)?;
@@ -64,23 +85,40 @@ impl ExternalCrate {
 
 #[cfg(test)]
 mod tests {
+    use super::escape_toml_string;
     use super::ExternalCrate;
     use std::path::Path;
+
+    #[test]
+    fn test_escape_toml_string() {
+        let string = "test \" \\ \\u1234 \u{10FFFF}";
+        assert_eq!(
+            escape_toml_string(string),
+            "test \\\" \\\\ \\\\u1234 \u{10FFFF}"
+        );
+
+        let string = "\u{0000} \u{0008} \t \n \u{000C} \r \u{001F} \u{007F}";
+        assert_eq!(
+            escape_toml_string(string),
+            r#"\u0000 \b \t \n \f \r \u001F \u007F"#
+        );
+    }
 
     #[test]
     fn make_paths_absolute() {
         let krate =
             ExternalCrate::new("foo".to_owned(), "{ path = \"src/testdata\" }".to_owned()).unwrap();
         assert_eq!(krate.name, "foo");
+
+        let expected_path_string = &escape_toml_string(
+            &Path::new("src/testdata")
+                .canonicalize()
+                .unwrap()
+                .to_string_lossy(),
+        );
         assert_eq!(
             krate.config,
-            format!(
-                "{{ path = \"{}\" }}",
-                Path::new("src/testdata")
-                    .canonicalize()
-                    .unwrap()
-                    .to_string_lossy()
-            )
+            format!("{{ path = \"{expected_path_string}\" }}")
         );
     }
 }

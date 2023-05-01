@@ -1,28 +1,38 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use anyhow::{anyhow, bail, Context, Result};
-use ra_ap_base_db::{FileId, SourceRoot};
+use anyhow::anyhow;
+use anyhow::bail;
+use anyhow::Context;
+use anyhow::Result;
+use once_cell::sync::OnceCell;
+use ra_ap_base_db::FileId;
+use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
+use ra_ap_ide_db::imports::insert_use::ImportGranularity;
+use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
+use ra_ap_ide_db::FxHashMap;
+use ra_ap_ide_db::SnippetCap;
 use ra_ap_paths::AbsPathBuf;
-use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace};
-use ra_ap_syntax::ast::{self, AstNode};
+use ra_ap_project_model::CargoConfig;
+use ra_ap_project_model::ProjectManifest;
+use ra_ap_project_model::ProjectWorkspace;
+use ra_ap_project_model::RustcSource;
+use ra_ap_syntax::ast::AstNode;
+use ra_ap_syntax::ast::{self};
 use ra_ap_vfs as ra_vfs;
 use ra_ap_vfs_notify as vfs_notify;
+use ra_ide::CallableSnippets;
+use std::collections::HashMap;
+use std::convert::TryFrom;
+use std::path::Path;
 use std::sync::mpsc;
-use std::{collections::HashMap, convert::TryFrom, path::Path, sync::Arc};
+use std::sync::Arc;
 
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
@@ -37,10 +47,17 @@ pub(crate) struct RustAnalyzer {
     current_source: Arc<String>,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum TypeName {
+    Named(String),
+    Closure,
+    Unknown,
+}
+
 #[derive(Debug)]
 pub(crate) struct VariableInfo {
-    /// The variable's type as Rust code.
-    pub(crate) type_name: String,
+    /// The variable's type as Rust code, or None if we couldn't determine it.
+    pub(crate) type_name: TypeName,
     /// Whether the variable is declared as mutable.
     pub(crate) is_mutable: bool,
 }
@@ -58,11 +75,11 @@ impl RustAnalyzer {
         // files existence when determining the crate structure.
         let src_dir = root_directory.join("src");
         std::fs::create_dir_all(&src_dir)
-            .with_context(|| format!("Failed to create directory `{:?}`", src_dir))?;
+            .with_context(|| format!("Failed to create directory `{src_dir:?}`"))?;
         // Pre-allocate an ID for our main source file.
         let vfs_source_file: ra_vfs::VfsPath = source_file.clone().into();
         vfs.set_file_contents(vfs_source_file.clone(), Some(vec![]));
-        let source_file_id = vfs.file_id(&vfs_source_file.clone()).unwrap();
+        let source_file_id = vfs.file_id(&vfs_source_file).unwrap();
         Ok(RustAnalyzer {
             with_sysroot: true,
             root_directory,
@@ -109,7 +126,8 @@ impl RustAnalyzer {
 
     /// Returns top-level variable names and their types in the specified function.
     pub(crate) fn top_level_variables(&self, function_name: &str) -> HashMap<String, VariableInfo> {
-        use ra_ap_syntax::ast::{ModuleItemOwner, NameOwner};
+        use ra_ap_syntax::ast::HasModuleItem;
+        use ra_ap_syntax::ast::HasName;
         let mut result = HashMap::new();
         let sema = ra_ide::Semantics::new(self.analysis_host.raw_database());
         let source_file = sema.parse(self.source_file_id);
@@ -120,30 +138,38 @@ impl RustAnalyzer {
                     .map(|n| n.text() == function_name)
                     .unwrap_or(false)
                 {
-                    let body = if let Some(b) = function.body() {
-                        b
-                    } else {
+                    let Some(body) = function.body() else {
                         continue;
                     };
-                    let module = sema.scope(&function.syntax()).module().unwrap();
+                    let module = sema
+                        .scope(function.syntax())
+                        .map(|scope| scope.module())
+                        .unwrap();
                     for statement in body.statements() {
                         if let ast::Stmt::LetStmt(let_stmt) = statement {
                             if let Some(pat) = let_stmt.pat() {
-                                if let ast::Pat::IdentPat(ident_pat) = pat.clone() {
-                                    if let Some(name) = ident_pat.name() {
-                                        use ra_hir::HirDisplay;
-                                        if let Some(ty) = sema.type_of_pat(&pat) {
-                                            if let Ok(type_name) =
-                                                ty.display_source_code(sema.db, module.into())
-                                            {
-                                                result.insert(
-                                                    name.text().to_string(),
-                                                    VariableInfo {
-                                                        type_name,
-                                                        is_mutable: ident_pat.mut_token().is_some(),
-                                                    },
-                                                );
-                                            }
+                                if !add_variable_for_pattern(
+                                    &pat,
+                                    &sema,
+                                    let_stmt.ty(),
+                                    module,
+                                    &mut result,
+                                ) {
+                                    // We didn't add a variable for `pat`, possibly because it's a
+                                    // more complex pattern that needs destructuring. Try for each
+                                    // sub pattern. This time, we ignore the explicit type, because
+                                    // it applies to the whole pattern, not to its parts. Note, this
+                                    // will attempt `pat` again, but that's OK, since it failed
+                                    // above, so will fail again.
+                                    for d in pat.syntax().descendants() {
+                                        if let Some(sub_pat) = ast::Pat::cast(d) {
+                                            add_variable_for_pattern(
+                                                &sub_pat,
+                                                &sema,
+                                                None,
+                                                module,
+                                                &mut result,
+                                            );
                                         }
                                     }
                                 }
@@ -158,11 +184,16 @@ impl RustAnalyzer {
 
     fn load_cargo_toml(&mut self, change: &mut ra_ide::Change) -> Result<()> {
         let manifest = ProjectManifest::from_manifest_file(self.cargo_toml_filename())?;
+        let sysroot = if self.with_sysroot {
+            Some(RustcSource::Discover)
+        } else {
+            None
+        };
         let config = CargoConfig {
-            no_sysroot: !self.with_sysroot,
+            sysroot,
             ..CargoConfig::default()
         };
-        let workspace = ProjectWorkspace::load(manifest, &config)?;
+        let workspace = ProjectWorkspace::load(manifest, &config, &|_| {})?;
         let load = workspace
             .to_roots()
             .iter()
@@ -177,13 +208,18 @@ impl RustAnalyzer {
         // Note, set_config is what triggers loading and calling the callback that we registered when we created self.loader.
         use ra_vfs::loader::Handle;
         self.loader.set_config(ra_vfs::loader::Config {
+            version: 1,
             load,
             watch: vec![],
         });
 
         for message in &self.message_receiver {
             match message {
-                ra_vfs::loader::Message::Progress { n_total, n_done } => {
+                ra_vfs::loader::Message::Progress {
+                    n_total,
+                    n_done,
+                    config_version: _,
+                } => {
                     if n_total == n_done {
                         break;
                     }
@@ -202,7 +238,7 @@ impl RustAnalyzer {
             let new_contents = if changed_file.exists() {
                 String::from_utf8(self.vfs.file_contents(changed_file.file_id).to_owned())
                     .ok()
-                    .map(|contents| Arc::new(contents))
+                    .map(Arc::new)
             } else {
                 None
             };
@@ -212,12 +248,14 @@ impl RustAnalyzer {
             ra_vfs::file_set::FileSetConfig::default()
                 .partition(&self.vfs)
                 .into_iter()
-                .map(|file_set| SourceRoot::new_local(file_set))
+                .map(SourceRoot::new_local)
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(None, None, &mut |path| {
-            self.vfs.file_id(&path.to_path_buf().into())
-        }));
+        change.set_crate_graph(workspace.to_crate_graph(
+            &mut |_, _| Ok(Vec::new()),
+            &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
+            &FxHashMap::default(),
+        ));
         Ok(())
     }
 
@@ -228,27 +266,36 @@ impl RustAnalyzer {
     pub(crate) fn completions(&self, position: usize) -> Result<Completions> {
         let mut completions = Vec::new();
         let mut range = None;
-        let mut config = ra_ide::CompletionConfig {
+        let config = ra_ide::CompletionConfig {
             enable_postfix_completions: true,
-            add_call_parenthesis: true,
-            add_call_argument_snippets: true,
-            snippet_cap: None,
-            ..ra_ide::CompletionConfig::default()
+            snippet_cap: SnippetCap::new(true),
+            enable_imports_on_the_fly: false,
+            enable_self_on_the_fly: true,
+            enable_private_editable: true,
+            prefer_no_std: false,
+            snippets: vec![],
+            insert_use: InsertUseConfig {
+                prefix_kind: ra_hir::PrefixKind::ByCrate,
+                group: false,
+                granularity: ImportGranularity::Item,
+                enforce_granularity: false,
+                skip_glob_imports: false,
+            },
+            callable: Some(CallableSnippets::FillArguments),
         };
-        config.allow_snippets(true);
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
             ra_ide::FilePosition {
                 file_id: self.source_file_id,
                 offset: (position as u32).into(),
             },
+            None,
         ) {
             for item in completion_items {
                 use regex::Regex;
-                lazy_static! {
-                    static ref ARG_PLACEHOLDER: Regex =
-                        Regex::new("\\$\\{[0-9]+:([^}]*)\\}").unwrap();
-                }
+                static ARG_PLACEHOLDER: OnceCell<Regex> = OnceCell::new();
+                let arg_placeholder =
+                    ARG_PLACEHOLDER.get_or_init(|| Regex::new("\\$\\{[0-9]+:([^}]*)\\}").unwrap());
                 let mut indels = item.text_edit().iter();
                 if let Some(indel) = indels.next() {
                     let text_to_delete = &self.current_source[indel.delete];
@@ -258,7 +305,7 @@ impl RustAnalyzer {
                         continue;
                     }
                     completions.push(Completion {
-                        code: ARG_PLACEHOLDER
+                        code: arg_placeholder
                             .replace_all(&indel.insert, "$1")
                             .replace("$0", ""),
                     });
@@ -283,6 +330,63 @@ impl RustAnalyzer {
     }
 }
 
+/// If `pat` represents a variable that is being defined, then record it in `result` and return
+/// true.
+fn add_variable_for_pattern(
+    pat: &ast::Pat,
+    sema: &ra_hir::Semantics<ra_ide::RootDatabase>,
+    explicit_type: Option<ast::Type>,
+    module: ra_hir::Module,
+    result: &mut HashMap<String, VariableInfo>,
+) -> bool {
+    use ra_ap_syntax::ast::HasName;
+    if let ast::Pat::IdentPat(ident_pat) = pat {
+        if let Some(name) = ident_pat.name() {
+            let type_name = get_type_name(
+                explicit_type,
+                sema.type_of_pat(pat).map(|info| info.original()),
+                sema,
+                module,
+            );
+            result.insert(
+                name.text().to_string(),
+                VariableInfo {
+                    type_name,
+                    is_mutable: ident_pat.mut_token().is_some(),
+                },
+            );
+            return true;
+        }
+    }
+    false
+}
+
+fn get_type_name(
+    explicit_type: Option<ast::Type>,
+    inferred_type: Option<ra_hir::Type>,
+    sema: &ra_hir::Semantics<ra_ide::RootDatabase>,
+    module: ra_hir::Module,
+) -> TypeName {
+    use ra_hir::HirDisplay;
+    if let Some(explicit_type) = explicit_type {
+        let type_name = explicit_type.syntax().text().to_string();
+        if is_type_valid(&type_name) {
+            return TypeName::Named(type_name);
+        }
+    }
+    if let Some(ty) = inferred_type {
+        if ty.is_closure() {
+            return TypeName::Closure;
+        }
+        if let Ok(type_name) = ty.display_source_code(sema.db, module.into()) {
+            if is_type_valid(&type_name) {
+                return TypeName::Named(type_name);
+            }
+        }
+    }
+    TypeName::Unknown
+}
+
 /// Completions found in a particular context.
 #[derive(Default)]
 pub struct Completions {
@@ -303,22 +407,32 @@ pub struct Completion {
 /// types, produces invalid code. In particular, fixed sized arrays come out without a size. e.g.
 /// instead of `[i32, 5]`, we get `[i32, _]`.
 pub(crate) fn is_type_valid(type_name: &str) -> bool {
-    if let Ok(ty) = ast::Type::parse(&type_name) {
-        for node in ty.syntax().descendants() {
-            if node.kind() == ra_ap_syntax::SyntaxKind::ERROR {
-                return false;
-            }
-        }
-        return true;
+    use ra_ap_syntax::SyntaxKind;
+    let wrapped_source = format!("const _: {type_name} = foo();");
+    let parsed = ast::SourceFile::parse(&wrapped_source);
+    if !parsed.errors().is_empty() {
+        return false;
     }
-    false
+    for node in parsed.syntax_node().descendants() {
+        if node.kind() == SyntaxKind::ERROR || node.kind() == SyntaxKind::INFER_TYPE {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
 mod test {
-    use super::{is_type_valid, RustAnalyzer};
+    use super::is_type_valid;
+    use super::RustAnalyzer;
+    use super::TypeName;
     use anyhow::Result;
-    use tempfile;
+
+    impl TypeName {
+        fn named(name: &str) -> TypeName {
+            TypeName::Named(name.to_owned())
+        }
+    }
 
     #[test]
     fn get_variable_types() -> Result<()> {
@@ -338,14 +452,20 @@ mod test {
 
         ra.set_source(
             r#"
+            struct Foo<const I: usize> {}
+            struct Point {x: u8, y: u8}
             fn foo() {
                 let v1 = true;
                 let mut v1 = 42i32;
                 let v2 = &[false];
+                let v3: Foo<10> = Foo::<10> {};
                 {
                     let v2 = false;
                     let v100 = true;
                 }
+                let (v4, ..) = (42u64, 43, 44);
+                let p1 = Point {x: 1, y: 2};
+                let Point {x, y: y2} = p1;
             }
             fn foo2() {
                 let v9 = true;
@@ -353,11 +473,15 @@ mod test {
             .to_owned(),
         )?;
         let var_types = ra.top_level_variables("foo");
-        assert_eq!(var_types["v1"].type_name, "i32");
+        assert_eq!(var_types["v1"].type_name, TypeName::named("i32"));
         assert!(var_types["v1"].is_mutable);
-        assert_eq!(var_types["v2"].type_name, "&[bool; _]");
+        assert_eq!(var_types["v2"].type_name, TypeName::named("&[bool; 1]"));
         assert!(!var_types["v2"].is_mutable);
+        assert_eq!(var_types["v3"].type_name, TypeName::named("Foo<10>"));
         assert!(var_types.get("v100").is_none());
+        assert_eq!(var_types["v4"].type_name, TypeName::named("u64"));
+        assert_eq!(var_types["x"].type_name, TypeName::named("u8"));
+        assert_eq!(var_types["y2"].type_name, TypeName::named("u8"));
 
         ra.set_source(
             r#"
@@ -367,7 +491,7 @@ mod test {
             .to_owned(),
         )?;
         let var_types = ra.top_level_variables("foo");
-        assert_eq!(var_types["v1"].type_name, "u16");
+        assert_eq!(var_types["v1"].type_name, TypeName::named("u16"));
         assert!(var_types.get("v2").is_none());
 
         Ok(())
@@ -378,5 +502,7 @@ mod test {
         assert!(is_type_valid("Vec<String>"));
         assert!(is_type_valid("&[i32]"));
         assert!(!is_type_valid("[i32, _]"));
+        assert!(!is_type_valid("Vec<_>"));
+        assert!(is_type_valid("Foo<42>"));
     }
 }

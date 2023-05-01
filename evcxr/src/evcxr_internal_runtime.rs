@@ -1,16 +1,9 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 // This file is both a module of evcxr and is included via include_str! then
 // built as a crate itself. The latter is the primary use-case. It's included as
@@ -30,8 +23,6 @@ impl VariableStore {
         }
     }
 
-    pub fn assert_copy_type<T: Copy>(&self, _: T) {}
-
     pub fn put_variable<T: 'static>(&mut self, name: &str, value: T) {
         self.variables.insert(name.to_owned(), Box::new(value));
     }
@@ -39,11 +30,8 @@ impl VariableStore {
     pub fn check_variable<T: 'static>(&mut self, name: &str) -> bool {
         if let Some(v) = self.variables.get(name) {
             if v.downcast_ref::<T>().is_none() {
-                eprintln!(
-                    "The type of the variable {} was redefined, so was lost.",
-                    name
-                );
-                println!("{}{}", VARIABLE_CHANGED_TYPE, name);
+                eprintln!("The type of the variable {name} was redefined, so was lost.",);
+                println!("{VARIABLE_CHANGED_TYPE}{name}");
                 return false;
             }
         }
@@ -60,7 +48,7 @@ impl VariableStore {
                     panic!("Variable changed type");
                 }
             }
-            None => panic!("Variable '{}' has gone missing", name),
+            None => panic!("Variable '{name}' has gone missing"),
         }
     }
 
@@ -75,9 +63,9 @@ impl VariableStore {
             .or_insert_with(|| Box::new(std::sync::Arc::new(create())))
             .downcast_mut()
         {
-            std::sync::Arc::clone(&value)
+            std::sync::Arc::clone(value)
         } else {
-            panic!("lazy_arc {} changed type", name);
+            panic!("lazy_arc {name} changed type");
         }
     }
 

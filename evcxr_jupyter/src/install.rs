@@ -1,22 +1,18 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use anyhow::{anyhow, bail, Result};
-use dirs;
+use anyhow::anyhow;
+use anyhow::bail;
+use anyhow::Result;
+use std::env;
+use std::fs;
 use std::io::Write;
+use std::path::Path;
 use std::path::PathBuf;
-use std::{env, fs};
 
 const LOGO_32X32: &[u8] = include_bytes!("../third_party/rust/rust-logo-32x32.png");
 const LOGO_64X64: &[u8] = include_bytes!("../third_party/rust/rust-logo-64x64.png");
@@ -59,6 +55,12 @@ pub(crate) fn install() -> Result<()> {
 /// version.txt. If it is out of date, then updates it.
 pub(crate) fn update_if_necessary() -> Result<()> {
     let kernel_dir = get_kernel_dir()?;
+    // If the kernel directory doesn't exist, then we're probably being run from
+    // a wrapper, so we shouldn't "update", since that would in effect be
+    // installing ourselves when we weren't already installed.
+    if !kernel_dir.exists() {
+        return Ok(());
+    }
     let installed_version = std::fs::read(kernel_dir.join("version.txt")).unwrap_or_default();
     if installed_version != VERSION_TXT {
         install()?;
@@ -72,7 +74,7 @@ pub(crate) fn update_if_necessary() -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn install_resource(dir: &PathBuf, filename: &str, bytes: &'static [u8]) -> Result<()> {
+pub(crate) fn install_resource(dir: &Path, filename: &str, bytes: &'static [u8]) -> Result<()> {
     let res_path = dir.join(filename);
     println!("Writing {}", res_path.to_string_lossy());
     let mut file = fs::File::create(res_path)?;
@@ -90,9 +92,7 @@ pub(crate) fn uninstall() -> Result<()> {
 
 // https://jupyter-client.readthedocs.io/en/latest/kernels.html
 fn get_kernel_dir() -> Result<PathBuf> {
-    let jupyter_dir = if let Ok(dir) = env::var("JUPYTER_CONFIG_DIR") {
-        PathBuf::from(dir)
-    } else if let Ok(dir) = env::var("JUPYTER_PATH") {
+    let jupyter_dir = if let Ok(dir) = env::var("JUPYTER_PATH") {
         PathBuf::from(dir)
     } else if let Some(dir) = get_user_kernel_dir() {
         dir

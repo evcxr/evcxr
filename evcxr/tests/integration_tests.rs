@@ -1,24 +1,21 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use evcxr::{CommandContext, Error, EvalContext, EvalContextOutputs};
-use lazy_static::lazy_static;
-use std::collections::{HashMap, HashSet};
-use std::ops::{Deref, DerefMut};
-use std::sync::mpsc;
-use std::{io, sync::Mutex};
-use tempfile;
+use evcxr::CommandContext;
+use evcxr::Error;
+use evcxr::EvalContext;
+use evcxr::EvalContextOutputs;
+use once_cell::sync::OnceCell;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::io;
+use std::ops::Deref;
+use std::ops::DerefMut;
+use std::sync::Mutex;
 
 #[track_caller]
 fn eval_and_unwrap(ctxt: &mut CommandContext, code: &str) -> HashMap<String, String> {
@@ -53,7 +50,10 @@ fn new_command_context_and_outputs() -> (CommandContext, EvalContextOutputs) {
     (command_context, outputs)
 }
 
-fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, mut output: T) {
+fn send_output<T: io::Write + Send + 'static>(
+    channel: crossbeam_channel::Receiver<String>,
+    mut output: T,
+) {
     std::thread::spawn(move || {
         while let Ok(line) = channel.recv() {
             if writeln!(output, "{}", line).is_err() {
@@ -63,10 +63,8 @@ fn send_output<T: io::Write + Send + 'static>(channel: mpsc::Receiver<String>, m
     });
 }
 fn context_pool() -> &'static Mutex<Vec<CommandContext>> {
-    lazy_static! {
-        static ref CONTEXT_POOL: Mutex<Vec<CommandContext>> = Mutex::new(vec![]);
-    }
-    &CONTEXT_POOL
+    static CONTEXT_POOL: OnceCell<Mutex<Vec<CommandContext>>> = OnceCell::new();
+    CONTEXT_POOL.get_or_init(|| Mutex::new(vec![]))
 }
 
 struct ContextHolder {
@@ -205,7 +203,7 @@ fn missing_semicolon_on_let_stmt() {
     eval_and_unwrap(&mut e, "mod foo {pub mod bar { pub struct Baz {} }}");
     match e.execute("let v1 = foo::bar::Baz {}") {
         Err(Error::CompilationErrors(e)) => {
-            assert!(e.first().unwrap().message().contains(";"));
+            assert!(e.first().unwrap().message().contains(';'));
         }
         x => {
             panic!("Unexpected result: {:?}", x);
@@ -307,8 +305,8 @@ fn function_panics_without_variable_preserving() {
     "#,
     );
     let result = e.execute(stringify!(panic!("Intentional panic {}", b);));
-    if let Err(Error::ChildProcessTerminated(message)) = result {
-        assert!(message.contains("Child process terminated"));
+    if let Err(Error::SubprocessTerminated(message)) = result {
+        assert!(message.contains("Subprocess terminated"));
     } else {
         panic!("Unexpected result: {:?}", result);
     }
@@ -388,7 +386,7 @@ impl TmpCrate {
         format!(
             ":dep {} = {{ path = \"{}\"{}{} }}",
             self.name,
-            self.tempdir.path().to_string_lossy().replace("\\", "\\\\"),
+            self.tempdir.path().to_string_lossy().replace('\\', "\\\\"),
             if extra_options.is_empty() { "" } else { ", " },
             extra_options
         )
@@ -571,16 +569,18 @@ fn abort_and_restart() {
         let a = 42i32;
     );
     let result = e.execute(stringify!(std::process::abort();));
-    if let Err(Error::ChildProcessTerminated(message)) = result {
+    if let Err(Error::SubprocessTerminated(message)) = result {
         #[cfg(not(windows))]
         {
-            assert_eq!(message, "Child process terminated with status: signal: 6");
+            if !message.starts_with("Subprocess terminated with status: signal: 6") {
+                panic!("Unexpected abort message: '{message}'");
+            }
         }
         #[cfg(windows)]
         {
             assert_eq!(
                 message,
-                "Child process terminated with status: exit code: 0xc0000409"
+                "Subprocess terminated with status: exit code: 0xc0000409"
             );
         }
     } else {
@@ -608,6 +608,18 @@ fn int_array() {
     eval!(e, assert_eq!(v[4], 42));
 }
 
+#[test]
+fn const_generics_with_explicit_type() {
+    let mut e = new_context();
+    eval!(e,
+        struct Foo<const I: usize> {
+            data: [u8; I],
+        }
+        let foo: Foo<3> = Foo::<3> { data: [41, 42, 43] };
+    );
+    eval!(e, assert_eq!(foo.data[1], 42));
+}
+
 // Make sure that a type name containing a reserved word (e.g. async) doesn't
 // cause a compilation error.
 #[test]
@@ -624,9 +636,7 @@ fn unnamable_type_closure() {
     let mut e = new_context();
     let result = e.execute(stringify!(let v = || {42};));
     if let Err(Error::Message(message)) = result {
-        if !(message.starts_with("Sorry, the type")
-            && message.contains("cannot currently be persisted"))
-        {
+        if !(message.starts_with("The variable") && message.contains("cannot be persisted")) {
             panic!("Unexpected error: {:?}", message);
         }
     } else {
@@ -644,8 +654,8 @@ fn unnamable_type_impl_trait() {
         let v = foo();
     ));
     if let Err(Error::Message(message)) = result {
-        if !(message.starts_with("The variable `v` has a type")
-            && message.contains("can't be persisted"))
+        if !(message.starts_with("The variable `v` has type")
+            && message.contains("cannot be persisted"))
         {
             panic!("Unexpected error: {:?}", message);
         }
@@ -668,6 +678,57 @@ fn print_then_assign_variable() {
     let mut e = new_context();
     eval!(e, println!("Hello, world!"););
     eval!(e, let x = 42;);
+}
+
+#[test]
+fn display_type() {
+    let mut e = new_context();
+    assert_eq!(
+        e.execute(":types")
+            .unwrap()
+            .get("text/plain")
+            .unwrap()
+            .trim(),
+        "Types: true"
+    );
+    assert_eq!(eval!(e, 42), text_plain(": i32 = 42"));
+    assert_eq!(
+        eval!(e, Some("hello".to_string())),
+        text_plain(": Option<String> = Some(\"hello\")")
+    );
+    assert_eq!(
+        e.execute(":types")
+            .unwrap()
+            .get("text/plain")
+            .unwrap()
+            .trim(),
+        "Types: false"
+    );
+    assert_eq!(eval!(e, 42), text_plain("42"));
+}
+
+#[test]
+fn shorten_type_name() {
+    // This is a way to test the evcxr_shorten_type() function, evaluated in the child
+    let mut e = new_context();
+    e.execute(":fmt {}").unwrap();
+    // We need to enable types, so evcxr_shorten_type() will be defined.
+    e.execute(":types").unwrap();
+    assert_eq!(
+        eval!(e, evcxr_shorten_type("alloc::string::String")),
+        text_plain(": String = String")
+    );
+    assert_eq!(
+        eval!(
+            e,
+            evcxr_shorten_type("core::option::Option<alloc::string::String>")
+        ),
+        text_plain(": String = Option<String>")
+    );
+    assert_eq!(
+        eval!(e, evcxr_shorten_type("i32")),
+        text_plain(": String = i32")
+    );
 }
 
 #[test]
@@ -908,7 +969,9 @@ fn check(ctx: &mut CommandContext, code: &str) -> Vec<String> {
 }
 
 fn strs(input: &[String]) -> Vec<&str> {
-    input.iter().map(|s| s.as_str()).collect()
+    let mut result: Vec<&str> = input.iter().map(|s| s.as_str()).collect();
+    result.sort();
+    result
 }
 
 #[track_caller]
@@ -930,17 +993,18 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
 }
 "#
         )),
-        vec!["error 3:29-4:6", "error 2:41-2:43"]
+        vec!["error 2:41-2:43", "error 3:29-4:6"]
     );
 
     // An unused variable not within a function shouldn't produce a warning.
     assert_no_errors(&mut ctx, "let mut s = String::new();");
 
-    // An unused variable within a function should produce a warning.
-    assert_eq!(
-        strs(&check(&mut ctx, "fn foo() {let mut s = String::new();}")),
-        vec!["warning 1:15-1:20"]
-    );
+    // An unused variable within a function should produce a warning. Older versions of rustc have
+    // the warning span on `mut s`, while newer ones have it just one `s`.
+    let unused_var_warnings = check(&mut ctx, "fn foo() {let mut s = String::new();}");
+    if strs(&unused_var_warnings) != vec!["warning 1:19-1:20"] {
+        assert_eq!(strs(&unused_var_warnings), vec!["warning 1:15-1:20"]);
+    }
 
     // Make sure we don't get errors about duplicate use statements after we've
     // executed some code.
@@ -954,14 +1018,18 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
         vec!["error 1:10-1:13"]
     );
 
-    // Make sure that we can report errors resulting from macro expansions.
-    assert_eq!(
-        strs(&check(
-            &mut ctx,
-            r#"let mut s = String::new(); write!(&mut s, "foo").unwrap();"#
-        )),
-        vec!["error 1:28-1:49"]
+    // Make sure that we can report errors resulting from macro expansions. The first span is the
+    // whole macro, the second span, which is what appears in later versions of rustc, is just the
+    // variable `s`.
+    let allowed = ["error 1:28-1:44", "error 1:35-1:36"];
+    let actual = check(
+        &mut ctx,
+        r#"let mut s = String::new(); write!(s, "foo").unwrap();"#,
     );
+    let actual = &strs(&actual)[0];
+    if !allowed.contains(actual) {
+        panic!("Found '{actual}', but expected one of {allowed:?}");
+    }
 
     // Check that errors adding crates are reported.
     assert_eq!(
@@ -970,10 +1038,11 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
             "\
             :dep this_crate_does_not_exist = \"12.34\"\n\
             :dep foo = { path = \"/this/path/does/not/exist\" }\n\
+            // This is a comment interleaved with commands\n\
             :an_invalid_command
             "
         )),
-        vec!["error 1:6-1:41", "error 2:6-2:50", "error 3:1-3:20"]
+        vec!["error 1:6-1:41", "error 2:6-2:50", "error 4:1-4:20"]
     );
 
     // Make sure missing close parenthesis are reported as expected. Note, we still don't check the

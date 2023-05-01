@@ -16,3 +16,5 @@ exclude = [
 [profile.dev]
 # The speedup from optimization significantly exceeds any slowdown in compilation.
 opt-level = 2
+# Debug is disabled in order to speed up builds.
+debug = 0

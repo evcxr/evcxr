@@ -1,27 +1,33 @@
 [package]
 name = "evcxr_jupyter"
-version = "0.8.0"
-license = "Apache-2.0"
-description = "An Jupyter Kernel for Rust"
-repository = "https://github.com/google/evcxr"
+version = "0.14.2"
+license = "MIT OR Apache-2.0"
+description = "A Jupyter Kernel for Rust"
+repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
-edition = "2018"
+edition = "2021"
+rust-version = "1.57"
 
 [dependencies]
-evcxr = { version = "=0.8.0", path = "../evcxr" }
+evcxr = { version = "=0.14.2", path = "../evcxr" }
 json = "0.12.4"
 anyhow = "1.0.33"
-zmq = { version = "0.9.1", default-features = false }
-uuid = { version = "0.8.1", features = [ "v4" ] }
-hmac = "0.7.1"
-sha2 = "0.8.0"
+bytes = "1.2.1"
+tokio = "1.24.2"
+uuid = { version = "1.1.2", features = [ "v4" ] }
+hmac = "0.12.0"
+sha2 = "0.10.0"
 hex = "0.4.2"
 colored = "2.0.0"
-dirs = "3.0.1"
+dirs = "4.0.0"
 chrono = "0.4.19"
 unicode-segmentation = "1.7.1"
+generic-array = "0.14.4"
+mimalloc = { version = "0.1", default-features = false, optional = true }
+crossbeam-channel = "0.5.5"
+ariadne = "0.1.5"
+zeromq = { version = "0.3.3", default_features = false, features = [ "tokio-runtime", "tcp-transport" ] }
 
 [features]
-default = ["vendored-zmq"]
-vendored-zmq = ["zmq/vendored"]
+default = ["mimalloc"]

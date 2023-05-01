@@ -1,2 +1,1 @@
 libzmq3-dev
-cmake

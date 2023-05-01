@@ -1,24 +1,26 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use crate::code_block::{count_columns, CodeBlock, CodeKind, CommandCall, Segment, UserCodeInfo};
-use json::{self, JsonValue};
-use ra_ap_ide::{TextRange, TextSize};
-use regex::Regex;
-use std;
+use crate::code_block::count_columns;
+use crate::code_block::CodeBlock;
+use crate::code_block::CodeKind;
+use crate::code_block::CommandCall;
+use crate::code_block::Segment;
+use crate::code_block::UserCodeInfo;
+use ariadne::Color;
+use ariadne::{ColorGenerator, Label, Report, ReportKind};
+use json::JsonValue;
+use json::{self};
+use ra_ap_ide::TextRange;
+use ra_ap_ide::TextSize;
 use std::fmt;
+use std::fmt::Write as _;
 use std::io;
+use std::ops::Range;
 
 #[derive(Debug, Clone)]
 pub struct CompilationError {
@@ -26,7 +28,95 @@ pub struct CompilationError {
     pub json: JsonValue,
     pub(crate) code_origins: Vec<CodeKind>,
     spanned_messages: Vec<SpannedMessage>,
+    spanned_helps: Vec<SpannedMessage>,
     level: String,
+}
+
+pub enum Theme {
+    Light,
+    Dark,
+}
+
+fn span_to_byte_range(source: &str, span: &Span) -> Range<usize> {
+    fn line_and_number_to_byte_offset(source: &str, line_number: usize, column: usize) -> usize {
+        source
+            .lines()
+            .take(line_number - 1)
+            .map(|x| x.len())
+            .sum::<usize>()
+            + column
+            + line_number
+            - 2
+    }
+    line_and_number_to_byte_offset(source, span.start_line, span.start_column)
+        ..line_and_number_to_byte_offset(source, span.end_line, span.end_column)
+}
+
+impl CompilationError {
+    pub fn build_report(
+        &self,
+        file_name: String,
+        source: String,
+        theme: Theme,
+    ) -> Option<Report<(String, Range<usize>)>> {
+        let error = self;
+        if !source.is_ascii() {
+            return None;
+        }
+        let mut builder =
+            Report::build(ReportKind::Error, file_name.clone(), 0).with_message(error.message());
+        let mut next_color = {
+            let mut colors = ColorGenerator::new();
+            move || {
+                if let Color::Fixed(x) = colors.next() {
+                    Color::Fixed(match theme {
+                        Theme::Light => 255 - x,
+                        Theme::Dark => x,
+                    })
+                } else {
+                    unreachable!()
+                }
+            }
+        };
+        if let Some(code) = error.code() {
+            builder = builder.with_code(code);
+        }
+        let mut notes = String::new();
+        for spanned_message in error
+            .spanned_messages()
+            .iter()
+            .chain(error.help_spanned().iter())
+        {
+            if let Some(span) = &spanned_message.span {
+                if spanned_message.label.is_empty() {
+                    continue;
+                }
+                builder = builder.with_label(
+                    Label::new((file_name.clone(), span_to_byte_range(&source, span)))
+                        .with_message(&spanned_message.label)
+                        .with_color(next_color())
+                        .with_order(10),
+                );
+            } else {
+                notes.push_str(&spanned_message.label);
+            }
+        }
+        if let Some(evcxr_notes) = evcxr_specific_notes(error) {
+            builder.set_note(evcxr_notes);
+        } else if !notes.is_empty() {
+            builder.set_note(notes);
+        }
+        Some(builder.finish())
+    }
+}
+
+fn evcxr_specific_notes(error: &CompilationError) -> Option<&'static str> {
+    Some(match error.code()? {
+        "E0384" | "E0596" => {
+            "You can change an existing variable to mutable like: `let mut x = x;`"
+        }
+        _ => return None,
+    })
 }
 
 fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
@@ -101,20 +191,27 @@ impl CompilationError {
             json = user_error_json;
         }
 
-        let message = if let Some(message) = json["message"].as_str() {
-            if message.starts_with("aborting due to")
-                || message.starts_with("For more information about")
-                || message.starts_with("Some errors occurred")
-            {
-                return None;
-            }
-            sanitize_message(message)
-        } else {
+        let message = json["message"].as_str()?;
+        if message.starts_with("aborting due to")
+            || message.starts_with("For more information about")
+            || message.starts_with("Some errors occurred")
+        {
             return None;
-        };
+        }
+        let message = sanitize_message(message);
 
         Some(CompilationError {
             spanned_messages: build_spanned_messages(&json, code_block),
+            spanned_helps: {
+                if let JsonValue::Array(children) = &json["children"] {
+                    children
+                        .iter()
+                        .flat_map(|x| build_spanned_messages(x, code_block))
+                        .collect()
+                } else {
+                    vec![]
+                }
+            },
             message,
             level: json["level"].as_str().unwrap_or("").to_owned(),
             json,
@@ -142,6 +239,7 @@ impl CompilationError {
     ) -> CompilationError {
         CompilationError {
             spanned_messages: vec![spanned_message],
+            spanned_helps: vec![],
             message,
             json: JsonValue::Null,
             code_origins: vec![segment.kind.clone()],
@@ -209,6 +307,10 @@ impl CompilationError {
         &self.level
     }
 
+    pub fn help_spanned(&self) -> &[SpannedMessage] {
+        &self.spanned_helps
+    }
+
     pub fn help(&self) -> Vec<String> {
         if let JsonValue::Array(children) = &self.json["children"] {
             children
@@ -223,7 +325,7 @@ impl CompilationError {
                             child["spans"][0]["suggested_replacement"].as_str()
                         {
                             use std::fmt::Write;
-                            write!(&mut message, "\n\n{}", replacement.trim_end()).unwrap();
+                            write!(message, "\n\n{}", replacement.trim_end()).unwrap();
                         }
                         message
                     })
@@ -235,55 +337,7 @@ impl CompilationError {
     }
 
     pub fn rendered(&self) -> String {
-        self.json["rendered"]
-            .as_str()
-            .unwrap_or_else(|| "")
-            .to_owned()
-    }
-
-    /// Returns the actual type indicated by the error message or None if this isn't a type error.
-    pub(crate) fn get_actual_type(&self) -> Option<String> {
-        // Observed formats:
-        // Up to 1.40:
-        //   message.children[].message
-        //     "expected type `std::string::String`\n   found type `{integer}`"
-        // 1.41+:
-        //   message.children[].message
-        //     "expected struct `std::string::String`\n     found enum `std::option::Option<std::string::String>`"
-        //     "expected struct `std::string::String`\n    found tuple `({integer}, {float})`"
-        //     "  expected struct `std::string::String`\nfound opaque type `impl Bar`"
-        //   message.spans[].label
-        //     "expected struct `std::string::String`, found integer"
-        //     "expected struct `std::string::String`, found `i32`"
-        lazy_static! {
-            static ref TYPE_ERROR_RE: Regex =
-                Regex::new(" *expected (?s:.)*found.* `(.*)`").unwrap();
-        }
-        if let JsonValue::Array(children) = &self.json["children"] {
-            for child in children {
-                if let Some(message) = child["message"].as_str() {
-                    if let Some(captures) = TYPE_ERROR_RE.captures(message) {
-                        return Some(captures[1].to_owned());
-                    }
-                }
-            }
-        }
-        lazy_static! {
-            static ref TYPE_ERROR_RE2: Regex =
-                Regex::new("expected .* found (integer|float)").unwrap();
-        }
-        if let JsonValue::Array(spans) = &self.json["spans"] {
-            for span in spans {
-                if let Some(label) = span["label"].as_str() {
-                    if let Some(captures) = TYPE_ERROR_RE.captures(label) {
-                        return Some(captures[1].to_owned());
-                    } else if let Some(captures) = TYPE_ERROR_RE2.captures(label) {
-                        return Some(captures[1].to_owned());
-                    }
-                }
-            }
-        }
-        None
+        self.json["rendered"].as_str().unwrap_or("").to_owned()
     }
 }
 
@@ -297,9 +351,25 @@ fn sanitize_message(message: &str) -> String {
 
 fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<SpannedMessage> {
     let mut output_spans = Vec::new();
+    let mut only_one_span = false;
+    let level_label: Option<String> = (|| {
+        let level = json["level"].as_str()?;
+        if level != "error" {
+            // We can't handle helps and notes with multiple spans currently
+            only_one_span = true;
+        }
+        let message = json["message"].as_str()?;
+        Some(format!("{level}: {message}"))
+    })();
     if let JsonValue::Array(spans) = &json["spans"] {
-        for span_json in spans {
-            output_spans.push(SpannedMessage::from_json(span_json, code_block));
+        if !only_one_span || spans.len() == 1 {
+            for span_json in spans {
+                output_spans.push(SpannedMessage::from_json(
+                    span_json,
+                    code_block,
+                    level_label.clone(),
+                ));
+            }
         }
     }
     if output_spans.iter().any(|s| s.span.is_some()) {
@@ -376,12 +446,7 @@ fn line_and_column(
 ) -> (usize, usize) {
     let text = &text[..usize::from(position)];
     let line = text.lines().count();
-    let mut column = text
-        .lines()
-        .last()
-        .map(|line| count_columns(&line))
-        .unwrap_or(0)
-        + 1;
+    let mut column = text.lines().last().map(count_columns).unwrap_or(0) + 1;
     if line == 1 {
         column += first_line_column_offset;
     }
@@ -398,7 +463,11 @@ pub struct SpannedMessage {
 }
 
 impl SpannedMessage {
-    fn from_json(span_json: &JsonValue, code_block: &CodeBlock) -> SpannedMessage {
+    fn from_json(
+        span_json: &JsonValue,
+        code_block: &CodeBlock,
+        fallback_label: Option<String>,
+    ) -> SpannedMessage {
         let span = if let (Some(file_name), Some(start_column), Some(end_column)) = (
             span_json["file_name"].as_str(),
             span_json["column_start"].as_usize(),
@@ -441,7 +510,7 @@ impl SpannedMessage {
         if span.is_none() {
             let expansion_span_json = &span_json["expansion"]["span"];
             if !expansion_span_json.is_empty() {
-                let mut message = SpannedMessage::from_json(expansion_span_json, code_block);
+                let mut message = SpannedMessage::from_json(expansion_span_json, code_block, None);
                 if message.span.is_some() {
                     if let Some(label) = span_json["label"].as_str() {
                         message.label = label.to_owned();
@@ -451,13 +520,18 @@ impl SpannedMessage {
                 }
             }
         }
+        let mut label = span_json["label"]
+            .as_str()
+            .map(|s| s.to_owned())
+            .or(fallback_label)
+            .unwrap_or_default();
+        if let Some(replace) = span_json["suggested_replacement"].as_str() {
+            let _ = write!(&mut label, ": `{replace}`");
+        }
         SpannedMessage {
             span,
             lines: Vec::new(),
-            label: span_json["label"]
-                .as_str()
-                .map(|s| s.to_owned())
-                .unwrap_or_else(String::new),
+            label,
             is_primary: span_json["is_primary"].as_bool().unwrap_or(false),
         }
     }
@@ -472,12 +546,12 @@ impl SpannedMessage {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Error {
     CompilationErrors(Vec<CompilationError>),
     TypeRedefinedVariablesLost(Vec<String>),
     Message(String),
-    ChildProcessTerminated(String),
+    SubprocessTerminated(String),
 }
 
 impl std::error::Error for Error {}
@@ -497,8 +571,8 @@ impl fmt::Display for Error {
                     variables.join(", ")
                 )?;
             }
-            Error::Message(message) | Error::ChildProcessTerminated(message) => {
-                write!(f, "{}", message)?
+            Error::Message(message) | Error::SubprocessTerminated(message) => {
+                write!(f, "{message}")?
             }
         }
         Ok(())
@@ -547,8 +621,14 @@ impl<'a> From<&'a str> for Error {
     }
 }
 
-impl<'a> From<anyhow::Error> for Error {
+impl From<anyhow::Error> for Error {
     fn from(error: anyhow::Error) -> Self {
+        Error::Message(error.to_string())
+    }
+}
+
+impl From<libloading::Error> for Error {
+    fn from(error: libloading::Error) -> Self {
         Error::Message(error.to_string())
     }
 }

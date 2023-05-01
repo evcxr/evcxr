@@ -1,21 +1,17 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use anyhow::{bail, Context, Result};
-use json::{self, JsonValue};
+use anyhow::bail;
+use anyhow::Context;
+use anyhow::Result;
+use json::JsonValue;
+use json::{self};
+use once_cell::sync::OnceCell;
 use regex::Regex;
-use std;
 use std::collections::HashMap;
 
 use crate::eval_context::Config;
@@ -48,15 +44,14 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
     [package]
     name = "evcxr_dummy_validate_dep"
     version = "0.0.1"
-    edition = "2018"
+    edition = "2021"
 
     [lib]
     path = "lib.rs"
 
     [dependencies]
-    {} = {}
-    "#,
-            dep, dep_config
+    {dep} = {dep_config}
+    "#
         ),
     )?;
     let mut cmd = config.cargo_command("metadata");
@@ -64,21 +59,28 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
     if output.status.success() {
         Ok(())
     } else {
-        lazy_static! {
-            static ref IGNORED_LINES_PATTERN: Regex =
-                Regex::new("required by package `evcxr_dummy_validate_dep.*").unwrap();
-        }
-        lazy_static! {
-            static ref PRIMARY_ERROR_PATTERN: Regex =
-                Regex::new("(.*) as a dependency of package `[^`]*`").unwrap();
-        }
+        static IGNORED_LINES_PATTERN: OnceCell<Regex> = OnceCell::new();
+        let ignored_lines_pattern = IGNORED_LINES_PATTERN
+            .get_or_init(|| Regex::new("required by package `evcxr_dummy_validate_dep.*").unwrap());
+        static PRIMARY_ERROR_PATTERN: OnceCell<Regex> = OnceCell::new();
+        let primary_error_pattern = PRIMARY_ERROR_PATTERN
+            .get_or_init(|| Regex::new("(.*) as a dependency of package `[^`]*`").unwrap());
         let mut message = Vec::new();
+        let mut suggest_offline_mode = false;
         for line in String::from_utf8_lossy(&output.stderr).lines() {
-            if let Some(captures) = PRIMARY_ERROR_PATTERN.captures(line) {
+            if let Some(captures) = primary_error_pattern.captures(line) {
                 message.push(captures[1].to_string());
-            } else if !IGNORED_LINES_PATTERN.is_match(line) {
+            } else if !ignored_lines_pattern.is_match(line) {
                 message.push(line.to_owned());
             }
+
+            if line.contains("failed to fetch `https://github.com/rust-lang/crates.io-index`") {
+                suggest_offline_mode = true;
+            }
+        }
+
+        if suggest_offline_mode {
+            message.push("\nTip: Enable offline mode with `:offline 1`".to_owned());
         }
         bail!(message.join("\n"));
     }
@@ -123,7 +125,7 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
     let mut library_names = Vec::new();
     for dep_name in direct_dependencies {
         if let Some(lib_name) = crate_to_library_names.get(dep_name) {
-            library_names.push(lib_name.replace("-", "_"));
+            library_names.push(lib_name.replace('-', "_"));
         }
     }
     Ok(library_names)
@@ -131,12 +133,10 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::eval_context::Config;
-
-    use super::{get_library_names, library_names_from_metadata};
     use anyhow::Result;
     use std::path::Path;
-    use tempfile;
 
     #[test]
     fn test_library_names_from_metadata() {
@@ -154,14 +154,13 @@ mod tests {
             format!(
                 r#"
             [package]
-            name = "{}"
+            name = "{name}"
             version = "0.0.1"
-            edition = "2018"
+            edition = "2021"
 
             [dependencies]
-            {}
-        "#,
-                name, deps
+            {deps}
+        "#
             ),
         )?;
         std::fs::write(src_dir.join("lib.rs"), "")?;
@@ -169,7 +168,7 @@ mod tests {
     }
 
     fn path_to_string(path: &Path) -> String {
-        path.to_string_lossy().replace("\\", "\\\\")
+        path.to_string_lossy().replace('\\', "\\\\")
     }
 
     #[test]
@@ -184,7 +183,7 @@ mod tests {
             &format!(r#"crate1 = {{ path = "{}" }}"#, path_to_string(&crate1)),
         )?;
         assert_eq!(
-            get_library_names(&Config::new(crate2.to_owned())).unwrap(),
+            get_library_names(&Config::new(crate2)).unwrap(),
             vec!["crate1".to_owned()]
         );
         Ok(())
@@ -206,7 +205,7 @@ mod tests {
         )?;
         // Make sure that the problematic feature "no_such_feature" is mentioned
         // somewhere in the error message.
-        assert!(get_library_names(&Config::new(crate2.to_owned()))
+        assert!(get_library_names(&Config::new(crate2))
             .unwrap_err()
             .to_string()
             .contains("no_such_feature"));

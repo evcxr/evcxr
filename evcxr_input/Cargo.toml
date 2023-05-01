@@ -1,10 +1,10 @@
 [package]
 name = "evcxr_input"
 version = "1.0.0"
-license = "Apache-2.0"
+license = "MIT OR Apache-2.0"
 description = "Support for reading input from the user in Evcxr"
-repository = "https://github.com/google/evcxr"
+repository = "https://github.com/evcxr/evcxr"
 authors = ["The Evcxr Authors"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]

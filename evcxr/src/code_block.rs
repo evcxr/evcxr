@@ -1,22 +1,17 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use crate::statement_splitter;
-use anyhow::{anyhow, Result};
+use anyhow::anyhow;
+use anyhow::Result;
+use once_cell::sync::OnceCell;
 use ra_ap_syntax::SyntaxNode;
+use regex::Regex;
 use statement_splitter::OriginalUserCode;
-use std;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct Segment {
@@ -65,10 +60,6 @@ pub(crate) enum CodeKind {
     /// Code is packing a variable into the variable store. Failure modes include (a) incorrect type
     /// (b) variable has been moved (c) non-static lifetime.
     PackVariable {
-        variable_name: String,
-    },
-    /// Used to check if a variable implements Copy.
-    AssertCopyType {
         variable_name: String,
     },
     /// A line of code that has a fallback to be used in case the supplied line fails to compile.
@@ -145,7 +136,7 @@ impl CodeBlock {
     /// value of `f` once done. This is a convenience for when we only have a
     /// &mut, not an owned value.
     pub(crate) fn modify<F: FnOnce(CodeBlock) -> CodeBlock>(&mut self, f: F) {
-        let mut block = std::mem::replace(self, CodeBlock::new());
+        let mut block = std::mem::take(self);
         block = f(block);
         *self = block;
     }
@@ -191,10 +182,8 @@ impl CodeBlock {
     }
 
     pub(crate) fn from_original_user_code(user_code: &str) -> (CodeBlock, UserCodeInfo) {
-        use regex::Regex;
-        lazy_static! {
-            static ref COMMAND_RE: Regex = Regex::new("^ *(:[^ ]*)( +(.*))?$").unwrap();
-        }
+        static COMMAND_RE: OnceCell<Regex> = OnceCell::new();
+        let command_re = COMMAND_RE.get_or_init(|| Regex::new("^ *(:[^ ]*)( +(.*))?$").unwrap());
         let mut code_block = CodeBlock::new();
         let mut nodes = Vec::new();
 
@@ -204,7 +193,7 @@ impl CodeBlock {
 
         for (command_line_offset, line) in user_code.lines().enumerate() {
             // We only accept commands up until the first non-command.
-            if let Some(captures) = COMMAND_RE.captures(line) {
+            if let Some(captures) = command_re.captures(line) {
                 code_block = code_block.with(
                     CodeKind::Command(CommandCall {
                         command: captures[1].to_owned(),
@@ -214,8 +203,9 @@ impl CodeBlock {
                     }),
                     line,
                 );
-            } else if line.trim().is_empty() {
+            } else if line.starts_with(r"//") || line.trim().is_empty() {
                 // Ignore blank lines, otherwise we can't have blank lines before :dep commands.
+                // We also ignore lines that start with //, because those are line comments.
             } else {
                 // Anything else, we treat as Rust code to be executed. Since we don't accept commands after Rust code, we're done looking for commands.
                 let non_command_start_byte = line.as_ptr() as usize - user_code.as_ptr() as usize;
@@ -327,13 +317,6 @@ impl CodeBlock {
             .push(Segment::new(CodeKind::PackVariable { variable_name }, code));
     }
 
-    pub(crate) fn assert_copy_variable(&mut self, variable_name: String, code: String) {
-        self.segments.push(Segment::new(
-            CodeKind::AssertCopyType { variable_name },
-            code,
-        ));
-    }
-
     pub(crate) fn add_all(mut self, other: CodeBlock) -> Self {
         self.segments.extend(other.segments);
         self
@@ -366,7 +349,7 @@ impl CodeBlock {
 
     pub(crate) fn apply_fallback(&mut self, fallback: &CodeBlock) {
         let mut replacement_segments = Vec::new();
-        for segment in std::mem::replace(&mut self.segments, Vec::new()) {
+        for segment in std::mem::take(&mut self.segments) {
             if segment.kind.equals_fallback(fallback) {
                 replacement_segments.extend(fallback.segments.clone());
             } else {
@@ -379,7 +362,8 @@ impl CodeBlock {
 
 #[cfg(test)]
 mod test {
-    use super::{CodeBlock, CodeKind};
+    use super::CodeBlock;
+    use super::CodeKind;
 
     #[test]
     fn basic_usage() {

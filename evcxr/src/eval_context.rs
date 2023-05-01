@@ -1,49 +1,60 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
+use crate::child_process::ChildProcess;
+use crate::code_block::CodeBlock;
+use crate::code_block::CodeKind;
+use crate::code_block::Segment;
+use crate::code_block::UserCodeInfo;
+use crate::crate_config::ExternalCrate;
+use crate::errors::bail;
+use crate::errors::CompilationError;
+use crate::errors::Error;
+use crate::errors::Span;
+use crate::errors::SpannedMessage;
 use crate::evcxr_internal_runtime;
 use crate::item;
-use crate::module::{Module, SoFile};
+use crate::module::Module;
+use crate::module::SoFile;
 use crate::runtime;
-use crate::rust_analyzer::{Completions, RustAnalyzer, VariableInfo};
-use crate::{child_process::ChildProcess, use_trees::Import};
-use crate::{
-    code_block::UserCodeInfo,
-    errors::{bail, CompilationError, Error},
-};
-use crate::{
-    code_block::{CodeBlock, CodeKind, Segment},
-    errors::SpannedMessage,
-};
-use crate::{crate_config::ExternalCrate, errors::Span};
+use crate::rust_analyzer::Completions;
+use crate::rust_analyzer::RustAnalyzer;
+use crate::rust_analyzer::TypeName;
+use crate::rust_analyzer::VariableInfo;
+use crate::use_trees::Import;
 use anyhow::Result;
+use once_cell::sync::OnceCell;
 use ra_ap_ide::TextRange;
-use ra_ap_syntax::{ast, AstNode, SyntaxKind, SyntaxNode};
+use ra_ap_syntax::ast;
+use ra_ap_syntax::AstNode;
+use ra_ap_syntax::SyntaxKind;
+use ra_ap_syntax::SyntaxNode;
 use regex::Regex;
-use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
-use std::sync::mpsc;
-use std::time::{Duration, Instant};
-use tempfile;
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::path::Path;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Duration;
+use std::time::Instant;
 
 pub struct EvalContext {
+    // Order is important here. We need to drop child_process before _tmpdir,
+    // since if the subprocess hasn't terminted before we clean up the temporary
+    // directory, then on some platforms (e.g. Windows), files in the temporary
+    // directory will still be locked, so won't be deleted.
+    child_process: ChildProcess,
     // Our tmpdir if EVCXR_TMPDIR wasn't set - Drop causes tmpdir to be cleaned up.
     _tmpdir: Option<tempfile::TempDir>,
     module: Module,
     committed_state: ContextState,
-    child_process: ChildProcess,
-    stdout_sender: mpsc::Sender<String>,
+    stdout_sender: crossbeam_channel::Sender<String>,
     analyzer: RustAnalyzer,
     initial_config: Config,
 }
@@ -57,6 +68,7 @@ pub(crate) struct Config {
     // attempt to determine if the type of the variable is copy.
     preserve_vars_on_panic: bool,
     output_format: String,
+    display_types: bool,
     /// Whether to try to display the final expression. Currently this needs to
     /// be turned off when doing tab completion or cargo check, but otherwise it
     /// should always be on.
@@ -75,11 +87,18 @@ pub(crate) struct Config {
     /// Whether to attempt to avoid network access.
     pub(crate) offline_mode: bool,
     pub(crate) toolchain: String,
+    cargo_path: String,
+    pub(crate) rustc_path: String,
 }
 
 fn create_initial_config(crate_dir: PathBuf) -> Config {
     let mut config = Config::new(crate_dir);
-    if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
+    // default the linker to mold, then lld, first checking if either are installed
+    // neither linkers support macos, so fallback to system (aka default)
+    // https://github.com/rui314/mold/issues/132
+    if !cfg!(target_os = "macos") && which::which("mold").is_ok() {
+        config.linker = "mold".to_owned();
+    } else if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
         config.linker = "lld".to_owned();
     }
     config
@@ -90,8 +109,9 @@ impl Config {
         Config {
             crate_dir,
             debug_mode: false,
-            preserve_vars_on_panic: false,
+            preserve_vars_on_panic: true,
             output_format: "{:?}".to_owned(),
+            display_types: false,
             display_final_expression: true,
             expand_use_statements: true,
             opt_level: "2".to_owned(),
@@ -101,6 +121,8 @@ impl Config {
             sccache: None,
             offline_mode: false,
             toolchain: String::new(),
+            cargo_path: default_cargo_path(),
+            rustc_path: default_rustc_path(),
         }
     }
 
@@ -121,10 +143,14 @@ impl Config {
         self.sccache.is_some()
     }
 
-    pub(crate) fn cargo_command(&self, command_name: &str) -> std::process::Command {
-        let mut command = std::process::Command::new("cargo");
-        if !self.toolchain.is_empty() {
-            command.arg(format!("+{}", self.toolchain));
+    pub(crate) fn cargo_command(&self, command_name: &str) -> Command {
+        let mut command = if self.linker == "mold" {
+            Command::new("mold")
+        } else {
+            Command::new(&self.cargo_path)
+        };
+        if self.linker == "mold" {
+            command.arg("-run").arg(&self.cargo_path);
         }
         if self.offline_mode {
             command.arg("--offline");
@@ -158,7 +184,8 @@ static ERROR_FORMATS: &[ErrorFormat] = &[
 
 const SEND_TEXT_PLAIN_DEF: &str = stringify!(
     fn evcxr_send_text_plain(text: &str) {
-        use std::io::{self, Write};
+        use std::io::Write;
+        use std::io::{self};
         fn try_send_text(text: &str) -> io::Result<()> {
             let stdout = io::stdout();
             let mut output = stdout.lock();
@@ -174,21 +201,56 @@ const SEND_TEXT_PLAIN_DEF: &str = stringify!(
     }
 );
 
+const GET_TYPE_NAME_DEF: &str = stringify!(
+    /// Shorten a type name. Convert "core::option::Option<alloc::string::String>" into "Option<String>".
+    pub fn evcxr_shorten_type(t: &str) -> String {
+        // This could have been done easily with regex, but we must only depend on stdlib.
+        // We go over the string backwards, and remove all alphanumeric and ':' chars following a ':'.
+        let mut r = String::with_capacity(t.len());
+        let mut is_skipping = false;
+        for c in t.chars().rev() {
+            if !is_skipping {
+                if c == ':' {
+                    is_skipping = true;
+                } else {
+                    r.push(c);
+                }
+            } else {
+                if !c.is_alphanumeric() && c != '_' && c != ':' {
+                    is_skipping = false;
+                    r.push(c);
+                }
+            }
+        }
+        r.chars().rev().collect()
+    }
+
+    fn evcxr_get_type_name<T>(_: &T) -> String {
+        evcxr_shorten_type(std::any::type_name::<T>())
+    }
+);
+
 const PANIC_NOTIFICATION: &str = "EVCXR_PANIC_NOTIFICATION";
 
 // Outputs from an EvalContext. This is a separate struct since users may want
 // destructure this and pass its components to separate threads.
 pub struct EvalContextOutputs {
-    pub stdout: mpsc::Receiver<String>,
-    pub stderr: mpsc::Receiver<String>,
+    pub stdout: crossbeam_channel::Receiver<String>,
+    pub stderr: crossbeam_channel::Receiver<String>,
 }
 
-//#[non_exhaustive]
+#[non_exhaustive]
+#[derive(Debug, Clone)]
+pub struct InputRequest {
+    pub prompt: String,
+    pub is_password: bool,
+}
+
 pub struct EvalCallbacks<'a> {
-    pub input_reader: &'a dyn Fn(&str, bool) -> String,
+    pub input_reader: &'a dyn Fn(InputRequest) -> String,
 }
 
-fn default_input_reader(_: &str, _: bool) -> String {
+fn default_input_reader(_: InputRequest) -> String {
     String::new()
 }
 
@@ -202,8 +264,10 @@ impl<'a> Default for EvalCallbacks<'a> {
 
 impl EvalContext {
     pub fn new() -> Result<(EvalContext, EvalContextOutputs), Error> {
+        fix_path();
+
         let current_exe = std::env::current_exe()?;
-        Self::with_subprocess_command(std::process::Command::new(&current_exe))
+        Self::with_subprocess_command(std::process::Command::new(current_exe))
     }
 
     #[cfg(windows)]
@@ -239,7 +303,7 @@ impl EvalContext {
             .unwrap()
             .join("testing_runtime");
         let (mut context, outputs) =
-            EvalContext::with_subprocess_command(std::process::Command::new(&testing_runtime_path))
+            EvalContext::with_subprocess_command(std::process::Command::new(testing_runtime_path))
                 .unwrap();
         let mut state = context.state();
         state.set_offline_mode(true);
@@ -265,8 +329,8 @@ impl EvalContext {
 
         Self::apply_platform_specific_vars(&module, &mut subprocess_command);
 
-        let (stdout_sender, stdout_receiver) = mpsc::channel();
-        let (stderr_sender, stderr_receiver) = mpsc::channel();
+        let (stdout_sender, stdout_receiver) = crossbeam_channel::unbounded();
+        let (stderr_sender, stderr_receiver) = crossbeam_channel::unbounded();
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
         let initial_config = create_initial_config(module.crate_dir().to_owned());
         let initial_state = ContextState::new(initial_config.clone());
@@ -288,7 +352,15 @@ impl EvalContext {
         } else {
             // We need to eval something anyway, otherwise rust-analyzer crashes when trying to get
             // completions. Not 100% sure. Just writing Cargo.toml isn't sufficient.
-            context.eval("42")?;
+            if let Err(error) = context.eval("42") {
+                drop(context);
+                let mut stderr = String::new();
+                while let Ok(line) = outputs.stderr.recv() {
+                    stderr.push_str(&line);
+                    stderr.push('\n');
+                }
+                return Err(format!("{stderr}{error}").into());
+            }
         }
         context.initial_config = context.committed_state.config.clone();
         Ok((context, outputs))
@@ -348,7 +420,7 @@ impl EvalContext {
         let code_out = state.apply(user_code.clone(), &code_info.nodes)?;
 
         let mut outputs = match self.run_statements(code_out, &mut state, &mut phases, callbacks) {
-            error @ Err(Error::ChildProcessTerminated(_)) => {
+            error @ Err(Error::SubprocessTerminated(_)) => {
                 self.restart_child_process()?;
                 return error;
             }
@@ -398,7 +470,7 @@ impl EvalContext {
         if state.config.debug_mode {
             let mut s = code.code_string();
             s.insert_str(wrapped_offset, "<|>");
-            println!("=========\n{}\n==========", s);
+            println!("=========\n{s}\n==========");
         }
 
         self.analyzer.set_source(code.code_string())?;
@@ -406,11 +478,11 @@ impl EvalContext {
         completions.start_offset = code.output_offset_to_user_offset(completions.start_offset)?;
         completions.end_offset = code.output_offset_to_user_offset(completions.end_offset)?;
         // Filter internal identifiers.
-        completions.completions = completions
-            .completions
-            .into_iter()
-            .filter(|c| c.code != "evcxr_variable_store" && c.code != "evcxr_internal_runtime")
-            .collect();
+        completions.completions.retain(|c| {
+            c.code != "evcxr_variable_store"
+                && c.code != "evcxr_internal_runtime"
+                && c.code != "evcxr_analysis_wrapper"
+        });
         Ok(completions)
     }
 
@@ -464,6 +536,10 @@ impl EvalContext {
 
     pub fn reset_config(&mut self) {
         self.committed_state.config = self.initial_config.clone();
+    }
+
+    pub fn process_handle(&self) -> Arc<Mutex<std::process::Child>> {
+        self.child_process.process_handle()
     }
 
     fn restart_child_process(&mut self) -> Result<(), Error> {
@@ -591,6 +667,7 @@ impl EvalContext {
 
     pub(crate) fn write_cargo_toml(&self, state: &ContextState) -> Result<()> {
         self.module.write_cargo_toml(state)?;
+        self.module.write_config_toml(state)?;
         Ok(())
     }
 
@@ -608,32 +685,37 @@ impl EvalContext {
             },
         ) in self.analyzer.top_level_variables("evcxr_analysis_wrapper")
         {
+            // We don't want to try to store record evcxr_variable_store into itself, so we ignore
+            // it.
+            if variable_name == "evcxr_variable_store" {
+                continue;
+            }
+            let type_name = match type_name {
+                TypeName::Named(x) => x,
+                TypeName::Closure => bail!(
+                    "The variable `{}` is a closure, which cannot be persisted.\n\
+                     You can however persist closures if you box them. e.g.:\n\
+                     let f: Box<dyn Fn()> = Box::new(|| {{println!(\"foo\")}});\n\
+                     Alternatively, you can prevent evcxr from attempting to persist\n\
+                     the variable by wrapping your code in braces.",
+                    variable_name
+                ),
+                TypeName::Unknown => bail!(
+                    "Couldn't automatically determine type of variable `{}`.\n\
+                     Please give it an explicit type.",
+                    variable_name
+                ),
+            };
             // For now, we need to look for and escape any reserved words. This should probably in
             // theory be done in rust analyzer in a less hacky way.
             let type_name = replace_reserved_words_in_type(&type_name);
-            // We don't want to try to store record evcxr_variable_store into itself, so we ignore
-            // it. We also ignore any variables for which we were given an invalid type. Variables
-            // with invalid types will then have their types determined by looking at compilation
-            // errors (although we may eventually drop the code that does that). At the time of
-            // writing, the test `int_array` fails if we don't reject invalid types here.
-            if variable_name == "evcxr_variable_store"
-                || !crate::rust_analyzer::is_type_valid(&type_name)
-            {
-                continue;
-            }
-            let preserve_vars_on_panic = state.config.preserve_vars_on_panic;
             state
                 .variable_states
                 .entry(variable_name)
                 .or_insert_with(|| VariableState {
                     type_name: String::new(),
                     is_mut: is_mutable,
-                    // All new locals will initially be defined only inside our catch_unwind
-                    // block.
-                    move_state: VariableMoveState::MovedIntoCatchUnwind,
-                    // If we're preserving copy types, then assume this variable
-                    // is copy until we find out it's not.
-                    is_copy_type: preserve_vars_on_panic,
+                    move_state: VariableMoveState::New,
                     definition_span: None,
                 })
                 .type_name = type_name;
@@ -662,9 +744,9 @@ impl EvalContext {
 
         let mut got_panic = false;
         let mut lost_variables = Vec::new();
-        lazy_static! {
-            static ref MIME_OUTPUT: Regex = Regex::new("EVCXR_BEGIN_CONTENT ([^ ]+)").unwrap();
-        }
+        static MIME_OUTPUT: OnceCell<Regex> = OnceCell::new();
+        let mime_output =
+            MIME_OUTPUT.get_or_init(|| Regex::new("EVCXR_BEGIN_CONTENT ([^ ]+)").unwrap());
         loop {
             let line = self.child_process.recv_line()?;
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
@@ -674,23 +756,25 @@ impl EvalContext {
                 got_panic = true;
             } else if line.starts_with(evcxr_input::GET_CMD) {
                 let is_password = line.starts_with(evcxr_input::GET_CMD_PASSWORD);
-                let prompt = line.split(':').skip(1).next().unwrap_or_default();
+                let prompt = line.split(':').nth(1).unwrap_or_default().to_owned();
                 self.child_process
-                    .send(&(callbacks.input_reader)(prompt, is_password))?;
+                    .send(&(callbacks.input_reader)(InputRequest {
+                        prompt,
+                        is_password,
+                    }))?;
             } else if line == evcxr_internal_runtime::USER_ERROR_OCCURRED {
                 // A question mark operator in user code triggered an early
-                // return. Any variables moved into the block in which the code
-                // was running, including any newly defined variables will have
-                // been lost (or possibly never even defined).
+                // return. Any newly defined variables won't have been stored.
                 state
                     .variable_states
                     .retain(|_variable_name, variable_state| {
-                        variable_state.move_state != VariableMoveState::MovedIntoCatchUnwind
+                        variable_state.move_state != VariableMoveState::New
                     });
-            } else if line.starts_with(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE) {
-                let variable_name = &line[evcxr_internal_runtime::VARIABLE_CHANGED_TYPE.len()..];
+            } else if let Some(variable_name) =
+                line.strip_prefix(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE)
+            {
                 lost_variables.push(variable_name.to_owned());
-            } else if let Some(captures) = MIME_OUTPUT.captures(&line) {
+            } else if let Some(captures) = mime_output.captures(&line) {
                 let mime_type = captures[1].to_owned();
                 let mut content = String::new();
                 loop {
@@ -711,31 +795,15 @@ impl EvalContext {
             } else {
                 // Note, errors sending are ignored, since it just means the
                 // user of the library has dropped the Receiver.
-                // TODO: Clone might not be necessary with NLL.
-                let _ = self.stdout_sender.send(line.clone());
+                let _ = self.stdout_sender.send(line);
             }
         }
         if got_panic {
-            let mut lost = Vec::new();
             state
                 .variable_states
-                .retain(|variable_name, variable_state| {
-                    if variable_state.move_state == VariableMoveState::MovedIntoCatchUnwind {
-                        lost.push(variable_name.clone());
-                        false
-                    } else {
-                        true
-                    }
+                .retain(|_variable_name, variable_state| {
+                    variable_state.move_state != VariableMoveState::New
                 });
-            if !lost.is_empty() {
-                output.content_by_mime_type.insert(
-                    "text/plain".to_owned(),
-                    format!(
-                        "Panic occurred, the following variables have been lost: {}",
-                        lost.join(", ")
-                    ),
-                );
-            }
         } else if !lost_variables.is_empty() {
             return Err(Error::TypeRedefinedVariablesLost(lost_variables));
         }
@@ -749,58 +817,12 @@ impl EvalContext {
         state: &mut ContextState,
         fixed_errors: &mut HashSet<&'static str>,
     ) -> Result<(), Error> {
-        lazy_static! {
-            static ref DISALLOWED_TYPES: Regex = Regex::new("(impl .*|[.*@])").unwrap();
-        }
         for code_origin in &error.code_origins {
             match code_origin {
                 CodeKind::PackVariable { variable_name } => {
-                    if error.code() == Some("E0308") {
-                        // Handle mismatched types. We might eventually remove this code entirely
-                        // now that we use Rust analyzer for type inference. Keeping it for now as
-                        // there's still a handful of tests that fail without this code..
-                        if let Some(mut actual_type) = error.get_actual_type() {
-                            // If the user hasn't given enough information for the compiler to
-                            // determine what type of integer or float, we default to i32 and f64
-                            // respectively.
-                            actual_type = actual_type
-                                .replace("{integer}", "i32")
-                                .replace("{float}", "f64");
-                            if actual_type == "integer" {
-                                actual_type = "i32".to_string();
-                            } else if actual_type == "float" {
-                                actual_type = "f64".to_string();
-                            }
-                            if DISALLOWED_TYPES.is_match(&actual_type) {
-                                bail!(
-                                    "Sorry, the type {} cannot currently be persisted",
-                                    actual_type
-                                );
-                            }
-                            actual_type = replace_reserved_words_in_type(&actual_type);
-                            state
-                                .variable_states
-                                .get_mut(variable_name)
-                                .unwrap()
-                                .type_name = actual_type;
-                            fixed_errors.insert("Variable types");
-                        } else {
-                            bail!("Got error E0308 but failed to parse actual type");
-                        }
-                    } else if error.code() == Some("E0382") {
+                    if error.code() == Some("E0382") {
                         // Use of moved value.
-                        let old_move_state = std::mem::replace(
-                            &mut state
-                                .variable_states
-                                .get_mut(variable_name)
-                                .unwrap()
-                                .move_state,
-                            VariableMoveState::MovedIntoCatchUnwind,
-                        );
-                        if old_move_state == VariableMoveState::MovedIntoCatchUnwind {
-                            // Variable is truly moved, forget about it.
-                            state.variable_states.remove(variable_name);
-                        }
+                        state.variable_states.remove(variable_name);
                         fixed_errors.insert("Captured value");
                     } else if error.code() == Some("E0425") {
                         // cannot find value in scope.
@@ -820,21 +842,10 @@ impl EvalContext {
                     } else if error.code() == Some("E0562")
                         || (error.code().is_none() && error.code_origins.len() == 1)
                     {
-                        bail!(
-                            "The variable `{}` has a type `{}` that can't be persisted. You can \
-                            try wrapping your code in braces so that the variable goes out of \
-                            scope before the end of the code to be executed.",
+                        return non_persistable_type_error(
                             variable_name,
-                            state.variable_states[variable_name].type_name
+                            &state.variable_states[variable_name].type_name,
                         );
-                    }
-                }
-                CodeKind::AssertCopyType { variable_name } => {
-                    if error.code() == Some("E0277") {
-                        if let Some(variable_state) = state.variable_states.get_mut(variable_name) {
-                            variable_state.is_copy_type = false;
-                            fixed_errors.insert("Non-copy type");
-                        }
                     }
                 }
                 CodeKind::WithFallback(fallback) => {
@@ -845,7 +856,11 @@ impl EvalContext {
                     if error.code() == Some("E0728") && !state.async_mode {
                         state.async_mode = true;
                         if !state.external_deps.contains_key("tokio") {
-                            state.add_dep("tokio", "\"0.2\"")?;
+                            state.add_dep("tokio", "\"1.20.1\"")?;
+                            // Rewrite Cargo.toml, since the dependency will probably have been
+                            // validated in the process of being added, which will have overwritten
+                            // Cargo.toml
+                            self.write_cargo_toml(state)?;
                         }
                         fixed_errors.insert("Enabled async mode");
                     } else if error.code() == Some("E0277") && !state.allow_question_mark {
@@ -870,6 +885,40 @@ impl EvalContext {
             }
         }
         Ok(())
+    }
+}
+
+fn non_persistable_type_error(variable_name: &str, actual_type: &str) -> Result<(), Error> {
+    bail!(
+        "The variable `{}` has type `{}` which cannot be persisted.\n\
+             You might be able to fix this by creating a `Box<dyn YourType>`. e.g.\n\
+             let v: Box<dyn core::fmt::Debug> = Box::new(foo());\n\
+             Alternatively, you can prevent evcxr from attempting to persist\n\
+             the variable by wrapping your code in braces.",
+        variable_name,
+        actual_type
+    );
+}
+
+fn fix_path() {
+    // If cargo isn't on our path, see if it exists in the same directory as
+    // our executable and if it does, add that directory to our PATH.
+    if which::which("cargo").is_err() {
+        if let Ok(current_exe) = std::env::current_exe() {
+            if let Some(bin_dir) = current_exe.parent() {
+                if bin_dir.join("cargo").exists() {
+                    if let Some(mut path) = std::env::var_os("PATH") {
+                        if cfg!(windows) {
+                            path.push(";");
+                        } else {
+                            path.push(":");
+                        }
+                        path.push(bin_dir);
+                        std::env::set_var("PATH", path);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -942,13 +991,18 @@ impl EvalOutputs {
         self.content_by_mime_type.get(mime_type).map(String::as_str)
     }
 
-    pub fn merge(&mut self, other: EvalOutputs) {
+    pub fn merge(&mut self, mut other: EvalOutputs) {
         for (mime_type, content) in other.content_by_mime_type {
             self.content_by_mime_type
                 .entry(mime_type)
                 .or_default()
                 .push_str(&content);
         }
+        self.timing = match (self.timing.take(), other.timing) {
+            (Some(t1), Some(t2)) => Some(t1 + t2),
+            (t1, t2) => t1.or(t2),
+        };
+        self.phases.append(&mut other.phases);
     }
 }
 
@@ -957,11 +1011,6 @@ struct VariableState {
     type_name: String,
     is_mut: bool,
     move_state: VariableMoveState,
-    // Whether the type of this variable implements Copy. Variables that implement copy never get
-    // moved into the catch_unwind block (they get copied), so we need to make sure we always save
-    // them from within the catch_unwind block, otherwise any changes made to the variable within
-    // the block will be lost.
-    is_copy_type: bool,
     definition_span: Option<UserCodeSpan>,
 }
 
@@ -971,11 +1020,10 @@ struct UserCodeSpan {
     range: TextRange,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Copy, Clone)]
 enum VariableMoveState {
+    New,
     Available,
-    CopiedIntoCatchUnwind,
-    MovedIntoCatchUnwind,
 }
 
 struct ExecutionArtifacts {
@@ -1010,6 +1058,7 @@ pub struct ContextState {
     /// code was executed. Doesn't include newly defined variables until after
     /// execution completes.
     stored_variable_states: HashMap<String, VariableState>,
+    attributes: HashMap<String, CodeBlock>,
     async_mode: bool,
     allow_question_mark: bool,
     build_num: i32,
@@ -1025,6 +1074,7 @@ impl ContextState {
             extern_crate_stmts: HashMap::new(),
             variable_states: HashMap::new(),
             stored_variable_states: HashMap::new(),
+            attributes: HashMap::new(),
             async_mode: false,
             allow_question_mark: false,
             build_num: 0,
@@ -1089,7 +1139,7 @@ impl ContextState {
         self.config.preserve_vars_on_panic
     }
 
-    pub fn offline_mode(&mut self) -> bool {
+    pub fn offline_mode(&self) -> bool {
         self.config.offline_mode
     }
 
@@ -1124,7 +1174,21 @@ impl ContextState {
         self.config.output_format = output_format;
     }
 
+    pub fn display_types(&self) -> bool {
+        self.config.display_types
+    }
+
+    pub fn set_display_types(&mut self, display_types: bool) {
+        self.config.display_types = display_types;
+    }
+
     pub fn set_toolchain(&mut self, value: &str) {
+        if let Some(rustc_path) = rustup_rustc_path(Some(value)) {
+            self.config.rustc_path = rustc_path;
+        }
+        if let Some(cargo_path) = rustup_cargo_path(Some(value)) {
+            self.config.cargo_path = cargo_path;
+        }
         self.config.toolchain = value.to_owned();
     }
 
@@ -1140,11 +1204,9 @@ impl ContextState {
                 return Ok(());
             }
         }
-        crate::cargo_metadata::validate_dep(dep, dep_config, &self.config)?;
-        self.external_deps.insert(
-            dep.to_owned(),
-            ExternalCrate::new(dep.to_owned(), dep_config.to_owned())?,
-        );
+        let external = ExternalCrate::new(dep.to_owned(), dep_config.to_owned())?;
+        crate::cargo_metadata::validate_dep(&external.name, &external.config, &self.config)?;
+        self.external_deps.insert(dep.to_owned(), external);
         Ok(())
     }
 
@@ -1216,8 +1278,9 @@ impl ContextState {
             }
             "E0597" => {
                 format!(
-                    "The variable `{}` contains a reference with a non-static lifetime so can't be persisted",
-                    variable_name
+                    "The variable `{variable_name}` contains a reference with a non-static lifetime so\n\
+                    can't be persisted. You can prevent this error by making sure that the\n\
+                    variable goes out of scope - i.e. wrapping the code in {{}}."
                 )
             }
             _ => {
@@ -1266,11 +1329,12 @@ impl ContextState {
     fn analysis_code(&self, user_code: CodeBlock) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
+            .add_all(self.attributes_code())
             .add_all(self.items_code())
             .add_all(self.error_trait_code(true))
             .generated("fn evcxr_variable_store<T: 'static>(_: T) {}")
             .generated("#[allow(unused_variables)]")
-            .generated("fn evcxr_analysis_wrapper(");
+            .generated("async fn evcxr_analysis_wrapper(");
         for (var_name, state) in &self.stored_variable_states {
             code = code.generated(format!(
                 "{}{}: {},",
@@ -1286,10 +1350,10 @@ impl ContextState {
         // Pack variable statements in analysis mode are a lot simpler than in compiled mode. We
         // just call a function that enforces that the variable doesn't contain any non-static
         // lifetimes.
-        for (var_name, _var_state) in &self.variable_states {
+        for var_name in self.variable_states.keys() {
             code.pack_variable(
                 var_name.clone(),
-                format!("evcxr_variable_store({});", var_name),
+                format!("evcxr_variable_store({var_name});"),
             );
         }
 
@@ -1304,6 +1368,7 @@ impl ContextState {
     ) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
+            .add_all(self.attributes_code())
             .add_all(self.items_code());
         let has_user_code = !user_code.is_empty();
         if has_user_code {
@@ -1325,6 +1390,14 @@ impl ContextState {
         let mut code = CodeBlock::new().add_all(self.get_imports());
         for item in self.items_by_name.values().chain(self.unnamed_items.iter()) {
             code = code.add_all(item.clone());
+        }
+        code
+    }
+
+    fn attributes_code(&self) -> CodeBlock {
+        let mut code = CodeBlock::new();
+        for attrib in self.attributes.values() {
+            code = code.add_all(attrib.clone());
         }
         code
     }
@@ -1386,9 +1459,7 @@ impl ContextState {
                 .generated("let evcxr_variable_store = unsafe {&mut *evcxr_variable_store};")
                 .add_all(self.check_variable_statements())
                 .add_all(self.load_variable_statements());
-            user_code = user_code
-                .add_all(self.store_variable_statements(&VariableMoveState::MovedIntoCatchUnwind))
-                .add_all(self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind));
+            user_code = user_code.add_all(self.store_variable_statements(VariableMoveState::New));
         } else {
             code = code.generated("evcxr_variable_store: *mut u8) -> *mut u8 {");
         }
@@ -1419,61 +1490,46 @@ impl ContextState {
             if needs_variable_store {
                 code = code
                     .generated("match std::panic::catch_unwind(")
-                    .generated("  std::panic::AssertUnwindSafe(move ||{")
-                    // Shadow the outer evcxr_variable_store with a local one for variables moved
-                    // into the closure.
-                    .generated(
-                        "let mut evcxr_variable_store = evcxr_internal_runtime::VariableStore::new();",
-                    )
+                    .generated("  std::panic::AssertUnwindSafe(||{")
                     .add_all(user_code)
                     // Return our local variable store from the closure to be merged back into the
                     // main variable store.
-                    .generated("evcxr_variable_store")
                     .generated("})) { ")
-                    .generated("  Ok(inner_store) => evcxr_variable_store.merge(inner_store),")
+                    .generated("  Ok(_) => {}")
                     .generated("  Err(_) => {")
-                    .add_all(
-                        self.store_variable_statements(&VariableMoveState::CopiedIntoCatchUnwind),
-                    )
-                    .generated(format!("    println!(\"{}\");", PANIC_NOTIFICATION))
+                    .generated(format!("    println!(\"{PANIC_NOTIFICATION}\");"))
                     .generated("}}");
             } else {
                 code = code
                     .generated("if std::panic::catch_unwind(||{")
                     .add_all(user_code)
                     .generated("}).is_err() {")
-                    .generated(format!("    println!(\"{}\");", PANIC_NOTIFICATION))
+                    .generated(format!("    println!(\"{PANIC_NOTIFICATION}\");"))
                     .generated("}");
             }
         } else {
             code = code.add_all(user_code);
         }
         if needs_variable_store {
-            code = code.add_all(self.store_variable_statements(&VariableMoveState::Available));
+            code = code.add_all(self.store_variable_statements(VariableMoveState::Available));
         }
         code = code.generated("evcxr_variable_store");
         code.generated("}")
     }
 
-    fn store_variable_statements(&self, move_state: &VariableMoveState) -> CodeBlock {
+    fn store_variable_statements(&self, move_state: VariableMoveState) -> CodeBlock {
         let mut statements = CodeBlock::new();
         for (var_name, var_state) in &self.variable_states {
-            if var_state.move_state == *move_state {
+            if var_state.move_state == move_state {
                 statements.pack_variable(
                     var_name.clone(),
                     format!(
                         // Note, we use stringify instead of quoting ourselves since it results in
                         // better errors if the user forgets to close a double-quote in their code.
-                        "evcxr_variable_store.put_variable::<{}>(stringify!({}), {});",
-                        var_state.type_name, var_name, var_name
+                        "evcxr_variable_store.put_variable::<{}>(stringify!({var_name}), {var_name});",
+                        var_state.type_name
                     ),
                 );
-                if var_state.is_copy_type {
-                    statements.assert_copy_variable(
-                        var_name.clone(),
-                        format!("evcxr_variable_store.assert_copy_type({});", var_name),
-                    );
-                }
             }
         }
         statements
@@ -1483,8 +1539,8 @@ impl ContextState {
         let mut statements = CodeBlock::new().generated("{let mut vars_ok = true;");
         for (var_name, var_state) in &self.stored_variable_states {
             statements = statements.generated(format!(
-                "vars_ok &= evcxr_variable_store.check_variable::<{}>(stringify!({}));",
-                var_state.type_name, var_name
+                "vars_ok &= evcxr_variable_store.check_variable::<{}>(stringify!({var_name}));",
+                var_state.type_name
             ));
         }
         statements.generated("if !vars_ok {return evcxr_variable_store;}}")
@@ -1532,21 +1588,8 @@ impl ContextState {
     /// code. Things like use-statements will be removed from the returned code,
     /// as they will have been stored in `self`.
     fn apply(&mut self, user_code: CodeBlock, nodes: &[SyntaxNode]) -> Result<CodeBlock, Error> {
-        if self.config.preserve_vars_on_panic {
-            // Any pre-existing, non-copy variables are marked as available, so that we'll take their
-            // values from outside of the catch_unwind block. If they remain this way, then this
-            // effectively means that they're not being used.
-            for variable_state in self.variable_states.values_mut() {
-                variable_state.move_state = if variable_state.is_copy_type {
-                    VariableMoveState::CopiedIntoCatchUnwind
-                } else {
-                    VariableMoveState::Available
-                };
-            }
-        } else {
-            for variable_state in self.variable_states.values_mut() {
-                variable_state.move_state = VariableMoveState::Available;
-            }
+        for variable_state in self.variable_states.values_mut() {
+            variable_state.move_state = VariableMoveState::Available;
         }
 
         let mut code_out = CodeBlock::new();
@@ -1564,6 +1607,11 @@ impl ContextState {
                     self.record_new_locals(pat, let_stmt.ty(), &segment, node.text_range());
                     code_out = code_out.with_segment(segment);
                 }
+            } else if ast::Attr::can_cast(node.kind()) {
+                self.attributes.insert(
+                    node.text().to_string(),
+                    CodeBlock::new().with_segment(segment),
+                );
             } else if ast::Expr::can_cast(node.kind()) {
                 if statement_index == num_statements - 1 {
                     if self.config.display_final_expression {
@@ -1575,15 +1623,27 @@ impl ContextState {
                                 .generated(").evcxr_display();")
                                 .code_string(),
                             // If that fails, we try debug format.
-                            CodeBlock::new()
+                            if self.config.display_types {
+                                CodeBlock::new()
                                 .generated(SEND_TEXT_PLAIN_DEF)
-                                .generated(&format!(
-                                    "evcxr_send_text_plain(&format!(\"{}\",\n",
+                                .generated(GET_TYPE_NAME_DEF)
+                                .generated("{ let r = &(")
+                                .with_segment(segment)
+                                .generated(format!(
+                                    "); evcxr_send_text_plain(&format!(\": {{}} = {}\", evcxr_get_type_name(r), r)); }};",
+                                    self.config.output_format
+                                ))
+                            } else {
+                                CodeBlock::new()
+                                .generated(SEND_TEXT_PLAIN_DEF)
+                                .generated(format!(
+                                    "evcxr_send_text_plain(&format!(\"{}\",&(\n",
                                     self.config.output_format
                                 ))
                                 .with_segment(segment)
-                                .generated("));"),
-                        );
+                                .generated(")));")
+                                },
+                            );
                     } else {
                         code_out = code_out
                             .generated("let _ = ")
@@ -1615,7 +1675,7 @@ impl ContextState {
                         }
                     }
                     ast::Item::MacroRules(macro_rules) => {
-                        if let Some(name) = ast::NameOwner::name(&macro_rules) {
+                        if let Some(name) = ast::HasName::name(&macro_rules) {
                             let item_block = CodeBlock::new().with_segment(segment);
                             self.items_by_name
                                 .insert(name.text().to_string(), item_block);
@@ -1749,7 +1809,7 @@ impl ContextState {
             Some(ty) if type_is_fully_specified(&ty) => format!("{}", AstNode::syntax(&ty).text()),
             _ => "String".to_owned(),
         };
-        if let Some(name) = ast::NameOwner::name(&pat_ident) {
+        if let Some(name) = ast::HasName::name(&pat_ident) {
             self.variable_states.insert(
                 name.text().to_string(),
                 VariableState {
@@ -1757,10 +1817,7 @@ impl ContextState {
                     is_mut: pat_ident.mut_token().is_some(),
                     // All new locals will initially be defined only inside our catch_unwind
                     // block.
-                    move_state: VariableMoveState::MovedIntoCatchUnwind,
-                    // If we're preserving copy types, then assume this variable
-                    // is copy until we find out it's not.
-                    is_copy_type: self.config.preserve_vars_on_panic,
+                    move_state: VariableMoveState::New,
                     definition_span: segment.sequence.map(|segment_index| {
                         let range = name.syntax().text_range() - let_stmt_range.start();
                         UserCodeSpan {
@@ -1774,15 +1831,60 @@ impl ContextState {
     }
 }
 
-fn replace_reserved_words_in_type(ty: &str) -> String {
-    lazy_static! {
-        static ref RESERVED_WORDS: Regex = Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap();
+// Returns the path to the current cargo binary that rustup will use, or None if
+// anything goes wrong (e.g. rustup isn't available). By invoking this binary
+// directly, we avoid having rustup decide which binary to invoke each time we
+// compile. This reduces eval time for a trivial bit of code from about 140ms to
+// 109ms.
+fn rustup_cargo_path(toolchain: Option<&str>) -> Option<String> {
+    let mut cmd = Command::new("rustup");
+    if let Some(toolchain) = toolchain {
+        cmd.arg("+".to_owned() + toolchain);
     }
-    RESERVED_WORDS.replace_all(ty, "${1}r#${2}${3}").to_string()
+    let output = cmd.arg("which").arg("cargo").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(std::str::from_utf8(&output.stdout).ok()?.trim().to_owned())
+}
+
+fn default_cargo_path() -> String {
+    rustup_cargo_path(None).unwrap_or_else(|| "cargo".to_owned())
+}
+
+// Similar to the above, this avoids cargo invoking rustup, cutting the eval
+// time for a trivial bit of code to about 75ms.
+fn rustup_rustc_path(toolchain: Option<&str>) -> Option<String> {
+    let mut cmd = Command::new("rustup");
+    if let Some(toolchain) = toolchain {
+        cmd.arg("+".to_owned() + toolchain);
+    }
+    let output = cmd.arg("which").arg("rustc").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(std::str::from_utf8(&output.stdout).ok()?.trim().to_owned())
+}
+
+fn default_rustc_path() -> String {
+    rustup_rustc_path(None).unwrap_or_else(|| "rustc".to_owned())
+}
+
+fn replace_reserved_words_in_type(ty: &str) -> String {
+    static RESERVED_WORDS: OnceCell<Regex> = OnceCell::new();
+    RESERVED_WORDS
+        .get_or_init(|| Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap())
+        .replace_all(ty, "${1}r#${2}${3}")
+        .to_string()
 }
 
 #[cfg(test)]
 mod tests {
+    use ra_ap_syntax::ast::HasAttrs;
+    use ra_ap_syntax::SourceFile;
+
+    use super::*;
+
     #[test]
     fn test_replace_reserved_words_in_type() {
         use super::replace_reserved_words_in_type as repl;
@@ -1792,5 +1894,37 @@ mod tests {
         assert_eq!(repl("foo::async::bar"), "foo::r#async::bar");
         assert_eq!(repl("foo::async::async::bar"), "foo::r#async::r#async::bar");
         assert_eq!(repl("Bar<async::foo::Baz>"), "Bar<r#async::foo::Baz>");
+    }
+
+    fn create_state() -> ContextState {
+        let config = Config::new(PathBuf::from("/dummy_path"));
+        ContextState::new(config)
+    }
+
+    #[test]
+    fn test_attributes() {
+        let mut state = create_state();
+        let (user_code, code_info) = CodeBlock::from_original_user_code(stringify!(
+            #![feature(box_syntax)]
+            #![feature(some_other_feature)]
+            fn foo() {}
+            let x = box 10;
+        ));
+        let user_code = state.apply(user_code, &code_info.nodes).unwrap();
+        let final_code = state.code_to_compile(user_code, CompilationMode::NoCatch);
+        let source_file = SourceFile::parse(&final_code.code_string()).ok().unwrap();
+        let mut attrs: Vec<String> = source_file
+            .attrs()
+            .map(|attr| attr.syntax().text().to_string().replace(' ', ""))
+            .collect();
+        attrs.sort();
+        assert_eq!(
+            attrs,
+            vec![
+                "#![allow(unused_imports,unused_mut,dead_code)]".to_owned(),
+                "#![feature(box_syntax)]".to_owned(),
+                "#![feature(some_other_feature)]".to_owned(),
+            ]
+        );
     }
 }

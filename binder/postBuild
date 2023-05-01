@@ -6,5 +6,5 @@ echo '. $HOME/.cargo/env' >> ~/.bashrc
 echo '. $HOME/.cargo/env' >> ~/.profile
 source $HOME/.cargo/env
 
-cargo install evcxr_jupyter
+cargo install evcxr_jupyter --no-default-features
 evcxr_jupyter --install

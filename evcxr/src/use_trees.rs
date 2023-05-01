@@ -1,18 +1,11 @@
-use ra_ap_syntax::{ast, SmolStr};
+use ra_ap_syntax::ast;
 
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum Import {
@@ -25,14 +18,13 @@ pub(crate) enum Import {
 }
 
 impl Import {
-    fn format(name: &SmolStr, path: &[SmolStr]) -> Import {
-        let code;
+    fn format(name: &str, path: &[String]) -> Import {
         let joined_path = path.join("::");
-        if path.last() == Some(name) {
-            code = format!("use {};", joined_path);
+        let code = if path.last().map(String::as_str) == Some(name) {
+            format!("use {joined_path};")
         } else {
-            code = format!("use {} as {};", joined_path, name);
-        }
+            format!("use {joined_path} as {name};")
+        };
         if name == "_" || name == "*" {
             Import::Unnamed(code)
         } else {
@@ -45,7 +37,7 @@ impl Import {
 }
 
 pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Import)) {
-    fn process_use_tree(use_tree: &ast::UseTree, prefix: &[SmolStr], out: &mut impl FnMut(Import)) {
+    fn process_use_tree(use_tree: &ast::UseTree, prefix: &[String], out: &mut impl FnMut(Import)) {
         if let Some(path) = use_tree.path() {
             // If we get ::self, ignore it and use what we've got so far.
             if path.segment().and_then(|segment| segment.kind())
@@ -63,9 +55,9 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
             loop {
                 if let Some(segment) = path.segment() {
                     if let Some(name_ref) = segment.name_ref() {
-                        path_parts.push(name_ref.text().clone());
+                        path_parts.push(name_ref.text().to_owned());
                     } else if let Some(token) = segment.crate_token() {
-                        path_parts.push(token.text().clone());
+                        path_parts.push(token.text().to_owned());
                     }
                     if let Some(qualifier) = path.qualifier() {
                         path = qualifier;
@@ -79,7 +71,7 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
             // Combine the existing prefix with the new path components.
             let mut new_prefix = Vec::with_capacity(prefix.len() + path_parts.len());
             new_prefix.extend(prefix.iter().cloned());
-            new_prefix.extend(path_parts.drain(..));
+            new_prefix.append(&mut path_parts);
 
             // Recurse into any subtree.
             if let Some(tree_list) = use_tree.use_tree_list() {
@@ -87,13 +79,13 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
                     process_use_tree(&subtree, &new_prefix, out);
                 }
             } else if let Some(rename) = use_tree.rename() {
-                if let Some(name) = ast::NameOwner::name(&rename) {
-                    out(Import::format(name.text(), &new_prefix));
+                if let Some(name) = ast::HasName::name(&rename) {
+                    out(Import::format(&name.text(), &new_prefix));
                 } else if let Some(underscore) = rename.underscore_token() {
                     out(Import::format(underscore.text(), &new_prefix));
                 }
             } else if let Some(star_token) = use_tree.star_token() {
-                new_prefix.push(star_token.text().clone());
+                new_prefix.push(star_token.text().to_owned());
                 out(Import::format(star_token.text(), &new_prefix));
             } else if let Some(ident) = new_prefix.last() {
                 out(Import::format(ident, &new_prefix));
@@ -106,17 +98,21 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
 
 #[cfg(test)]
 mod tests {
-    use super::{use_tree_names_do, Import};
+    use super::use_tree_names_do;
+    use super::Import;
     use ra_ap_syntax::ast;
+    use ra_ap_syntax::ast::HasModuleItem;
 
     fn use_tree_names(code: &str) -> Vec<Import> {
         let mut out = Vec::new();
-        let item = ast::Item::parse(code).unwrap();
-        if let ast::Item::Use(use_stmt) = item {
-            if let Some(use_tree) = use_stmt.use_tree() {
-                use_tree_names_do(&use_tree, &mut |import| {
-                    out.push(import);
-                });
+        let file = ast::SourceFile::parse(code);
+        for item in file.tree().items() {
+            if let ast::Item::Use(use_stmt) = item {
+                if let Some(use_tree) = use_stmt.use_tree() {
+                    use_tree_names_do(&use_tree, &mut |import| {
+                        out.push(import);
+                    });
+                }
             }
         }
         out

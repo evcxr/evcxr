@@ -1,0 +1,82 @@
+# Trigger a release when a tag is pushed that starts with v then some number.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.*'
+
+name: Release
+
+jobs:
+  release:
+    name: Release
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write # Needed for creating releases
+
+    strategy:
+      matrix:
+        include:
+        - build: linux
+          os: ubuntu-latest
+          target: x86_64-unknown-linux-gnu
+        - build: macos
+          os: macos-latest
+          target: x86_64-apple-darwin
+        - build: windows
+          os: windows-2019
+          target: x86_64-pc-windows-msvc
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: stable
+
+    - name: Extract release notes
+      shell: bash
+      run: |
+        awk "/# Version ${GITHUB_REF_NAME#v}/{flag=1; next} /^$/{flag=0} flag" RELEASE_NOTES.md >REL.md
+
+    - name: Build release binary
+      uses: actions-rs/cargo@v1
+      with:
+        command: build
+        args: --release --target ${{ matrix.target }}
+
+    - name: Create tarballs (Unix)
+      if: matrix.build == 'linux' || matrix.build == 'macos'
+      run: |
+        n="evcxr-${{ github.ref_name }}-${{ matrix.target }}"
+        mkdir "$n"
+        cp "target/${{ matrix.target }}/release/evcxr" "$n"
+        strip "$n/evcxr"
+        tar zcf $n.tar.gz $n
+        n="evcxr_jupyter-${{ github.ref_name }}-${{ matrix.target }}"
+        mkdir "$n"
+        cp "target/${{ matrix.target }}/release/evcxr_jupyter" "$n"
+        strip "$n/evcxr_jupyter"
+        tar zcf $n.tar.gz $n
+
+    - name: Zip binaries (Window)
+      if: matrix.build == 'windows'
+      shell: bash
+      run: |
+        n="evcxr-${{ github.ref_name }}-${{ matrix.target }}"
+        mkdir "$n"
+        cp "target/${{ matrix.target }}/release/evcxr.exe" "$n"
+        7z a $n.zip $n
+        n="evcxr_jupyter-${{ github.ref_name }}-${{ matrix.target }}"
+        mkdir "$n"
+        cp "target/${{ matrix.target }}/release/evcxr_jupyter.exe" "$n"
+        7z a $n.zip $n
+
+    - name: Release
+      uses: softprops/action-gh-release@v1
+      with:
+        body_path: REL.md
+        files: |
+          evcxr-v*.*
+          evcxr_jupyter-v*.*

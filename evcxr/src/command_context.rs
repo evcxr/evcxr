@@ -1,32 +1,34 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
 use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::Mutex;
 
-use crate::{
-    code_block::{self, CodeBlock, CodeKind, CommandCall, Segment},
-    crash_guard::CrashGuard,
-    errors::{Span, SpannedMessage},
-    eval_context::EvalCallbacks,
-    rust_analyzer::{Completion, Completions},
-    EvalContext, EvalContextOutputs, EvalOutputs,
-};
-use crate::{
-    errors::{bail, CompilationError, Error},
-    eval_context::ContextState,
-};
+use crate::code_block::CodeBlock;
+use crate::code_block::CodeKind;
+use crate::code_block::CommandCall;
+use crate::code_block::Segment;
+use crate::code_block::{self};
+use crate::crash_guard::CrashGuard;
+use crate::errors::bail;
+use crate::errors::CompilationError;
+use crate::errors::Error;
+use crate::errors::Span;
+use crate::errors::SpannedMessage;
+use crate::eval_context::ContextState;
+use crate::eval_context::EvalCallbacks;
+use crate::rust_analyzer::Completion;
+use crate::rust_analyzer::Completions;
+use crate::EvalContext;
+use crate::EvalContextOutputs;
+use crate::EvalOutputs;
 use anyhow::Result;
+use once_cell::sync::OnceCell;
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
@@ -73,6 +75,10 @@ impl CommandContext {
         self.eval_context.check(non_command_code, state, &code_info)
     }
 
+    pub fn process_handle(&self) -> Arc<Mutex<std::process::Child>> {
+        self.eval_context.process_handle()
+    }
+
     pub fn variables_and_types(&self) -> impl Iterator<Item = (&str, &str)> {
         self.eval_context.variables_and_types()
     }
@@ -98,12 +104,11 @@ impl CommandContext {
 =============================================================================
 Panic detected. Here's some useful information if you're filing a bug report.
 <CODE>
-{}
+{to_run}
 </CODE>
 <STATE>
-{:?}
-</STATE>"#,
-                to_run, state
+{state:?}
+</STATE>"#
             );
         });
         let result = self.execute_with_callbacks_internal(to_run, callbacks);
@@ -205,9 +210,11 @@ Panic detected. Here's some useful information if you're filing a bug report.
         full_position: usize,
     ) -> Result<Completions> {
         let existing = &segment.code[0..offset];
-        let mut completions = Completions::default();
-        completions.start_offset = full_position - offset;
-        completions.end_offset = full_position;
+        let mut completions = Completions {
+            start_offset: full_position - offset,
+            end_offset: full_position,
+            ..Completions::default()
+        };
         for cmd in Self::commands_by_name().keys() {
             if cmd.starts_with(existing) {
                 completions.completions.push(Completion {
@@ -218,12 +225,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
         Ok(completions)
     }
 
-    fn load_config(&mut self) -> Result<EvalOutputs, Error> {
+    fn load_config(&mut self, quiet: bool) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
         if let Some(config_dir) = crate::config_dir() {
             let config_file = config_dir.join("init.evcxr");
             if config_file.exists() {
-                println!("Loading startup commands from {:?}", config_file);
+                if !quiet {
+                    println!("Loading startup commands from {config_file:?}");
+                }
                 let contents = std::fs::read_to_string(config_file)?;
                 for line in contents.lines() {
                     outputs.merge(self.execute(line)?);
@@ -233,7 +242,9 @@ Panic detected. Here's some useful information if you're filing a bug report.
             // any other state changed by :commands) specified in the init file.
             let prelude_file = config_dir.join("prelude.rs");
             if prelude_file.exists() {
-                println!("Executing prelude from {:?}", prelude_file);
+                if !quiet {
+                    println!("Executing prelude from {prelude_file:?}");
+                }
                 let prelude = std::fs::read_to_string(prelude_file)?;
                 outputs.merge(self.execute(&prelude)?);
             }
@@ -279,14 +290,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
                             found_space = true;
                             return false;
                         }
-                        return found_space;
+                        found_space
                     })
                     .map(|(index, _char)| index)
                     .unwrap_or(0);
                 let start_column = code_block::count_columns(&segment.code[..start_byte]) + 1;
                 let end_column = code_block::count_columns(&segment.code);
                 CompilationError::from_segment_span(
-                    &segment,
+                    segment,
                     SpannedMessage::from_segment_span(
                         segment,
                         Span::from_command(command_call, start_column, end_column),
@@ -295,8 +306,8 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 )
             })
         } else {
-            return Err(CompilationError::from_segment_span(
-                &segment,
+            Err(CompilationError::from_segment_span(
+                segment,
                 SpannedMessage::from_segment_span(
                     segment,
                     Span::from_command(
@@ -306,19 +317,19 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     ),
                 ),
                 format!("Unrecognised command {}", command_call.command),
-            ));
+            ))
         }
     }
 
     fn commands_by_name() -> &'static HashMap<&'static str, AvailableCommand> {
-        lazy_static! {
-            static ref COMMANDS_BY_NAME: HashMap<&'static str, AvailableCommand> =
-                CommandContext::create_commands()
-                    .into_iter()
-                    .map(|command| (command.name, command))
-                    .collect();
-        }
-        &COMMANDS_BY_NAME
+        static COMMANDS_BY_NAME: OnceCell<HashMap<&'static str, AvailableCommand>> =
+            OnceCell::new();
+        COMMANDS_BY_NAME.get_or_init(|| {
+            CommandContext::create_commands()
+                .into_iter()
+                .map(|command| (command.name, command))
+                .collect()
+        })
     }
 
     fn create_commands() -> Vec<AvailableCommand> {
@@ -329,14 +340,15 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 |_ctx, state, _args| {
                     let debug_mode = !state.debug_mode();
                     state.set_debug_mode(debug_mode);
-                    text_output(format!("Internals debugging: {}", debug_mode))
+                    text_output(format!("Internals debugging: {debug_mode}"))
                 },
             ),
             AvailableCommand::new(
                 ":load_config",
-                "Reloads startup configuration files",
-                |ctx, state, _args| {
-                    let result = ctx.load_config();
+                "Reloads startup configuration files. Accepts optional flag `--quiet` to suppress logging.",
+                |ctx, state, args| {
+                    let quiet = args.as_ref().map(String::as_str) == Some("--quiet");
+                    let result = ctx.load_config(quiet);
                     *state = ctx.eval_context.state();
                     result
                 },
@@ -353,6 +365,20 @@ Panic detected. Here's some useful information if you're filing a bug report.
                         ctx.vars_as_text(),
                         ctx.vars_as_html(),
                     ))
+                },
+            ),
+            AvailableCommand::new(
+                ":type",
+                "Show variable type",
+                |ctx, _state, args| {
+                    ctx.var_type(args)
+                },
+            ),
+            AvailableCommand::new(
+                ":t",
+                "Short version of :type",
+                |ctx, _state, args| {
+                    ctx.var_type(args)
                 },
             ),
             AvailableCommand::new(
@@ -398,7 +424,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "Set optimization level (0/1/2)",
                 |_ctx, state, args| {
                     let new_level = if let Some(n) = args {
-                        &n
+                        n
                     } else if state.opt_level() == "2" {
                         "0"
                     } else {
@@ -415,6 +441,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     let new_format = if let Some(f) = args { f } else { "{:?}" };
                     state.set_output_format(new_format.to_owned());
                     text_output(format!("Output format: {}", state.output_format()))
+                },
+            ),
+            AvailableCommand::new(
+                ":types",
+                "Toggle printing of types",
+                |_ctx, state, _args| {
+                    state.set_display_types(!state.display_types());
+                    text_output(format!("Types: {}", state.display_types()))
                 },
             ),
             AvailableCommand::new(
@@ -436,14 +470,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "Set which toolchain to use (e.g. nightly)",
                 |_ctx, state, args| {
                     if let Some(arg) = args {
-                        state.set_toolchain(&arg);
+                        state.set_toolchain(arg);
                     }
                     text_output(format!("Toolchain: {}", state.toolchain()))
                 },
             ),
             AvailableCommand::new(
                 ":offline",
-                "Set offline mode when invoking cargo",
+                "Set offline mode when invoking cargo (0/1)",
                 |_ctx, state, args| {
                     state.set_offline_mode(args.as_ref().map(String::as_str) == Some("1"));
                     text_output(format!("Offline mode: {}", state.offline_mode()))
@@ -481,7 +515,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             ),
             AvailableCommand::new(
                 ":linker",
-                "Set/print linker. Supported: system, lld",
+                "Set/print linker. Supported: system, lld, mold",
                 |_ctx, state, args| {
                     if let Some(linker) = args {
                         state.set_linker(linker.to_owned());
@@ -515,7 +549,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     let mut errors_out = String::new();
                     for error in &ctx.last_errors {
                         use std::fmt::Write;
-                        write!(&mut errors_out, "{}", error.json)?;
+                        write!(errors_out, "{}", error.json)?;
                         errors_out.push('\n');
                     }
                     bail!(errors_out);
@@ -525,18 +559,18 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 use std::fmt::Write;
                 let mut text = String::new();
                 let mut html = String::new();
-                writeln!(&mut html, "<table>")?;
+                writeln!(html, "<table>")?;
                 let mut commands = CommandContext::create_commands();
                 commands.sort_by(|a, b| a.name.cmp(b.name));
                 for cmd in commands {
-                    writeln!(&mut text, "{:<17} {}", cmd.name, cmd.short_description).unwrap();
+                    writeln!(text, "{:<17} {}", cmd.name, cmd.short_description).unwrap();
                     writeln!(
-                        &mut html,
+                        html,
                         "<tr><td>{}</td><td>{}</td></tr>",
                         cmd.name, cmd.short_description
                     )?;
                 }
-                writeln!(&mut html, "</table>")?;
+                writeln!(html, "</table>")?;
                 Ok(EvalOutputs::text_html(text, html))
             }),
         ]
@@ -548,7 +582,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             out.push_str(var);
             out.push_str(": ");
             out.push_str(ty);
-            out.push_str("\n");
+            out.push('\n');
         }
         out
     }
@@ -566,6 +600,29 @@ Panic detected. Here's some useful information if you're filing a bug report.
         out.push_str("</table>");
         out
     }
+
+    fn var_type(&self, args: &Option<String>) -> Result<EvalOutputs, Error> {
+        let args = if let Some(x) = args {
+            x.trim()
+        } else {
+            bail!("Variable name required")
+        };
+
+        let mut out = None;
+        for (var, ty) in self.eval_context.variables_and_types() {
+            if var == args {
+                out = Some(ty.to_owned());
+                break;
+            }
+        }
+
+        if let Some(out) = out {
+            let out = format!("{args}: {out}");
+            Ok(EvalOutputs::text_html(out.clone(), out))
+        } else {
+            bail!("Variable does not exist: {}", args)
+        }
+    }
 }
 
 fn process_dep_command(
@@ -573,18 +630,15 @@ fn process_dep_command(
     args: &Option<String>,
 ) -> Result<EvalOutputs, Error> {
     use regex::Regex;
-    let args = if let Some(v) = args {
-        v
-    } else {
+    let Some(args) = args else {
         bail!(":dep requires arguments")
     };
-    lazy_static! {
-        static ref DEP_RE: Regex = Regex::new("^([^= ]+) *(= *(.+))?$").unwrap();
-    }
-    if let Some(captures) = DEP_RE.captures(args) {
+    static DEP_RE: OnceCell<Regex> = OnceCell::new();
+    let dep_re = DEP_RE.get_or_init(|| Regex::new("^([^= ]+) *(= *(.+))?$").unwrap());
+    if let Some(captures) = dep_re.captures(args) {
         state.add_dep(
             &captures[1],
-            &captures.get(3).map_or("\"*\"", |m| m.as_str()),
+            captures.get(3).map_or("\"*\"", |m| m.as_str()),
         )?;
         Ok(EvalOutputs::new())
     } else {
@@ -592,30 +646,17 @@ fn process_dep_command(
     }
 }
 
+type CallbackFn = dyn Fn(&mut CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>
+    + 'static
+    + Sync
+    + Send;
+
 struct AvailableCommand {
     name: &'static str,
     short_description: &'static str,
-    callback: Box<
-        dyn Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
-            + 'static
-            + Sync,
-    >,
+    callback: Box<CallbackFn>,
     /// If `Some`, this callback will be run when preparing for analysis instead of `callback`.
-    analysis_callback: Option<
-        Box<
-            dyn Fn(
-                    &CommandContext,
-                    &mut ContextState,
-                    &Option<String>,
-                ) -> Result<EvalOutputs, Error>
-                + 'static
-                + Sync,
-        >,
-    >,
+    analysis_callback: Option<Box<CallbackFn>>,
 }
 
 impl AvailableCommand {
@@ -628,7 +669,8 @@ impl AvailableCommand {
                 &Option<String>,
             ) -> Result<EvalOutputs, Error>
             + 'static
-            + Sync,
+            + Sync
+            + Send,
     ) -> AvailableCommand {
         AvailableCommand {
             name,
@@ -640,9 +682,14 @@ impl AvailableCommand {
 
     fn with_analysis_callback(
         mut self,
-        callback: impl Fn(&CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>
+        callback: impl Fn(
+                &mut CommandContext,
+                &mut ContextState,
+                &Option<String>,
+            ) -> Result<EvalOutputs, Error>
             + 'static
-            + Sync,
+            + Sync
+            + Send,
     ) -> Self {
         self.analysis_callback = Some(Box::new(callback));
         self
@@ -656,6 +703,7 @@ impl AvailableCommand {
 fn html_escape(input: &str, out: &mut String) {
     for ch in input.chars() {
         match ch {
+            '&' => out.push_str("&amp;"),
             '<' => out.push_str("&lt;"),
             '>' => out.push_str("&gt;"),
             x => out.push(x),

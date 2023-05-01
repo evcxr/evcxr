@@ -1,44 +1,44 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use super::scan::{validate_source_fragment, FragmentValidity};
+use super::scan::validate_source_fragment;
+use super::scan::FragmentValidity;
+use crate::bginit::BgInitMutex;
 use colored::*;
-use evcxr::{CommandContext, Completions};
-use rustyline::{
-    completion::Completer,
-    error::ReadlineError,
-    highlight::Highlighter,
-    hint::Hinter,
-    validate::{ValidationContext, ValidationResult, Validator},
-    Context, Helper,
-};
+use evcxr::CommandContext;
+use evcxr::Completions;
+use evcxr::Error;
+use rustyline::completion::Completer;
+use rustyline::error::ReadlineError;
+use rustyline::highlight::Highlighter;
+use rustyline::hint::Hinter;
+use rustyline::validate::ValidationContext;
+use rustyline::validate::ValidationResult;
+use rustyline::validate::Validator;
+use rustyline::Context;
+use rustyline::Helper;
 use std::borrow::Cow;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct EvcxrRustylineHelper {
-    command_context: Arc<Mutex<CommandContext>>,
+    command_context: Arc<BgInitMutex<Result<CommandContext, Error>>>,
 }
 
 impl EvcxrRustylineHelper {
-    pub fn new(command_context: Arc<Mutex<CommandContext>>) -> Self {
+    pub fn new(command_context: Arc<BgInitMutex<Result<CommandContext, Error>>>) -> Self {
         Self { command_context }
     }
 }
 
 // Have to implement a bunch of traits as mostly noop...
 
-impl Hinter for EvcxrRustylineHelper {}
+impl Hinter for EvcxrRustylineHelper {
+    type Hint = String;
+}
 
 impl Completer for EvcxrRustylineHelper {
     type Candidate = String;
@@ -49,12 +49,17 @@ impl Completer for EvcxrRustylineHelper {
         pos: usize,
         _ctx: &Context<'_>,
     ) -> rustyline::Result<(usize, Vec<String>)> {
-        let completions = self
-            .command_context
-            .lock()
-            .unwrap()
-            .completions(line, pos)
-            .unwrap_or_else(|_| Completions::default());
+        let completions = match &mut *self.command_context.lock() {
+            Ok(command_context) => command_context
+                .completions(line, pos)
+                .unwrap_or_else(|_| Completions::default()),
+            Err(e) => {
+                return Err(rustyline::error::ReadlineError::Io(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e.clone(),
+                )))
+            }
+        };
         let res: Vec<String> = completions
             .completions
             .into_iter()

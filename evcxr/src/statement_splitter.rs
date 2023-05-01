@@ -1,18 +1,14 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use ra_ap_syntax::{ast, AstNode, SourceFile, SyntaxNode};
+use ra_ap_syntax::ast;
+use ra_ap_syntax::AstNode;
+use ra_ap_syntax::SourceFile;
+use ra_ap_syntax::SyntaxNode;
 
 pub(crate) struct OriginalUserCode<'a> {
     pub(crate) code: &'a str,
@@ -28,15 +24,17 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
     let prelude = "fn f(){";
     let parsed_file = SourceFile::parse(&(prelude.to_owned() + code + "}"));
     let mut start_byte = 0;
-    if let Some(block) = parsed_file
+    if let Some(stmt_list) = parsed_file
         .syntax_node()
         .children()
         .next()
         .and_then(ast::Fn::cast)
         .as_ref()
         .and_then(ast::Fn::body)
+        .as_ref()
+        .and_then(ast::BlockExpr::stmt_list)
     {
-        let mut children = block.syntax().children().peekable();
+        let mut children = stmt_list.syntax().children().peekable();
         while let (Some(child), next) = (children.next(), children.peek()) {
             // With the possible exception of the first node, We want to include
             // whitespace after nodes rather than before, so our end is the
@@ -57,7 +55,9 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
 
 #[cfg(test)]
 mod test {
-    use ra_ap_syntax::{ast, AstNode, SyntaxKind};
+    use ra_ap_syntax::ast;
+    use ra_ap_syntax::AstNode;
+    use ra_ap_syntax::SyntaxKind;
 
     use super::split_into_statements;
 

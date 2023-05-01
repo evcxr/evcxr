@@ -5,10 +5,6 @@ and the [Evcxr Jupyter kernel](evcxr_jupyter/README.md).
 
 ## Usage notes
 
-* If your code panics, all variables will be lost. You can optionally run
-  `:preserve_vars_on_panic 1` to turn on preservation of variables. However note
-  that this will slow down compilation. Also, only variables that either are not
-  referenced by the code being run, or are Copy will be preserved.
 * If your code segfaults (e.g. due to buggy unsafe code), aborts, exits etc, the
   process in which the code runs will be restarted. All variables will be lost.
 
@@ -45,6 +41,15 @@ package `unicode-xid`, but refer to it locally as `unicode_xid`, you could do th
 :dep unicode_xid = { package = "unicode-xid", version = "*" }
 use unicode_xid;
 ```
+
+You can use the local work-in-progress crate like this:
+
+```rust
+>> :dep my_crate = { path = "." }
+>> use my_crate::*;
+```
+
+It will even automatically update when you save your files!
 
 There are many other options that can be specified. See Cargo's [official dependency
 documentation](https://doc.rust-lang.org/cargo/reference/specifying-dependencies.html) for details.
@@ -135,14 +140,6 @@ y: i32
 x: i32
 ```
 
-If your code panics, all variables will be lost. To preserve variables on panics, you can set the `:preserve_vars_on_panic` configuration option:
-```rust
->> :preserve_vars_on_panic 1
-Preserve vars on panic: true
-```
-
-Only variables that either are not referenced by the code being run or implement `Copy` will be preserved. Also note that this will slow down compilation.
-
 ### References
 
 Variables that persist cannot reference other variables. For example, you can't do this:
@@ -183,21 +180,29 @@ $ sudo apt install lld
 
 Here is a complete list of the configuration options you can set to customize your Evcxr experience:
 
-* `:opt [level]`      Toggle/set optimization level
-* `:fmt [format]`     Set output formatter (default: `{:?}`). 
 * `:efmt [format]`    Set the formatter for errors returned by `?`
-* `:sccache [0|1]`    Set whether to use sccache.
-* `:linker [linker]`  Set/print linker. Supported: `system`, `lld`
-* `:timing`           Toggle printing of how long evaluations take
-* `:time_passes`      Toggle printing of rustc pass times (requires nightly)
+* `:fmt [format]`     Set output formatter (default: `{:?}`)
 * `:internal_debug`   Toggle internal code debugging output
+* `:linker [linker]`  Set/print linker. Supported: `system`, `lld`, `mold`
+* `:offline [0|1]`    Set offline mode when invoking cargo
+* `:opt [level]`      Toggle/set optimization level
 * `:preserve_vars_on_panic [0|1]`  Try to keep vars on panic
+* `:sccache [0|1]`    Set whether to use sccache
+* `:time_passes`      Toggle printing of rustc pass times (requires nightly)
+* `:timing`           Toggle printing of how long evaluations take
+* `:toolchain`        Set which toolchain to use (e.g. nightly)
+* `:types`            Toggle printing of the type of the output
 
 And here are the supported Evcxr commands:
 
-* `:explain`          Print the explanation of last error
 * `:clear`            Clear all state, keeping compilation cache
+* `:dep`              Add an external dependency. e.g. `:dep regex = "1.0"`
+* `:explain`          Print the explanation of last error
+* `:help`             View the help message
 * `:last_compile_dir` Print the directory in which we last compiled
 * `:last_error_json`  Print the last compilation error as JSON (for debugging)
-* `:dep`              Add an external dependency. e.g. `:dep regex = "1.0"`
-* `:help`             View the help message
+* `:load_config`      Reloads startup configuration files. Accepts optional flag `--quiet` to suppress logging.
+* `:quit`             Quit evaluation and exit
+* `:type` | `:t`      Show variable type
+* `:vars`             List bound variables and their types
+* `:version`          Print Evcxr version

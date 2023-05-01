@@ -1,3 +1,80 @@
+# Version 0.14.2
+* Fixed jupyter kernel running from vscode. Thanks TethysSvensson for bisecting
+  the cause.
+* Updated rust-analyzer
+
+# Version 0.14.1
+* Fixed thread starvation in Jupyter integration on systems with few CPUs.
+* Support interrupting execution in Jupyter notebook. Process gets terminated,
+  so variables are lost, but other state is preserved.
+* Support interrupting execution in REPL by pressing ctrl-c.
+* Updated rust-analyzer.
+
+# Version 0.14.0
+* `:dep` lines can now be commented out without breaking subsequent `:dep`
+  lines. Thanks JohnScience!
+* Reduced interleaving of stdout and stderr.
+* Errors now render using ariadne, giving a much nicer presentation. Thanks
+  HKalbasi!
+* Small speedup in execution time by bypassing rustup.
+* `preserve_vars_on_panic` is now true by default (as it used to be). It now
+  works much better than before, with all variables being preserved if a panic
+  occurs.
+* By using rustyline's new external printer API, stderr output that hasn't been
+  displayed before we return to the prompt no longer messes up the prompt. In
+  fact, you can now spawn a thread that writes to stderr in the background and
+  the output now appears above your prompt.
+* Jupyter kernel now uses a native Rust library for ZMQ, so no longer requires
+  cmake to build.
+* The last bit of code that tried to use rustc error messages to determine
+  variable types has been deleted. Now if rust-analyzer can't determine the type
+  of a variable, we ask the user to add an explicit type annotation.
+* Update rust-analyzer
+* Building evcxr now requires rust 1.63 or higher.
+* Added a release workflow so that binaries for the latest Linux (built on
+  Ubuntu), Windows and Mac are available for download on the releases page.
+
+# Version 0.13.0
+* Now uses Rust edition 2021.
+* MSRV is now 1.59.
+* Changed completion type in REPL to `list`. See evcxr_repl/README.md if you'd
+  like the old behavior.
+* Update to latest rust-analyzer - const generics now work reasonably well!
+* Fix escaping of ampersands in HTML output - Thanks Tim McNamara.
+* Use mold for linking if of path - Thanks Will Eaton.
+* Fix inline errors showing up for await calls in Jupyter notebook.
+
+# Version 0.12.0
+* Fix compilation due to a non-semver breaking change in an upstream crate.
+* Update to latest rust-analyzer.
+* Minimum supported rust version is now 1.55 due to changes in rust-analyzer.
+
+# Version 0.11.0
+* Update rust-analyzer - fixes a compilation failure.
+* Support for crate-level attributes - e.g. `#![feature(...)]`
+* Minimum supported rust version is now 1.53 due to changes in rust-analyzer.
+
+# Version 0.10.0
+* Use mimalloc. This reduces startup time, at least one Mac. Thanks thomcc.
+* Initialize CommandContext in the background. Reduces startup time. Thanks thomcc.
+* Updated rustyline. Thanks thomcc
+* Use rust-analyzer for infering types for let destructurings.
+* Update rust-analyzer. Fixes evcxr on nightly, beta (and next stable release).
+* Minimum supported rust version now 1.52 (required for latest rust-analyzer).
+
+# Version 0.9.0
+* Fix relative paths in deps. Thanks Max Göttlicher!
+* Use explicit types for variables when supplied. This is currently required for variables that use
+  const generics.
+* Minimum rust version is now 1.51 (since upstream crates are already using const generics).
+* Don't misuse JUPYTER_CONFIG_DIR.
+* Make `a = 10` (no semicolon or let) report an error.
+* Updated rust-analyzer
+
+# Version 0.8.1
+* Fixed bug that was affecting HTML export from Jupyter. #153
+* Updated rust-analyzer.
+
 # Version 0.8.0
 * Jupyter kernel now shows errors and warnings inline as you type by running cargo check on the
   backend. Running `evcxr\_jupyter --install` before starting jupyter notebook is recommended. It

@@ -1,7 +1,7 @@
 # Evcxr image
 
 Integration between [Evcxr
-Jupyter](https://github.com/google/evcxr/blob/master/evcxr_jupyter/README.md)
+Jupyter](https://github.com/evcxr/evcxr/blob/main/evcxr_jupyter/README.md)
 and the image crate. Enables display of images in Evcxr Jupyter kernel.
 
 Currently supports all 8 bit per channel formats:

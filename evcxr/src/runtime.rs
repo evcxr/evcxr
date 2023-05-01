@@ -1,23 +1,18 @@
 // Copyright 2020 The Evcxr Authors.
 //
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Licensed under the Apache License, Version 2.0 <LICENSE or
+// https://www.apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE
+// or https://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
 
-use crate::errors::{bail, Error};
-use libloading;
+use crate::errors::bail;
+use crate::errors::Error;
+use once_cell::sync::OnceCell;
 use regex::Regex;
+use std::io;
 use std::marker::PhantomData;
 use std::rc::Rc;
-use std::{self, io};
+use std::{self};
 
 pub(crate) const EVCXR_IS_RUNTIME_VAR: &str = "EVCXR_IS_RUNTIME";
 pub(crate) const EVCXR_EXECUTION_COMPLETE: &str = "EVCXR_EXECUTION_COMPLETE";
@@ -53,12 +48,10 @@ impl Runtime {
         self.install_crash_handlers();
 
         let stdin = std::io::stdin();
+        #[allow(unknown_lints, clippy::significant_drop_in_scrutinee)]
         for line in stdin.lock().lines() {
             if let Err(error) = self.handle_line(&line) {
-                eprintln!(
-                    "While processing instruction `{:?}`, got error: {:?}",
-                    line, error
-                );
+                eprintln!("While processing instruction `{line:?}`, got error: {error:?}",);
                 std::process::exit(99);
             }
         }
@@ -67,10 +60,10 @@ impl Runtime {
 
     fn handle_line(&mut self, line: &io::Result<String>) -> Result<(), Error> {
         let line = line.as_ref()?;
-        lazy_static! {
-            static ref LOAD_AND_RUN: Regex = Regex::new("LOAD_AND_RUN ([^ ]+) ([^ ]+)").unwrap();
-        }
-        if let Some(captures) = LOAD_AND_RUN.captures(&line) {
+        static LOAD_AND_RUN: OnceCell<Regex> = OnceCell::new();
+        let load_and_run =
+            LOAD_AND_RUN.get_or_init(|| Regex::new("LOAD_AND_RUN ([^ ]+) ([^ ]+)").unwrap());
+        if let Some(captures) = load_and_run.captures(line) {
             self.load_and_run(&captures[1], &captures[2])
         } else {
             bail!("Unrecognised line: {}", line);
@@ -79,13 +72,13 @@ impl Runtime {
 
     fn load_and_run(&mut self, so_path: &str, fn_name: &str) -> Result<(), Error> {
         use std::os::raw::c_void;
-        let shared_object = libloading::Library::new(so_path)?;
+        let shared_object = unsafe { libloading::Library::new(so_path) }?;
         unsafe {
             let user_fn = shared_object
                 .get::<extern "C" fn(*mut c_void) -> *mut c_void>(fn_name.as_bytes())?;
             self.variable_store_ptr = user_fn(self.variable_store_ptr);
         }
-        println!("{}", EVCXR_EXECUTION_COMPLETE);
+        println!("{EVCXR_EXECUTION_COMPLETE}");
         self.shared_objects.push(shared_object);
         Ok(())
     }
