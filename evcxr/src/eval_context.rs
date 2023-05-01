@@ -5,6 +5,7 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::cargo_metadata;
 use crate::child_process::ChildProcess;
 use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
@@ -1210,6 +1211,12 @@ impl ContextState {
         Ok(())
     }
 
+    /// Adds a crate dependency at the specified local path
+    pub fn add_local_dep(&mut self, dep: &str) -> Result<(), Error> {
+        let name = cargo_metadata::parse_crate_name(dep)?;
+        self.add_dep(&name, &format!("{{ path = \"{}\" }}", dep))
+    }
+
     /// Clears fields that aren't useful for inclusion in bug reports and which might give away
     /// things like usernames.
     pub(crate) fn clear_non_debug_relevant_fields(&mut self) {
@@ -1755,7 +1762,6 @@ impl ContextState {
     }
 
     fn dependency_lib_names(&self) -> Result<Vec<String>> {
-        use crate::cargo_metadata;
         cargo_metadata::get_library_names(&self.config)
     }
 

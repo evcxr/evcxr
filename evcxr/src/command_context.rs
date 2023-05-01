@@ -634,12 +634,16 @@ fn process_dep_command(
         bail!(":dep requires arguments")
     };
     static DEP_RE: OnceCell<Regex> = OnceCell::new();
-    let dep_re = DEP_RE.get_or_init(|| Regex::new("^([^= ]+) *(= *(.+))?$").unwrap());
+    let dep_re = DEP_RE.get_or_init(|| Regex::new("^([^= ]+) *(?:= *(.+))?$").unwrap());
     if let Some(captures) = dep_re.captures(args) {
-        state.add_dep(
-            &captures[1],
-            captures.get(3).map_or("\"*\"", |m| m.as_str()),
-        )?;
+        if captures[1].starts_with('.') || captures[1].starts_with('/') {
+            state.add_local_dep(&captures[1])?;
+        } else {
+            state.add_dep(
+                &captures[1],
+                captures.get(2).map_or("\"*\"", |m| m.as_str()),
+            )?;
+        }
         Ok(EvalOutputs::new())
     } else {
         bail!("Invalid :dep command. Expected: name = ... or just name");

@@ -131,6 +131,41 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
     Ok(library_names)
 }
 
+/// Match the pattern or return an error.
+macro_rules! prism {
+    ($pattern:path, $rhs:expr, $msg:literal) => {
+        if let $pattern(x) = $rhs {
+            x
+        } else {
+            bail!("Parse error in Cargo.toml: {}", $msg)
+        }
+    };
+}
+
+/// Parse the crate at given path, producing crate name
+pub fn parse_crate_name(path: &str) -> Result<String> {
+    use toml::Value;
+
+    let config_path = std::path::Path::new(path).join("Cargo.toml");
+    let content = std::fs::read_to_string(config_path)?;
+    let package = content
+        .parse::<toml::Table>()
+        .context("Can't parse Cargo.toml")?;
+
+    // https://doc.rust-lang.org/cargo/reference/manifest.html
+    // The fields to define a package are 'package' and 'workspace'
+    if let Some(package) = package.get("package") {
+        let package = prism!(Value::Table, package, "expected 'package' to be a table");
+        let name = prism!(Some, package.get("name"), "no 'name' in package");
+        let name = prism!(Value::String, name, "expected 'name' to be a string");
+        Ok(name.clone())
+    } else if let Some(_workspace) = package.get("workspace") {
+        bail!("Workspaces are not supported");
+    } else {
+        bail!("Unexpected Cargo.toml format: not package or workspace")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -383,13 +383,15 @@ impl TmpCrate {
     }
 
     fn dep_command(&self, extra_options: &str) -> String {
-        format!(
-            ":dep {} = {{ path = \"{}\"{}{} }}",
-            self.name,
-            self.tempdir.path().to_string_lossy().replace('\\', "\\\\"),
-            if extra_options.is_empty() { "" } else { ", " },
-            extra_options
-        )
+        let path = self.tempdir.path().to_string_lossy().replace('\\', "\\\\");
+        if extra_options.is_empty() {
+            format!(":dep {}", path)
+        } else {
+            format!(
+                ":dep {} = {{ path = \"{}\", {} }}",
+                self.name, path, extra_options
+            )
+        }
     }
 }
 
