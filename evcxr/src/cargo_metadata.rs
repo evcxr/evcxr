@@ -144,12 +144,10 @@ macro_rules! prism {
 
 /// Parse the crate at given path, producing crate name
 pub fn parse_crate_name(path: &str) -> Result<String> {
-    use std::io::Read;
     use toml::Value;
 
-    let config_path = format!("{}/Cargo.toml", path);
-    let mut content = String::new();
-    std::fs::File::open(config_path)?.read_to_string(&mut content)?;
+    let config_path = std::path::Path::new(path).join("Cargo.toml");
+    let content = std::fs::read_to_string(config_path)?;
     let package = content
         .parse::<toml::Table>()
         .context("Can't parse Cargo.toml")?;
