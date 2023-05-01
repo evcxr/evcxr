@@ -1,3 +1,20 @@
+# Version 0.15.0 (unreleased)
+* `:dep` now prints "Compiling" messages emitted by Cargo to show progress. Thanks d86leader and
+  adiSuper94.
+* `:type` (or `:t`) command added to get the type of a single variable. Thanks d86leader.
+* `:types` command added to enable the display of evaluated expression types.
+* Attributes (e.g. `#[derive(Debug)]`) now cause REPL to wait for an additional line. Thanks
+  Marcono1234.
+* Fixed `:toolchain` command that was broken in a previous release.
+* Suggest offline mode when adding a dependency fails. Thanks Marcono1234.
+* Added links to some new resources for the Jupyter kernel. Thanks wiseaidev.
+* Escape paths - especially important for use on Windows. Thanks Marcono1234.
+* Fix for a file locking issue on Windows.
+* Documentation fixes. Thanks Marcono1234.
+* CLA no longer required for contributions.
+* Repository moved out of Google org into its own "evcxr" org.
+* License changed to dual Apache2/MIT (Previously just Apache2).
+
 # Version 0.14.2
 * Fixed jupyter kernel running from vscode. Thanks TethysSvensson for bisecting
   the cause.
