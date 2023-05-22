@@ -55,8 +55,15 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
         ),
     )?;
     let mut cmd = config.cargo_command("metadata");
-    let output = cmd.arg("-q").arg("--format-version=1").output()?;
+    let output = cmd.arg("--format-version=1").output()?;
     if output.status.success() {
+        static NO_LIB_PATTERN: Lazy<Regex> = Lazy::new(|| {
+            Regex::new("ignoring invalid dependency `(.*)` which is missing a lib target").unwrap()
+        });
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if let Some(captures) = NO_LIB_PATTERN.captures(&*stderr) {
+            bail!("Dependency `{}` is missing a lib target", &captures[1]);
+        }
         Ok(())
     } else {
         static IGNORED_LINES_PATTERN: Lazy<Regex> =
