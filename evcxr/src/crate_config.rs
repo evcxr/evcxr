@@ -7,7 +7,7 @@
 
 use crate::errors::bail;
 use crate::errors::Error;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::path::Path;
 
@@ -27,9 +27,9 @@ fn make_paths_absolute(config: String) -> Result<String, Error> {
     // compiler bug that prevented us from using any crate that used custom
     // derive. That bug is long fixed though, so switching this to use a toml
     // parser would be an option.
-    static PATH_RE: OnceCell<Regex> = OnceCell::new();
-    let path_re = PATH_RE.get_or_init(|| Regex::new("^(.*)path *= *\"([^\"]+)\"(.*)$").unwrap());
-    if let Some(captures) = path_re.captures(&config) {
+    static PATH_RE: Lazy<Regex> =
+        Lazy::new(|| Regex::new("^(.*)path *= *\"([^\"]+)\"(.*)$").unwrap());
+    if let Some(captures) = PATH_RE.captures(&config) {
         let path = Path::new(&captures[2]);
         if !path.is_absolute() {
             match path.canonicalize() {

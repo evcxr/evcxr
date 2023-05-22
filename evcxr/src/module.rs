@@ -11,7 +11,7 @@ use crate::errors::CompilationError;
 use crate::errors::Error;
 use crate::eval_context::Config;
 use crate::eval_context::ContextState;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use regex::Regex;
 use std::fs;
 use std::path::Path;
@@ -358,10 +358,9 @@ fn run_cargo(
 /// At this point it looks for messages about compiling dependency crates.
 fn tee_error_line(line: &[u8]) {
     use std::io::Write;
-    static CRATE_COMPILING: OnceCell<regex::bytes::Regex> = OnceCell::new();
-    let crate_compiling = CRATE_COMPILING
-        .get_or_init(|| regex::bytes::Regex::new("^\\s*Compiling (\\w+)(?:\\s+.*)?$").unwrap());
-    if let Some(captures) = crate_compiling.captures(line) {
+    static CRATE_COMPILING: Lazy<regex::bytes::Regex> =
+        Lazy::new(|| regex::bytes::Regex::new("^\\s*Compiling (\\w+)(?:\\s+.*)?$").unwrap());
+    if let Some(captures) = CRATE_COMPILING.captures(line) {
         let crate_name = captures.get(1).unwrap().as_bytes();
         if crate_name != CRATE_NAME.as_bytes() {
             // write line and the following nl symbol as it was stripped before
@@ -380,9 +379,8 @@ fn errors_from_cargo_output(
     // Our compiler errors should all be in JSON format, but for errors from
     // Cargo errors, we need to add explicit matching for those errors that we
     // expect we might see.
-    static KNOWN_NON_JSON_ERRORS: OnceCell<Regex> = OnceCell::new();
-    let known_non_json_errors = KNOWN_NON_JSON_ERRORS
-        .get_or_init(|| Regex::new("(error: no matching package named)").unwrap());
+    static KNOWN_NON_JSON_ERRORS: Lazy<Regex> =
+        Lazy::new(|| Regex::new("(error: no matching package named)").unwrap());
 
     let stderr = String::from_utf8_lossy(&cargo_output.stderr);
     let stdout = String::from_utf8_lossy(&cargo_output.stdout);
@@ -395,7 +393,7 @@ fn errors_from_cargo_output(
                 .ok()
                 .and_then(|json| CompilationError::opt_new(json, code_block))
                 .or_else(|| {
-                    if known_non_json_errors.is_match(line) {
+                    if KNOWN_NON_JSON_ERRORS.is_match(line) {
                         non_json_error = Some(line.to_owned());
                     }
                     None

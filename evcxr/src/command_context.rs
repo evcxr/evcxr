@@ -28,7 +28,7 @@ use crate::EvalContext;
 use crate::EvalContextOutputs;
 use crate::EvalOutputs;
 use anyhow::Result;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
@@ -322,14 +322,13 @@ Panic detected. Here's some useful information if you're filing a bug report.
     }
 
     fn commands_by_name() -> &'static HashMap<&'static str, AvailableCommand> {
-        static COMMANDS_BY_NAME: OnceCell<HashMap<&'static str, AvailableCommand>> =
-            OnceCell::new();
-        COMMANDS_BY_NAME.get_or_init(|| {
+        static COMMANDS_BY_NAME: Lazy<HashMap<&'static str, AvailableCommand>> = Lazy::new(|| {
             CommandContext::create_commands()
                 .into_iter()
                 .map(|command| (command.name, command))
                 .collect()
-        })
+        });
+        &*COMMANDS_BY_NAME
     }
 
     fn create_commands() -> Vec<AvailableCommand> {
@@ -633,9 +632,8 @@ fn process_dep_command(
     let Some(args) = args else {
         bail!(":dep requires arguments")
     };
-    static DEP_RE: OnceCell<Regex> = OnceCell::new();
-    let dep_re = DEP_RE.get_or_init(|| Regex::new("^([^= ]+) *(?:= *(.+))?$").unwrap());
-    if let Some(captures) = dep_re.captures(args) {
+    static DEP_RE: Lazy<Regex> = Lazy::new(|| Regex::new("^([^= ]+) *(?:= *(.+))?$").unwrap());
+    if let Some(captures) = DEP_RE.captures(args) {
         if captures[1].starts_with('.') || captures[1].starts_with('/') {
             state.add_local_dep(&captures[1])?;
         } else {

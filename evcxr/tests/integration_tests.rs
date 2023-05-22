@@ -9,7 +9,7 @@ use evcxr::CommandContext;
 use evcxr::Error;
 use evcxr::EvalContext;
 use evcxr::EvalContextOutputs;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io;
@@ -63,8 +63,8 @@ fn send_output<T: io::Write + Send + 'static>(
     });
 }
 fn context_pool() -> &'static Mutex<Vec<CommandContext>> {
-    static CONTEXT_POOL: OnceCell<Mutex<Vec<CommandContext>>> = OnceCell::new();
-    CONTEXT_POOL.get_or_init(|| Mutex::new(vec![]))
+    static CONTEXT_POOL: Lazy<Mutex<Vec<CommandContext>>> = Lazy::new(|| Mutex::new(vec![]));
+    &*CONTEXT_POOL
 }
 
 struct ContextHolder {

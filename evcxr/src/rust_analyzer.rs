@@ -9,7 +9,7 @@ use anyhow::anyhow;
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use ra_ap_base_db::FileId;
 use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
@@ -293,9 +293,8 @@ impl RustAnalyzer {
         ) {
             for item in completion_items {
                 use regex::Regex;
-                static ARG_PLACEHOLDER: OnceCell<Regex> = OnceCell::new();
-                let arg_placeholder =
-                    ARG_PLACEHOLDER.get_or_init(|| Regex::new("\\$\\{[0-9]+:([^}]*)\\}").unwrap());
+                static ARG_PLACEHOLDER: Lazy<Regex> =
+                    Lazy::new(|| Regex::new("\\$\\{[0-9]+:([^}]*)\\}").unwrap());
                 let mut indels = item.text_edit().iter();
                 if let Some(indel) = indels.next() {
                     let text_to_delete = &self.current_source[indel.delete];
@@ -305,7 +304,7 @@ impl RustAnalyzer {
                         continue;
                     }
                     completions.push(Completion {
-                        code: arg_placeholder
+                        code: ARG_PLACEHOLDER
                             .replace_all(&indel.insert, "$1")
                             .replace("$0", ""),
                     });

@@ -28,7 +28,7 @@ use crate::rust_analyzer::TypeName;
 use crate::rust_analyzer::VariableInfo;
 use crate::use_trees::Import;
 use anyhow::Result;
-use once_cell::sync::OnceCell;
+use once_cell::sync::Lazy;
 use ra_ap_ide::TextRange;
 use ra_ap_syntax::ast;
 use ra_ap_syntax::AstNode;
@@ -744,9 +744,8 @@ impl EvalContext {
 
         let mut got_panic = false;
         let mut lost_variables = Vec::new();
-        static MIME_OUTPUT: OnceCell<Regex> = OnceCell::new();
-        let mime_output =
-            MIME_OUTPUT.get_or_init(|| Regex::new("EVCXR_BEGIN_CONTENT ([^ ]+)").unwrap());
+        static MIME_OUTPUT: Lazy<Regex> =
+            Lazy::new(|| Regex::new("EVCXR_BEGIN_CONTENT ([^ ]+)").unwrap());
         loop {
             let line = self.child_process.recv_line()?;
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
@@ -774,7 +773,7 @@ impl EvalContext {
                 line.strip_prefix(evcxr_internal_runtime::VARIABLE_CHANGED_TYPE)
             {
                 lost_variables.push(variable_name.to_owned());
-            } else if let Some(captures) = mime_output.captures(&line) {
+            } else if let Some(captures) = MIME_OUTPUT.captures(&line) {
                 let mime_type = captures[1].to_owned();
                 let mut content = String::new();
                 loop {
@@ -1876,11 +1875,9 @@ fn default_rustc_path() -> String {
 }
 
 fn replace_reserved_words_in_type(ty: &str) -> String {
-    static RESERVED_WORDS: OnceCell<Regex> = OnceCell::new();
-    RESERVED_WORDS
-        .get_or_init(|| Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap())
-        .replace_all(ty, "${1}r#${2}${3}")
-        .to_string()
+    static RESERVED_WORDS: Lazy<Regex> =
+        Lazy::new(|| Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap());
+    RESERVED_WORDS.replace_all(ty, "${1}r#${2}${3}").to_string()
 }
 
 #[cfg(test)]
