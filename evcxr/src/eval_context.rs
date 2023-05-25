@@ -88,8 +88,8 @@ pub(crate) struct Config {
     /// Whether to attempt to avoid network access.
     pub(crate) offline_mode: bool,
     pub(crate) toolchain: String,
-    cargo_path: String,
-    pub(crate) rustc_path: String,
+    cargo_path: PathBuf,
+    pub(crate) rustc_path: PathBuf,
     /// The host target that we're compiling for. e.g. x86_64-unknown-linux-gnu
     pub(crate) target: String,
 }
@@ -109,6 +109,8 @@ fn create_initial_config(tmpdir: PathBuf) -> Result<Config> {
 
 impl Config {
     pub fn new(tmpdir: PathBuf) -> Result<Self> {
+        let rustc_path = default_rustc_path()?;
+        let target = get_host_target(Path::new(&rustc_path))?;
         Ok(Config {
             tmpdir,
             debug_mode: false,
@@ -124,9 +126,9 @@ impl Config {
             sccache: None,
             offline_mode: false,
             toolchain: String::new(),
-            cargo_path: default_cargo_path(),
-            rustc_path: default_rustc_path(),
-            target: get_host_target()?,
+            cargo_path: default_cargo_path()?,
+            rustc_path,
+            target,
         })
     }
 
@@ -1859,7 +1861,7 @@ impl ContextState {
 // directly, we avoid having rustup decide which binary to invoke each time we
 // compile. This reduces eval time for a trivial bit of code from about 140ms to
 // 109ms.
-fn rustup_cargo_path(toolchain: Option<&str>) -> Option<String> {
+fn rustup_cargo_path(toolchain: Option<&str>) -> Option<PathBuf> {
     let mut cmd = Command::new("rustup");
     if let Some(toolchain) = toolchain {
         cmd.arg("+".to_owned() + toolchain);
@@ -1868,16 +1870,21 @@ fn rustup_cargo_path(toolchain: Option<&str>) -> Option<String> {
     if !output.status.success() {
         return None;
     }
-    Some(std::str::from_utf8(&output.stdout).ok()?.trim().to_owned())
+    Some(PathBuf::from(
+        std::str::from_utf8(&output.stdout).ok()?.trim().to_owned(),
+    ))
 }
 
-fn default_cargo_path() -> String {
-    rustup_cargo_path(None).unwrap_or_else(|| "cargo".to_owned())
+fn default_cargo_path() -> Result<PathBuf> {
+    if let Some(path) = rustup_cargo_path(None) {
+        return Ok(path);
+    }
+    Ok(which::which("cargo")?)
 }
 
 // Similar to the above, this avoids cargo invoking rustup, cutting the eval
 // time for a trivial bit of code to about 75ms.
-fn rustup_rustc_path(toolchain: Option<&str>) -> Option<String> {
+fn rustup_rustc_path(toolchain: Option<&str>) -> Option<PathBuf> {
     let mut cmd = Command::new("rustup");
     if let Some(toolchain) = toolchain {
         cmd.arg("+".to_owned() + toolchain);
@@ -1886,15 +1893,20 @@ fn rustup_rustc_path(toolchain: Option<&str>) -> Option<String> {
     if !output.status.success() {
         return None;
     }
-    Some(std::str::from_utf8(&output.stdout).ok()?.trim().to_owned())
+    Some(PathBuf::from(
+        std::str::from_utf8(&output.stdout).ok()?.trim().to_owned(),
+    ))
 }
 
-fn default_rustc_path() -> String {
-    rustup_rustc_path(None).unwrap_or_else(|| "rustc".to_owned())
+fn default_rustc_path() -> Result<PathBuf> {
+    if let Some(path) = rustup_rustc_path(None) {
+        return Ok(path);
+    }
+    Ok(which::which("rustc")?)
 }
 
-fn get_host_target() -> Result<String, Error> {
-    let output = match Command::new("rustc").arg("-Vv").output() {
+fn get_host_target(rustc_path: &Path) -> Result<String, Error> {
+    let output = match Command::new(rustc_path).arg("-Vv").output() {
         Ok(o) => o,
         Err(error) => bail!("Failed to run rustc: {}", error),
     };
@@ -1906,7 +1918,8 @@ fn get_host_target() -> Result<String, Error> {
         }
     }
     bail!(
-        "rustc -Vv didn't output a host line.\n{}\n{}",
+        "`{} -Vv` didn't output a host line.\n{}\n{}",
+        rustc_path.display(),
         stdout,
         stderr
     );
