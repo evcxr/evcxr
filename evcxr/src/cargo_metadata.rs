@@ -38,7 +38,7 @@ pub(crate) fn get_library_names(config: &Config) -> Result<Vec<String>> {
 
 pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Result<()> {
     std::fs::write(
-        config.crate_dir.join("Cargo.toml"),
+        config.crate_dir().join("Cargo.toml"),
         format!(
             r#"
     [package]
@@ -223,7 +223,7 @@ mod tests {
             &format!(r#"crate1 = {{ path = "{}" }}"#, path_to_string(&crate1)),
         )?;
         assert_eq!(
-            get_library_names(&Config::new(crate2)).unwrap(),
+            get_library_names(&Config::new(crate2)?).unwrap(),
             vec!["crate1".to_owned()]
         );
         Ok(())
@@ -245,7 +245,7 @@ mod tests {
         )?;
         // Make sure that the problematic feature "no_such_feature" is mentioned
         // somewhere in the error message.
-        assert!(get_library_names(&Config::new(crate2))
+        assert!(get_library_names(&Config::new(crate2)?)
             .unwrap_err()
             .to_string()
             .contains("no_such_feature"));

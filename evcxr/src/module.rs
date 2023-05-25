@@ -16,7 +16,6 @@ use regex::Regex;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     if cfg!(target_os = "macos") {
@@ -84,52 +83,27 @@ fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
 }
 
 pub(crate) struct Module {
-    pub(crate) tmpdir: PathBuf,
     build_num: i32,
-    target: String,
 }
 
 const CRATE_NAME: &str = "ctx";
 
 impl Module {
-    pub(crate) fn new(tmpdir: PathBuf) -> Result<Module, Error> {
-        let module = Module {
-            tmpdir,
-            build_num: 0,
-            target: get_host_target()?,
-        };
+    pub(crate) fn new() -> Result<Module, Error> {
+        let module = Module { build_num: 0 };
         Ok(module)
     }
 
-    pub(crate) fn deps_dir(&self) -> PathBuf {
-        self.target_dir().join("debug").join("deps")
-    }
-
-    fn target_dir(&self) -> PathBuf {
-        self.tmpdir.join("target").join(&self.target)
-    }
-
-    fn so_path(&self) -> PathBuf {
-        self.deps_dir()
+    pub(crate) fn so_path(&self, config: &Config) -> PathBuf {
+        config
+            .deps_dir()
             .join(shared_object_name_from_crate_name(CRATE_NAME))
-    }
-
-    fn src_dir(&self) -> PathBuf {
-        self.tmpdir.join("src")
-    }
-
-    pub(crate) fn crate_dir(&self) -> &Path {
-        &self.tmpdir
-    }
-
-    pub fn last_source(&self) -> Result<String, std::io::Error> {
-        std::fs::read_to_string(self.src_dir().join("lib.rs"))
     }
 
     // Writes Cargo.toml. Should be called before compile.
     pub(crate) fn write_cargo_toml(&self, state: &ContextState) -> Result<(), Error> {
         write_file(
-            self.crate_dir(),
+            state.config.crate_dir(),
             "Cargo.toml",
             &self.get_cargo_toml_contents(state),
         )
@@ -137,7 +111,7 @@ impl Module {
 
     // Writes .cargo/config.toml. Should be called before compile.
     pub(crate) fn write_config_toml(&self, state: &ContextState) -> Result<(), Error> {
-        let dot_config_dir = self.crate_dir().join(".cargo");
+        let dot_config_dir = state.config.crate_dir().join(".cargo");
         fs::create_dir_all(dot_config_dir.as_path())?;
         write_file(
             dot_config_dir.as_path(),
@@ -151,7 +125,7 @@ impl Module {
         code_block: &CodeBlock,
         config: &Config,
     ) -> Result<Vec<CompilationError>, Error> {
-        self.write_code(code_block)?;
+        self.write_code(code_block, config)?;
         let output = config
             .cargo_command("check")
             .arg("--message-format=json")
@@ -177,7 +151,7 @@ impl Module {
 
         command
             .arg("--target")
-            .arg(&self.target)
+            .arg(&config.target)
             .arg("--message-format=json")
             .arg("--")
             .arg("-C")
@@ -195,14 +169,14 @@ impl Module {
         if config.time_passes {
             command.arg("-Ztime-passes");
         }
-        self.write_code(code_block)?;
+        self.write_code(code_block, config)?;
         let cargo_output = run_cargo(command, code_block)?;
         if config.time_passes {
             let output = String::from_utf8_lossy(&cargo_output.stderr);
             eprintln!("{output}");
         }
         self.build_num += 1;
-        let copied_so_file = self
+        let copied_so_file = config
             .deps_dir()
             .join(shared_object_name_from_crate_name(&format!(
                 "code_{}",
@@ -213,14 +187,14 @@ impl Module {
         // be able to load the result of the next compilation. Also, on Windows,
         // a loaded dll gets locked, so we couldn't even compile a second time
         // if we didn't load a different file.
-        rename_or_copy_so_file(&self.so_path(), &copied_so_file)?;
+        rename_or_copy_so_file(&self.so_path(config), &copied_so_file)?;
         Ok(SoFile {
             path: copied_so_file,
         })
     }
 
-    fn write_code(&self, code_block: &CodeBlock) -> Result<(), Error> {
-        write_file(&self.src_dir(), "lib.rs", &code_block.code_string())?;
+    fn write_code(&self, code_block: &CodeBlock, config: &Config) -> Result<(), Error> {
+        write_file(&config.src_dir(), "lib.rs", &code_block.code_string())?;
         self.maybe_bump_lib_mtime();
         Ok(())
     }
@@ -405,23 +379,4 @@ fn errors_from_cargo_output(
 
 pub(crate) struct SoFile {
     pub(crate) path: PathBuf,
-}
-
-fn get_host_target() -> Result<String, Error> {
-    let output = match Command::new("rustc").arg("-Vv").output() {
-        Ok(o) => o,
-        Err(error) => bail!("Failed to run rustc: {}", error),
-    };
-    let stdout = std::str::from_utf8(&output.stdout)?;
-    let stderr = std::str::from_utf8(&output.stderr)?;
-    for line in stdout.lines() {
-        if let Some(host) = line.strip_prefix("host: ") {
-            return Ok(host.to_owned());
-        }
-    }
-    bail!(
-        "rustc -Vv didn't output a host line.\n{}\n{}",
-        stdout,
-        stderr
-    );
 }

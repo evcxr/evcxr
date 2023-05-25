@@ -62,7 +62,7 @@ pub struct EvalContext {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Config {
-    pub(crate) crate_dir: PathBuf,
+    tmpdir: PathBuf,
     pub(crate) debug_mode: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
@@ -90,10 +90,12 @@ pub(crate) struct Config {
     pub(crate) toolchain: String,
     cargo_path: String,
     pub(crate) rustc_path: String,
+    /// The host target that we're compiling for. e.g. x86_64-unknown-linux-gnu
+    pub(crate) target: String,
 }
 
-fn create_initial_config(crate_dir: PathBuf) -> Config {
-    let mut config = Config::new(crate_dir);
+fn create_initial_config(tmpdir: PathBuf) -> Result<Config> {
+    let mut config = Config::new(tmpdir)?;
     // default the linker to mold, then lld, first checking if either are installed
     // neither linkers support macos, so fallback to system (aka default)
     // https://github.com/rui314/mold/issues/132
@@ -102,13 +104,13 @@ fn create_initial_config(crate_dir: PathBuf) -> Config {
     } else if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
         config.linker = "lld".to_owned();
     }
-    config
+    Ok(config)
 }
 
 impl Config {
-    pub fn new(crate_dir: PathBuf) -> Self {
-        Config {
-            crate_dir,
+    pub fn new(tmpdir: PathBuf) -> Result<Self> {
+        Ok(Config {
+            tmpdir,
             debug_mode: false,
             preserve_vars_on_panic: true,
             output_format: "{:?}".to_owned(),
@@ -124,7 +126,8 @@ impl Config {
             toolchain: String::new(),
             cargo_path: default_cargo_path(),
             rustc_path: default_rustc_path(),
-        }
+            target: get_host_target()?,
+        })
     }
 
     pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
@@ -157,8 +160,24 @@ impl Config {
             command.arg("--offline");
         }
         command.arg(command_name);
-        command.current_dir(&self.crate_dir);
+        command.current_dir(&self.crate_dir());
         command
+    }
+
+    pub(crate) fn crate_dir(&self) -> &Path {
+        &self.tmpdir
+    }
+
+    pub(crate) fn src_dir(&self) -> PathBuf {
+        self.tmpdir.join("src")
+    }
+
+    pub(crate) fn deps_dir(&self) -> PathBuf {
+        self.target_dir().join("debug").join("deps")
+    }
+
+    pub(crate) fn target_dir(&self) -> PathBuf {
+        self.tmpdir.join("target").join(&self.target)
     }
 }
 
@@ -326,14 +345,14 @@ impl EvalContext {
         }
 
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
-        let module = Module::new(tmpdir_path)?;
+        let module = Module::new()?;
 
         Self::apply_platform_specific_vars(&module, &mut subprocess_command);
 
         let (stdout_sender, stdout_receiver) = crossbeam_channel::unbounded();
         let (stderr_sender, stderr_receiver) = crossbeam_channel::unbounded();
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
-        let initial_config = create_initial_config(module.crate_dir().to_owned());
+        let initial_config = create_initial_config(tmpdir_path)?;
         let initial_state = ContextState::new(initial_config.clone());
         let mut context = EvalContext {
             _tmpdir: opt_tmpdir,
@@ -488,7 +507,7 @@ impl EvalContext {
     }
 
     pub fn last_source(&self) -> Result<String, std::io::Error> {
-        self.module.last_source()
+        std::fs::read_to_string(self.state().config.src_dir().join("lib.rs"))
     }
 
     pub fn set_opt_level(&mut self, level: &str) -> Result<(), Error> {
@@ -551,7 +570,7 @@ impl EvalContext {
     }
 
     pub(crate) fn last_compile_dir(&self) -> &Path {
-        self.module.crate_dir()
+        self.committed_state.config.crate_dir()
     }
 
     fn commit_state(&mut self, mut state: ContextState) {
@@ -1061,7 +1080,7 @@ pub struct ContextState {
     async_mode: bool,
     allow_question_mark: bool,
     build_num: i32,
-    config: Config,
+    pub(crate) config: Config,
 }
 
 impl ContextState {
@@ -1218,7 +1237,7 @@ impl ContextState {
     /// Clears fields that aren't useful for inclusion in bug reports and which might give away
     /// things like usernames.
     pub(crate) fn clear_non_debug_relevant_fields(&mut self) {
-        self.config.crate_dir = PathBuf::from("redacted");
+        self.config.tmpdir = PathBuf::from("redacted");
         if self.config.sccache.is_some() {
             self.config.sccache = Some(PathBuf::from("redacted"));
         }
@@ -1874,6 +1893,25 @@ fn default_rustc_path() -> String {
     rustup_rustc_path(None).unwrap_or_else(|| "rustc".to_owned())
 }
 
+fn get_host_target() -> Result<String, Error> {
+    let output = match Command::new("rustc").arg("-Vv").output() {
+        Ok(o) => o,
+        Err(error) => bail!("Failed to run rustc: {}", error),
+    };
+    let stdout = std::str::from_utf8(&output.stdout)?;
+    let stderr = std::str::from_utf8(&output.stderr)?;
+    for line in stdout.lines() {
+        if let Some(host) = line.strip_prefix("host: ") {
+            return Ok(host.to_owned());
+        }
+    }
+    bail!(
+        "rustc -Vv didn't output a host line.\n{}\n{}",
+        stdout,
+        stderr
+    );
+}
+
 fn replace_reserved_words_in_type(ty: &str) -> String {
     static RESERVED_WORDS: Lazy<Regex> =
         Lazy::new(|| Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap());
@@ -1899,7 +1937,7 @@ mod tests {
     }
 
     fn create_state() -> ContextState {
-        let config = Config::new(PathBuf::from("/dummy_path"));
+        let config = Config::new(PathBuf::from("/dummy_path")).unwrap();
         ContextState::new(config)
     }
 
