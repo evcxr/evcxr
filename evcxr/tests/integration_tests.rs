@@ -666,6 +666,8 @@ fn unnamable_type_impl_trait() {
     }
 }
 
+// Test disabled until we update rust-analyzer. See #295
+#[ignore]
 #[test]
 fn partially_inferred_variable_type() {
     let mut e = new_context();

@@ -24,6 +24,7 @@ unicode-segmentation = "1.7.1"
 crossbeam-channel = "0.5.5"
 toml = { version = "0.7.3", default-features = false, features = [ "parse" ] }
 
+# TODO: When next updating, reenable partially_inferred_variable_type test
 ra_ap_ide = "=0.0.149"
 ra_ap_ide_db = "=0.0.149"
 ra_ap_project_model = "=0.0.149"
