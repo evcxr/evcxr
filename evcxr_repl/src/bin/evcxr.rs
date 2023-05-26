@@ -17,6 +17,7 @@ use evcxr::Theme;
 use evcxr_repl::BgInitMutex;
 use evcxr_repl::EvcxrRustylineHelper;
 use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
 use rustyline::At;
 use rustyline::Cmd;
 use rustyline::Editor;
@@ -62,7 +63,11 @@ fn send_output<T: io::Write + Send + 'static>(
 }
 
 impl Repl {
-    fn new(ide_mode: bool, opt: String, editor: &mut Editor<EvcxrRustylineHelper>) -> Repl {
+    fn new(
+        ide_mode: bool,
+        opt: String,
+        editor: &mut Editor<EvcxrRustylineHelper, DefaultHistory>,
+    ) -> Repl {
         let stdout_printer = editor.create_external_printer().ok();
         let stderr_printer = editor.create_external_printer().ok();
         let stderr_colour = Some(Color::BrightRed);
@@ -293,7 +298,7 @@ fn main() -> Result<()> {
         config_builder = config_builder.completion_type(rustyline::CompletionType::List);
     }
     let config = config_builder.build();
-    let mut editor = Editor::<EvcxrRustylineHelper>::with_config(config)?;
+    let mut editor = Editor::<EvcxrRustylineHelper, DefaultHistory>::with_config(config)?;
     editor.bind_sequence(
         KeyEvent(KeyCode::Left, Modifiers::CTRL),
         Cmd::Move(Movement::BackwardWord(1, Word::Big)),
@@ -325,7 +330,7 @@ fn main() -> Result<()> {
         match readline {
             Ok(line) => {
                 interrupted = false;
-                editor.add_history_entry(line.clone());
+                let _ = editor.add_history_entry(line.clone());
                 repl.execute(&line)?;
             }
             Err(ReadlineError::Interrupted) => {

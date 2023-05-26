@@ -16,8 +16,8 @@ libc = "0.2.80"
 json = "0.12.4"
 regex = { version = "1.3.1", default-features = false, features = [ "std", "unicode-perl" ] }
 once_cell = "1.5.2"
-libloading = "0.7.0"
-dirs = "4.0.0"
+libloading = "0.8.0"
+dirs = "5.0.1"
 which = "4.0.2"
 evcxr_input = "1.0.0"
 unicode-segmentation = "1.7.1"
@@ -39,7 +39,7 @@ ra_ap_syntax = "=0.0.149"
 # semver bump. So we pin salsa to an exact version and update as needed together with the ra_ap_*
 # packages.
 salsa = "=0.17.0-pre.2"
-ariadne = "0.1.5"
+ariadne = "0.2.0"
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
 backtrace = "0.3.35"
