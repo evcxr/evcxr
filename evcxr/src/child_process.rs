@@ -37,6 +37,7 @@ impl ChildProcess {
             bail!("Our current binary doesn't call runtime_hook()");
         }
         command
+            .args(std::env::args())
             .env(runtime::EVCXR_IS_RUNTIME_VAR, "1")
             .env("RUST_BACKTRACE", "1")
             .stdin(std::process::Stdio::piped())
