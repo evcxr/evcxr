@@ -248,8 +248,8 @@ struct Options {
     #[clap(long, default_value = "emacs")]
     edit_mode: EditMode,
 
-    /// Extra arguments; ignored, but show up in std::env::args()
-    #[clap(long = "extra-args")]
+    /// Extra arguments; ignored, but show up in std::env::args() which is passed to the subprocess
+    /// (see child_process.rs).
     _extra_args: Vec<String>,
 }
 

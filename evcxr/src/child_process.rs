@@ -36,8 +36,11 @@ impl ChildProcess {
         if std::env::var(runtime::EVCXR_IS_RUNTIME_VAR).is_ok() {
             bail!("Our current binary doesn't call runtime_hook()");
         }
+        // All arguments after -- get passed to the subprocess, which the user can then access via
+        // std::env::args.
+        let user_args = std::env::args().skip_while(|arg| arg != "--").skip(1);
         command
-            .args(std::env::args())
+            .args(user_args)
             .env(runtime::EVCXR_IS_RUNTIME_VAR, "1")
             .env("RUST_BACKTRACE", "1")
             .stdin(std::process::Stdio::piped())
