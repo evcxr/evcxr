@@ -61,7 +61,7 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
             Regex::new("ignoring invalid dependency `(.*)` which is missing a lib target").unwrap()
         });
         let stderr = String::from_utf8_lossy(&output.stderr);
-        if let Some(captures) = NO_LIB_PATTERN.captures(&*stderr) {
+        if let Some(captures) = NO_LIB_PATTERN.captures(&stderr) {
             bail!("Dependency `{}` is missing a lib target", &captures[1]);
         }
         Ok(())

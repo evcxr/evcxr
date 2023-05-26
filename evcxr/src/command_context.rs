@@ -328,7 +328,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 .map(|command| (command.name, command))
                 .collect()
         });
-        &*COMMANDS_BY_NAME
+        &COMMANDS_BY_NAME
     }
 
     fn create_commands() -> Vec<AvailableCommand> {

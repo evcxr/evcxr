@@ -163,7 +163,7 @@ impl Config {
             command.arg("--offline");
         }
         command.arg(command_name);
-        command.current_dir(&self.crate_dir());
+        command.current_dir(self.crate_dir());
         command
     }
 
