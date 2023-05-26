@@ -252,7 +252,6 @@ struct Options {
     /// Extra arguments; ignored, but show up in std::env::args()
     #[structopt(long = "extra-args", multiple = true)]
     _extra_args: Vec<String>,
-    
 }
 
 fn main() -> Result<()> {
