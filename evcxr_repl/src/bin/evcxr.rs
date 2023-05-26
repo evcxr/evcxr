@@ -7,6 +7,8 @@
 
 use anyhow::Result;
 use ariadne::sources;
+use clap::Parser;
+use clap::ValueEnum;
 use colored::*;
 use evcxr::CommandContext;
 use evcxr::CompilationError;
@@ -17,7 +19,6 @@ use evcxr_repl::EvcxrRustylineHelper;
 use rustyline::error::ReadlineError;
 use rustyline::At;
 use rustyline::Cmd;
-use rustyline::EditMode;
 use rustyline::Editor;
 use rustyline::ExternalPrinter;
 use rustyline::KeyCode;
@@ -28,7 +29,6 @@ use rustyline::Word;
 use std::fs;
 use std::io;
 use std::sync::Arc;
-use structopt::StructOpt;
 
 const PROMPT: &str = ">> ";
 
@@ -232,32 +232,38 @@ fn readline_direct(prompt: &str) -> rustyline::Result<String> {
     }
 }
 
-#[derive(StructOpt, Debug)]
-#[structopt(name = "evcxr")]
+#[derive(Parser, Debug)]
+#[clap(version, about)]
 struct Options {
-    #[structopt(long)]
+    #[clap(long)]
     disable_readline: bool,
-    #[structopt(long)]
+
+    #[clap(long)]
     ide_mode: bool,
+
     /// Optimization level (0, 1 or 2)
-    #[structopt(long, default_value = "")]
+    #[clap(long, default_value = "")]
     opt: String,
-    #[structopt(
-        long,
-        parse(try_from_str = parse_edit_mode),
-        possible_values = &["vi", "emacs"],
-        default_value = "emacs"
-     )]
-    edit_mode: rustyline::EditMode,
+
+    #[clap(long, default_value = "emacs")]
+    edit_mode: EditMode,
+
     /// Extra arguments; ignored, but show up in std::env::args()
-    #[structopt(long = "extra-args", multiple = true)]
+    #[clap(long = "extra-args")]
     _extra_args: Vec<String>,
+}
+
+#[derive(ValueEnum, Default, Clone, Copy, Debug)]
+enum EditMode {
+    #[default]
+    Emacs,
+    Vi,
 }
 
 fn main() -> Result<()> {
     evcxr::runtime_hook();
 
-    let options = Options::from_args();
+    let options = Options::parse();
 
     #[cfg(windows)]
     colored::control::set_virtual_terminal(true).ok();
@@ -278,7 +284,7 @@ fn main() -> Result<()> {
     let mut config_builder = match options.edit_mode {
         EditMode::Vi => {
             rustyline::Config::builder()
-                .edit_mode(EditMode::Vi)
+                .edit_mode(rustyline::EditMode::Vi)
                 .keyseq_timeout(0) // https://github.com/kkawakam/rustyline/issues/371
         }
         _ => rustyline::Config::builder(), // default edit_mode is emacs
@@ -353,15 +359,6 @@ fn setup_ctrlc_handler(command_context: &CommandContext) {
     let _ = ctrlc::set_handler(move || {
         let _ = subprocess.lock().unwrap().kill();
     });
-}
-
-fn parse_edit_mode(src: &str) -> Result<EditMode, &str> {
-    let mode = match src {
-        "vi" => EditMode::Vi,
-        "emacs" => EditMode::Emacs,
-        _ => return Err("only 'vi' and 'emacs' are supported"),
-    };
-    Ok(mode)
 }
 
 #[cfg(feature = "mimalloc")]
