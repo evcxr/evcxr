@@ -28,6 +28,7 @@ use crate::rust_analyzer::TypeName;
 use crate::rust_analyzer::VariableInfo;
 use crate::use_trees::Import;
 use anyhow::Result;
+use dirs::home_dir;
 use once_cell::sync::Lazy;
 use ra_ap_ide::TextRange;
 use ra_ap_syntax::ast;
@@ -1203,10 +1204,10 @@ impl ContextState {
     }
 
     pub fn set_toolchain(&mut self, value: &str) {
-        if let Some(rustc_path) = rustup_rustc_path(Some(value)) {
+        if let Some(rustc_path) = rustup_tool_path(Some(value), "rustc") {
             self.config.rustc_path = rustc_path;
         }
-        if let Some(cargo_path) = rustup_cargo_path(Some(value)) {
+        if let Some(cargo_path) = rustup_tool_path(Some(value), "cargo") {
             self.config.cargo_path = cargo_path;
         }
         self.config.toolchain = value.to_owned();
@@ -1856,53 +1857,67 @@ impl ContextState {
     }
 }
 
-// Returns the path to the current cargo binary that rustup will use, or None if
-// anything goes wrong (e.g. rustup isn't available). By invoking this binary
-// directly, we avoid having rustup decide which binary to invoke each time we
-// compile. This reduces eval time for a trivial bit of code from about 140ms to
-// 109ms.
-fn rustup_cargo_path(toolchain: Option<&str>) -> Option<PathBuf> {
+// Returns the path to `tool` (rustc or cargo) that rustup will use, or None if anything goes wrong
+// (e.g. rustup isn't available). By invoking this binary directly, we avoid having rustup decide
+// which binary to invoke each time we compile. Doing this for cargo reduces eval time for a trivial
+// bit of code from about 140ms to 109ms. Doing it for rustc as well futher reduces it to about
+// 75ms.
+fn rustup_tool_path(toolchain: Option<&str>, tool: &str) -> Option<PathBuf> {
     let mut cmd = Command::new("rustup");
     if let Some(toolchain) = toolchain {
         cmd.arg("+".to_owned() + toolchain);
     }
-    let output = cmd.arg("which").arg("cargo").output().ok()?;
+    let output = cmd.arg("which").arg(tool).output().ok()?;
     if !output.status.success() {
         return None;
     }
     Some(PathBuf::from(
         std::str::from_utf8(&output.stdout).ok()?.trim().to_owned(),
     ))
+}
+
+/// Returns the path to `tool` (cargo or rustc), first attempting to use rustup, then failing that
+/// looking for the tool on the PATH and failing that checking if `fallback` exists. If all that
+/// fails, then returns an error. `fallback` should be the path to the tool at compile time and is a
+/// last resort for handling the case where the user does `cargo install` from a shell that has rust
+/// tools on their path, but then runs evcxr (most like the jupyter kernel) without their path set
+/// correctly. This mostly happens when people set PATH in their bashrc, then run evcxr_jupyter from
+/// vscode.
+fn default_tool_path(tool: &str, fallback: &str) -> Result<PathBuf> {
+    if let Some(path) = rustup_tool_path(None, tool) {
+        return Ok(path);
+    }
+    if let Ok(path) = which::which(tool) {
+        return Ok(path);
+    }
+    let path = PathBuf::from(fallback);
+    if path.exists() {
+        // For security reasons, we only use the fallback path if it's in the user's home directory.
+        // This is probably a bit paranoid, but we'd like to avoid the situation where someone
+        // downloads a pre-built evcxr binary and runs it and someone else on the system knows
+        // they're going to do this, so puts a malicious cargo/rustc binary at the location of the
+        // fallback path.
+        if let Some(home) = home_dir() {
+            if path.starts_with(home) {
+                // Note, if the user is using rustup, then we're likely returning the path to the
+                // rustup proxy, so they won't in this case get the speedup from bypassing the
+                // proxy... but at least thing will work. The complexity required to bypass in this
+                // case doesn't seem worth it.
+                return Ok(path);
+            }
+        }
+    }
+    anyhow::bail!("Cannot find `{}` binary", tool);
 }
 
 fn default_cargo_path() -> Result<PathBuf> {
-    if let Some(path) = rustup_cargo_path(None) {
-        return Ok(path);
-    }
-    Ok(which::which("cargo")?)
-}
-
-// Similar to the above, this avoids cargo invoking rustup, cutting the eval
-// time for a trivial bit of code to about 75ms.
-fn rustup_rustc_path(toolchain: Option<&str>) -> Option<PathBuf> {
-    let mut cmd = Command::new("rustup");
-    if let Some(toolchain) = toolchain {
-        cmd.arg("+".to_owned() + toolchain);
-    }
-    let output = cmd.arg("which").arg("rustc").output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(PathBuf::from(
-        std::str::from_utf8(&output.stdout).ok()?.trim().to_owned(),
-    ))
+    const BUILD_TIME_CARGO_PATH: &str = include_str!(concat!(env!("OUT_DIR"), "/cargo_path"));
+    default_tool_path("cargo", BUILD_TIME_CARGO_PATH)
 }
 
 fn default_rustc_path() -> Result<PathBuf> {
-    if let Some(path) = rustup_rustc_path(None) {
-        return Ok(path);
-    }
-    Ok(which::which("rustc")?)
+    const BUILD_TIME_RUSTC_PATH: &str = include_str!(concat!(env!("OUT_DIR"), "/rustc_path"));
+    default_tool_path("rustc", BUILD_TIME_RUSTC_PATH)
 }
 
 fn get_host_target(rustc_path: &Path) -> Result<String, Error> {
