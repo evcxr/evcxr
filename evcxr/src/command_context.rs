@@ -234,9 +234,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     println!("Loading startup commands from {config_file:?}");
                 }
                 let contents = std::fs::read_to_string(config_file)?;
-                for line in contents.lines() {
-                    outputs.merge(self.execute(line)?);
-                }
+                outputs.merge(self.execute(&contents)?);
             }
             // Note: Loaded *after* init.evcxr so that it can access `:dep`s (or
             // any other state changed by :commands) specified in the init file.
