@@ -293,13 +293,15 @@ impl EvalContext {
         Self::with_subprocess_command(std::process::Command::new(current_exe))
     }
 
-    #[cfg(windows)]
-    fn apply_platform_specific_vars(module: &Module, command: &mut std::process::Command) {
+    fn apply_platform_specific_vars(config: &Config, command: &mut std::process::Command) {
+        if cfg!(not(windows)) {
+            return;
+        }
         // Windows doesn't support rpath, so we need to set PATH so that it
         // knows where to find dlls.
         use std::ffi::OsString;
         let mut path_var_value = OsString::new();
-        path_var_value.push(&module.deps_dir());
+        path_var_value.push(&config.deps_dir());
         path_var_value.push(";");
 
         let mut sysroot_command = std::process::Command::new("rustc");
@@ -312,9 +314,6 @@ impl EvalContext {
 
         command.env("PATH", path_var_value);
     }
-
-    #[cfg(not(windows))]
-    fn apply_platform_specific_vars(_module: &Module, _command: &mut std::process::Command) {}
 
     #[doc(hidden)]
     pub fn new_for_testing() -> (EvalContext, EvalContextOutputs) {
@@ -350,12 +349,12 @@ impl EvalContext {
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
         let module = Module::new()?;
 
-        Self::apply_platform_specific_vars(&module, &mut subprocess_command);
+        let initial_config = create_initial_config(tmpdir_path)?;
+        Self::apply_platform_specific_vars(&initial_config, &mut subprocess_command);
 
         let (stdout_sender, stdout_receiver) = crossbeam_channel::unbounded();
         let (stderr_sender, stderr_receiver) = crossbeam_channel::unbounded();
         let child_process = ChildProcess::new(subprocess_command, stderr_sender)?;
-        let initial_config = create_initial_config(tmpdir_path)?;
         let initial_state = ContextState::new(initial_config.clone());
         let mut context = EvalContext {
             _tmpdir: opt_tmpdir,
