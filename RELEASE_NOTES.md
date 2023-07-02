@@ -11,6 +11,10 @@
 * Escape paths - especially important for use on Windows. Thanks Marcono1234.
 * Fix for a file locking issue on Windows.
 * Documentation fixes. Thanks Marcono1234.
+* init.evcxr is now executed all at once rather than a line at a time.
+* Try to use cargo/rustc paths from build time if cargo/rustc aren't on the path at runtime.
+* Minimum supported rust version is now 1.67.0.
+* Arguments after `--` are now available via `std::env::args` in the REPL.
 * CLA no longer required for contributions.
 * Repository moved out of Google org into its own "evcxr" org.
 * License changed to dual Apache2/MIT (Previously just Apache2).
