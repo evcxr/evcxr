@@ -22,7 +22,7 @@ use ra_ap_paths::AbsPathBuf;
 use ra_ap_project_model::CargoConfig;
 use ra_ap_project_model::ProjectManifest;
 use ra_ap_project_model::ProjectWorkspace;
-use ra_ap_project_model::RustcSource;
+use ra_ap_project_model::RustLibSource;
 use ra_ap_syntax::ast::AstNode;
 use ra_ap_syntax::ast::{self};
 use ra_ap_vfs as ra_vfs;
@@ -32,7 +32,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
-use std::sync::Arc;
+use triomphe::Arc;
 
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
@@ -44,7 +44,7 @@ pub(crate) struct RustAnalyzer {
     last_cargo_toml: Option<Vec<u8>>,
     source_file: AbsPathBuf,
     source_file_id: FileId,
-    current_source: Arc<String>,
+    current_source: Arc<str>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -92,12 +92,12 @@ impl RustAnalyzer {
             last_cargo_toml: None,
             source_file,
             source_file_id,
-            current_source: Arc::new(String::new()),
+            current_source: Arc::from(String::new()),
         })
     }
 
     pub(crate) fn set_source(&mut self, source: String) -> Result<()> {
-        self.current_source = Arc::new(source);
+        self.current_source = Arc::from(source);
         let mut change = ra_ide::Change::new();
 
         std::fs::write(self.source_file.as_path(), &*self.current_source)
@@ -106,7 +106,7 @@ impl RustAnalyzer {
             self.source_file.clone().into(),
             Some(self.current_source.bytes().collect()),
         );
-        change.change_file(self.source_file_id, Some(Arc::clone(&self.current_source)));
+        change.change_file(self.source_file_id, Some(self.current_source.clone()));
 
         // Check to see if we haven't yet loaded Cargo.toml, or if it's changed since we read it.
         let cargo_toml = Some(std::fs::read(self.cargo_toml_filename()).with_context(|| {
@@ -185,7 +185,7 @@ impl RustAnalyzer {
     fn load_cargo_toml(&mut self, change: &mut ra_ide::Change) -> Result<()> {
         let manifest = ProjectManifest::from_manifest_file(self.cargo_toml_filename())?;
         let sysroot = if self.with_sysroot {
-            Some(RustcSource::Discover)
+            Some(RustLibSource::Discover)
         } else {
             None
         };
@@ -238,7 +238,7 @@ impl RustAnalyzer {
             let new_contents = if changed_file.exists() {
                 String::from_utf8(self.vfs.file_contents(changed_file.file_id).to_owned())
                     .ok()
-                    .map(Arc::new)
+                    .map(Arc::from)
             } else {
                 None
             };
@@ -251,11 +251,11 @@ impl RustAnalyzer {
                 .map(SourceRoot::new_local)
                 .collect(),
         );
-        change.set_crate_graph(workspace.to_crate_graph(
-            &mut |_, _| Ok(Vec::new()),
+        let (crate_graph, _) = workspace.to_crate_graph(
             &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
             &FxHashMap::default(),
-        ));
+        );
+        change.set_crate_graph(crate_graph);
         Ok(())
     }
 
@@ -282,6 +282,7 @@ impl RustAnalyzer {
                 skip_glob_imports: false,
             },
             callable: Some(CallableSnippets::FillArguments),
+            limit: None,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
@@ -295,7 +296,7 @@ impl RustAnalyzer {
                 use regex::Regex;
                 static ARG_PLACEHOLDER: Lazy<Regex> =
                     Lazy::new(|| Regex::new("\\$\\{[0-9]+:([^}]*)\\}").unwrap());
-                let mut indels = item.text_edit().iter();
+                let mut indels = item.text_edit.iter();
                 if let Some(indel) = indels.next() {
                     let text_to_delete = &self.current_source[indel.delete];
                     // Rust analyzer returns all available methods/fields etc. It's up to us to
@@ -377,7 +378,7 @@ fn get_type_name(
         if ty.is_closure() {
             return TypeName::Closure;
         }
-        if let Ok(type_name) = ty.display_source_code(sema.db, module.into()) {
+        if let Ok(type_name) = ty.display_source_code(sema.db, module.into(), true) {
             if is_type_valid(&type_name) {
                 return TypeName::Named(type_name);
             }
