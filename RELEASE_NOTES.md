@@ -1,4 +1,4 @@
-# Version 0.15.0 (unreleased)
+# Version 0.15.0
 * `:dep` now prints "Compiling" messages emitted by Cargo to show progress. Thanks d86leader and
   adiSuper94.
 * `:type` (or `:t`) command added to get the type of a single variable. Thanks d86leader.
