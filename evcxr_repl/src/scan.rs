@@ -303,7 +303,9 @@ fn eat_comment_line<I: Iterator<Item = (usize, char)>>(iter: &mut I) {
 fn eat_comment_block(iter: &mut Peekable<CharIndices<'_>>) -> bool {
     let mut depth = 1;
     while depth != 0 {
-        let Some(next) = iter.next() else { return false; };
+        let Some(next) = iter.next() else {
+            return false;
+        };
         let c = next.1;
         match c {
             '/' => {
