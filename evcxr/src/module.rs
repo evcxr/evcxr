@@ -269,7 +269,8 @@ fn run_cargo(
     mut command: std::process::Command,
     code_block: &CodeBlock,
 ) -> Result<std::process::Output, Error> {
-    use std::io::{BufRead, Read};
+    use std::io::BufRead;
+    use std::io::Read;
 
     let mb_child = command
         .stderr(std::process::Stdio::piped())

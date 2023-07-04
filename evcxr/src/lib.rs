@@ -28,8 +28,9 @@ mod statement_splitter;
 mod use_trees;
 
 pub use crate::command_context::CommandContext;
+pub use crate::errors::CompilationError;
 pub use crate::errors::Error;
-pub use crate::errors::{CompilationError, Theme};
+pub use crate::errors::Theme;
 pub use crate::eval_context::EvalCallbacks;
 pub use crate::eval_context::EvalContext;
 pub use crate::eval_context::EvalContextOutputs;

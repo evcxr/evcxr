@@ -1947,10 +1947,9 @@ fn replace_reserved_words_in_type(ty: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use ra_ap_syntax::ast::HasAttrs;
     use ra_ap_syntax::SourceFile;
-
-    use super::*;
 
     #[test]
     fn test_replace_reserved_words_in_type() {

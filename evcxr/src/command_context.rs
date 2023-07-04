@@ -5,10 +5,6 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::Mutex;
-
 use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
@@ -29,6 +25,9 @@ use crate::EvalContextOutputs;
 use crate::EvalOutputs;
 use anyhow::Result;
 use once_cell::sync::Lazy;
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::Mutex;
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.

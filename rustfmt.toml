@@ -2,3 +2,5 @@ edition = "2021"
 use_field_init_shorthand = true
 # Uncomment once stable
 #imports_granularity = "Item"
+#group_imports = "One"
+

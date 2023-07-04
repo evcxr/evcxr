@@ -5,6 +5,7 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::eval_context::Config;
 use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
@@ -13,8 +14,6 @@ use json::{self};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
-
-use crate::eval_context::Config;
 
 /// Returns the library names for the direct dependencies of the crate rooted at
 /// the specified path.

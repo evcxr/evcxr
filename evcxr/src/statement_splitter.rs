@@ -55,11 +55,10 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
 
 #[cfg(test)]
 mod test {
+    use super::split_into_statements;
     use ra_ap_syntax::ast;
     use ra_ap_syntax::AstNode;
     use ra_ap_syntax::SyntaxKind;
-
-    use super::split_into_statements;
 
     fn split_and_get_text(code: &str) -> Vec<&str> {
         split_into_statements(code)
