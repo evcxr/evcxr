@@ -442,6 +442,7 @@ impl Server {
         channels: Vec<(&'static str, crossbeam_channel::Receiver<String>)>,
         shutdown_recv: crossbeam_channel::Receiver<()>,
     ) {
+        let handle = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || {
             let mut select = Select::new();
             for (_, channel) in &channels {
@@ -465,9 +466,7 @@ impl Server {
                 // their lines if possible.
                 while let Ok(line) = channel.recv_timeout(Duration::from_millis(1)) {
                     let server = self.clone();
-                    tokio::task::spawn(async move {
-                        server.pass_output_line(output_name, line).await;
-                    });
+                    handle.block_on(server.pass_output_line(output_name, line));
                 }
             }
         });
