@@ -22,7 +22,7 @@ pub(crate) struct OriginalUserCode<'a> {
 pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
     let mut output = Vec::new();
     let prelude = "fn f(){";
-    let parsed_file = SourceFile::parse(&(prelude.to_owned() + code + "}"));
+    let parsed_file = SourceFile::parse(&(prelude.to_owned() + code + "\n}"));
     let mut start_byte = 0;
     if let Some(stmt_list) = parsed_file
         .syntax_node()
@@ -56,6 +56,7 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
 #[cfg(test)]
 mod test {
     use super::split_into_statements;
+    use super::OriginalUserCode;
     use ra_ap_syntax::ast;
     use ra_ap_syntax::AstNode;
     use ra_ap_syntax::SyntaxKind;
@@ -154,5 +155,19 @@ mod test {
         assert_eq!(out[0].code, "use foo::Bar; ");
         assert!(ast::Expr::can_cast(out[1].node.kind()));
         assert_eq!(out[1].code, "Bar::result()");
+    }
+
+    #[test]
+    fn trailing_comment() {
+        let code = "&[1].as_ref()\n // Comment";
+        let out = split_into_statements(code);
+        assert_eq!(node_kinds(&out), &[SyntaxKind::REF_EXPR]);
+        assert!(ast::Expr::can_cast(out[0].node.kind()));
+        assert_eq!(out[0].code, code);
+        assert_eq!(out.len(), 1);
+    }
+
+    fn node_kinds(statements: &[OriginalUserCode]) -> Vec<SyntaxKind> {
+        statements.iter().map(|stmt| stmt.node.kind()).collect()
     }
 }
