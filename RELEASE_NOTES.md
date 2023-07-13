@@ -1,3 +1,7 @@
+# Version 0.15.1 (unreleased)
+* Fix miscompilation when there's a trailing comment after an expression.
+* Fix out-of-order printing in evcxr_jupyter
+
 # Version 0.15.0
 * `:dep` now prints "Compiling" messages emitted by Cargo to show progress. Thanks d86leader and
   adiSuper94.
