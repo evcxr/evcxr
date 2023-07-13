@@ -1,4 +1,4 @@
-# Version 0.15.1 (unreleased)
+# Version 0.15.1
 * Fix miscompilation when there's a trailing comment after an expression.
 * Fix out-of-order printing in evcxr_jupyter
 
