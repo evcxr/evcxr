@@ -28,6 +28,13 @@ evcxr_jupyter --install
 By default, `evcxr_jupyter --install` will install the kernel into a user local
 directory, e.g., `$HOME/.local/share/jupyter/kernels`.
 
+When installing inside a virtualenv, the correct path can be provided using the
+environment variable `JUPYTER_PATH`, i.e.
+
+```sh
+env JUPYTER_PATH=$VIRTUAL_ENV/share/jupyter/ evcxr_jupyter --install
+```
+
 If your operating system is an older version, or has a different libc than what
 the pre-built binaries were compiled with, then you'll need to build from source
 using the command above.
