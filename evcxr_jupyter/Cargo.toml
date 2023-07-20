@@ -7,7 +7,6 @@ repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
 edition = "2021"
-rust-version = "1.57"
 
 [dependencies]
 evcxr = { version = "=0.15.1", path = "../evcxr" }
