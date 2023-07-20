@@ -48,7 +48,7 @@ ra_ap_syntax = "0.0.164"
 # semver bump. So we pin salsa to an exact version and update as needed together with the ra_ap_*
 # packages.
 salsa = "=0.17.0-pre.2"
-ariadne = "0.2.0"
+ariadne = "0.3.0"
 triomphe = "0.1.8"
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
