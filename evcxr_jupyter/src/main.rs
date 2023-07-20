@@ -5,6 +5,11 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+// clippy::needless_pass_by_ref_mut (on nightly) is currently giving some false positives. Once
+// these have been fixed, we can remove this.
+#![allow(unknown_lints)]
+#![allow(clippy::needless_pass_by_ref_mut)]
+
 #[macro_use]
 extern crate json;
 
