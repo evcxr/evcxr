@@ -83,6 +83,9 @@ allow_proc_macro = true
 
 [pkg.serde_derive]
 allow_proc_macro = true
+allow_apis = [
+    "process",
+]
 
 [pkg.const-random-macro]
 allow_proc_macro = true
@@ -95,11 +98,6 @@ allow_unsafe = true
 
 [pkg.unicode-ident]
 allow_unsafe = true
-
-[pkg.quote.build]
-allow_apis = [
-    "process",
-]
 
 [pkg.smallvec]
 allow_unsafe = true
@@ -769,18 +767,11 @@ allow_apis = [
     "process",
 ]
 
-[pkg.futures-io]
-allow_apis = [
-    "fs",
-]
-
 [pkg.evcxr_jupyter]
 allow_apis = [
     "fs",
     "process",
 ]
-
-[pkg.asynchronous-codec]
 
 [pkg.tempfile]
 allow_apis = [
