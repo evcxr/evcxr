@@ -597,9 +597,6 @@ allow_unsafe = true
 [pkg.ra_ap_syntax]
 allow_unsafe = true
 
-[pkg.dirs-sys-next]
-allow_unsafe = true
-
 [pkg.endian-type]
 allow_unsafe = true
 
