@@ -20,7 +20,7 @@ sha2 = "0.10.0"
 hex = "0.4.2"
 colored = "2.0.0"
 dirs = "5.0.1"
-chrono = "0.4.19"
+chrono = { version = "0.4.19", default-features = false, features = [ "clock" ] }
 unicode-segmentation = "1.7.1"
 generic-array = "0.14.4"
 mimalloc = { version = "0.1", default-features = false, optional = true }
