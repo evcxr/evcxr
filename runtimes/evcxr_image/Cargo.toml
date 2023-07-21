@@ -9,5 +9,5 @@ authors = ["The Evcxr Authors"]
 edition = "2021"
 
 [dependencies]
-image = {version = "0.23.12", default-features = false, features = [ "png" ]}
+image = {version = "0.24.6", default-features = false, features = [ "png" ]}
 evcxr_runtime = {version = "1.1.0", path = "../../evcxr_runtime", features = [ "bytes" ]}
