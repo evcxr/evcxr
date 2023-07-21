@@ -3,6 +3,7 @@ name = "print_performance_info"
 version = "0.1.0"
 authors = ["The Evcxr Authors"]
 edition = "2021"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 evcxr = { path = "../evcxr" }
