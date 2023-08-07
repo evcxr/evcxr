@@ -17,6 +17,7 @@ cargo +${MIN_RUST_VER} --version >/dev/null 2>&1 \
   || rustup toolchain install $MIN_RUST_VER
 git pull --rebase
 cargo fmt --all -- --check
+cackle check
 cargo build
 cargo clippy -- -D warnings
 cargo +stable test --all || fail "Tests failed on stable"
