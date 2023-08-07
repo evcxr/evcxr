@@ -15,7 +15,7 @@ You can either download a pre-built binary from the
 [Releases](https://github.com/evcxr/evcxr/releases) page, extract it from the
 archive and put it somewhere on your path, or build from source by running:
 ```sh
-cargo install evcxr_jupyter
+cargo install --locked evcxr_jupyter
 ```
 
 Whether using a prebuilt binary or one you built yourself, you'll need to run

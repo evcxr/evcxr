@@ -38,7 +38,7 @@ version of rustc.
 
 Now you can go ahead and install the binary:
 ```
-$ cargo install evcxr_repl
+$ cargo install --locked evcxr_repl
 ```
 
 ## Usage
