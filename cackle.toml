@@ -20,12 +20,21 @@ exclude = [
 
 [api.fs]
 include = [
+    "rustix::fs",
     "tokio::fs",
+]
+no_auto_detect = [
+    "bitflags",
 ]
 
 [api.process]
 include = [
+    "ra_ap_stdx::process",
+    "rustix::process",
     "tokio::process",
+]
+no_auto_detect = [
+    "bitflags",
 ]
 
 [api.signal]
@@ -651,9 +660,6 @@ allow_apis = [
 [pkg.uuid]
 allow_unsafe = true
 
-[pkg.time]
-allow_unsafe = true
-
 [pkg.iana-time-zone]
 allow_unsafe = true
 
@@ -671,6 +677,9 @@ allow_unsafe = true
 
 [pkg.image]
 allow_unsafe = true
+allow_apis = [
+    "fs",
+]
 
 [pkg.tokio-util]
 allow_unsafe = true
@@ -793,4 +802,10 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.regex-automata]
+allow_unsafe = true
+
+[pkg.simd-adler32]
+allow_unsafe = true
+
+[pkg.flate2]
 allow_unsafe = true
