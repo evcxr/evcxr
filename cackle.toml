@@ -92,9 +92,6 @@ allow_proc_macro = true
 
 [pkg.serde_derive]
 allow_proc_macro = true
-allow_apis = [
-    "process",
-]
 
 [pkg.const-random-macro]
 allow_proc_macro = true
