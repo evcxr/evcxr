@@ -98,6 +98,12 @@ You can create an `init.evcxr` file in the `evcxr` config directory. The locatio
 |-------------------|------------------------------------------|----------------------------------------|
 |` ~/.config/evcxr` | `/Users/Alice/Library/Preferences/evcxr` | `C:\Users\Alice\AppData\Roaming\evcxr` |
 
+You can check the location of the config directory by running the following in the REPL:
+```rust 
+:dep dirs
+dirs::config_dir().unwrap().join("evcxr").join("init.evcxr")
+```
+
 Any options set in this file will be automatically loaded at startup. For example:
 
 ```rust
