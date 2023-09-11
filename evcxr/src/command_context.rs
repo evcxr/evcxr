@@ -34,7 +34,7 @@ use std::sync::Mutex;
 pub struct CommandContext {
     pub print_timings: bool,
     pub eval_context: EvalContext,
-    last_errors: Vec<CompilationError>,
+    pub last_errors: Vec<CompilationError>,
 }
 
 impl CommandContext {
