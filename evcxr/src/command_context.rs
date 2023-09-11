@@ -33,7 +33,7 @@ use std::sync::Mutex;
 /// ':') that alter context state or print information.
 pub struct CommandContext {
     print_timings: bool,
-    pub eval_context: EvalContext,
+    eval_context: EvalContext,
     last_errors: Vec<CompilationError>,
 }
 
