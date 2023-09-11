@@ -508,6 +508,31 @@ impl EvalContext {
         Ok(completions)
     }
 
+    pub fn hover(
+        &mut self,
+        code: &str,
+        state: &mut ContextState,
+    ) -> Result<String> {
+        let (modified_code, hover_offset) = if code == "let" {
+            (String::from("let _ = 1;"), 0)
+        } else {
+            (format!("{};", code), code.len() as u32)
+        };
+        let (user_code, code_info) = CodeBlock::from_original_user_code(&modified_code);
+        let user_code = state.apply(user_code, &code_info.nodes)?;
+        let pad_code = state.analysis_code(user_code);
+        self.analyzer.set_source(pad_code.code_string())?;
+        //if I set the hover position to be the start position of input code, then 
+        //`:doc std::fs::File::create` will return the information of `std`, rather than `create`
+        let wrapped_offset = pad_code.user_offset_to_output_offset_for_hover()? as u32 + hover_offset;
+        let text_range = TextRange::new(wrapped_offset.into(), wrapped_offset.into());
+        let hover_res = self.analyzer.hover(text_range);
+        match hover_res? {
+            Some(data) => Ok(data.info.markup.into()),
+            None => Ok("No documatation found".into()),
+        }
+    }
+
     pub fn last_source(&self) -> Result<String, std::io::Error> {
         std::fs::read_to_string(self.state().config.src_dir().join("lib.rs"))
     }

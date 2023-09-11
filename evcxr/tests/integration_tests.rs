@@ -1065,3 +1065,17 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
     // Dropped variables shouldn't report errors.
     assert_no_errors(&mut ctx, "let s1 = String::new(); std::mem::drop(s1);");
 }
+
+#[test]
+fn check_for_doc() {
+    let (mut e, _) = new_command_context_and_outputs();
+    eval_and_unwrap(&mut e, r#"
+    ///this is my struct
+    struct MyStruct(usize);
+    "#);
+    let res = eval_and_unwrap(&mut e, r#":doc MyStruct"#);
+    assert_eq!(
+        res.get("text/html"),
+        Some(&String::from("\n```rust\nctx\n```\n\n```rust\nstruct MyStruct\n```\n\n---\n\nthis is my struct")),
+    );
+}

@@ -11,6 +11,7 @@ use anyhow::Context;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use ra_ap_base_db::FileId;
+use ra_ap_base_db::FileRange;
 use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
@@ -18,6 +19,8 @@ use ra_ap_ide_db::imports::insert_use::ImportGranularity;
 use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
 use ra_ap_ide_db::FxHashMap;
 use ra_ap_ide_db::SnippetCap;
+use ra_ap_syntax::TextRange;
+use ra_ide::{RangeInfo, HoverResult, HoverConfig};
 use ra_ap_paths::AbsPathBuf;
 use ra_ap_project_model::CargoConfig;
 use ra_ap_project_model::ProjectManifest;
@@ -33,6 +36,7 @@ use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
 use triomphe::Arc;
+
 
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
@@ -327,6 +331,26 @@ impl RustAnalyzer {
             start_offset: range.map(|range| range.start().into()).unwrap_or(position),
             end_offset: range.map(|range| range.end().into()).unwrap_or(position),
         })
+    }
+
+    pub(crate) fn hover(&self, text_range: TextRange) -> Result<Option<RangeInfo<HoverResult>>> {
+        let hover_config: HoverConfig = HoverConfig {
+            links_in_hover: true,
+            memory_layout: None,
+            documentation: true,
+            keywords: true,
+            format: ra_ide::HoverDocFormat::Markdown,
+        };
+        let file_range = FileRange {
+            file_id: self.source_file_id,
+            range: text_range,
+        };
+        match self.analysis_host
+            .analysis()
+            .hover(&hover_config, file_range) {
+                Ok(range_info) => Ok(range_info),
+                _ => bail!("hover fail"), 
+            }
     }
 }
 

@@ -33,7 +33,7 @@ use std::sync::Mutex;
 /// ':') that alter context state or print information.
 pub struct CommandContext {
     print_timings: bool,
-    eval_context: EvalContext,
+    pub eval_context: EvalContext,
     last_errors: Vec<CompilationError>,
 }
 
@@ -569,6 +569,13 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 writeln!(html, "</table>")?;
                 Ok(EvalOutputs::text_html(text, html))
             }),
+            AvailableCommand::new(
+                ":doc",
+                "show the docmentation of a variable, keysword, type or module",
+                |ctx, state, args| {
+                    ctx.hover(state, args)
+                }
+            )
         ]
     }
 
@@ -618,6 +625,16 @@ Panic detected. Here's some useful information if you're filing a bug report.
         } else {
             bail!("Variable does not exist: {}", args)
         }
+    }
+
+    fn hover(&mut self, state: &mut ContextState, args: &Option<String>) -> Result<EvalOutputs, Error> {
+        let args = if let Some(x) = args {
+            x.trim()
+        } else {
+            bail!("Input required")
+        };
+        let res = self.eval_context.hover(args, state)?;
+        Ok(EvalOutputs::text_html(res.clone(), res))
     }
 }
 
