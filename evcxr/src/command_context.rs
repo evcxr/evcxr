@@ -32,8 +32,8 @@ use std::sync::Mutex;
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
 pub struct CommandContext {
-    print_timings: bool,
-    eval_context: EvalContext,
+    pub print_timings: bool,
+    pub eval_context: EvalContext,
     last_errors: Vec<CompilationError>,
 }
 
