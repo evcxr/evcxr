@@ -1608,6 +1608,9 @@ impl ContextState {
         for block in self.unnamed_items.iter_mut() {
             block.commit_old_user_code();
         }
+        for block in self.attributes.values_mut() {
+            block.commit_old_user_code();
+        }
     }
 
     /// Applies `user_code` to this state object, returning the updated user
