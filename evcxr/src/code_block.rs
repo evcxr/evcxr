@@ -288,16 +288,6 @@ impl CodeBlock {
             .ok_or_else(|| anyhow!("Offset {} doesn't refer to user code", user_code_offset))
     }
 
-    ///In order to get the offset, I tryed to use the function `user_offset_to_output_offset`
-    /// It works fine in crate `evcxr`, but not in jupyter. In jupyter, the offset is set
-    /// to be the starting position of `![allow(unused_imports)]`. I can't figure out it.
-    pub(crate) fn user_offset_to_output_offset_for_hover(&self) -> Result<usize> {
-        let re = Regex::new(r#"EvcxrUserCodeError>"#).unwrap();
-        let code_str = self.code_string();
-        let res = re.find(&code_str).ok_or_else(|| anyhow!("Offset not found"))?;
-        Ok(res.end() + 3)
-    }
-
     pub(crate) fn output_offset_to_user_offset(&self, output_offset: usize) -> Result<usize> {
         let mut bytes_seen = 0;
         self.segments

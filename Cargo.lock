@@ -783,6 +783,7 @@ dependencies = [
  "libc",
  "libloading",
  "once_cell",
+ "pulldown-cmark",
  "ra_ap_base_db",
  "ra_ap_hir",
  "ra_ap_ide",

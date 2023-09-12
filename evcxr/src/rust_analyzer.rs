@@ -333,13 +333,14 @@ impl RustAnalyzer {
         })
     }
 
-    pub(crate) fn hover(&self, text_range: TextRange) -> Result<Option<RangeInfo<HoverResult>>> {
+    pub(crate) fn hover(&self, text_range: TextRange, is_mark_down: bool) -> Result<Option<RangeInfo<HoverResult>>> {
+        use ra_ide::HoverDocFormat as hdf;
         let hover_config: HoverConfig = HoverConfig {
             links_in_hover: true,
             memory_layout: None,
             documentation: true,
             keywords: true,
-            format: ra_ide::HoverDocFormat::Markdown,
+            format: if is_mark_down { hdf::Markdown } else { hdf::PlainText },
         };
         let file_range = FileRange {
             file_id: self.source_file_id,

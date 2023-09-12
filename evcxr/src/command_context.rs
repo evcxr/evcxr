@@ -28,6 +28,7 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
+use pulldown_cmark;
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
@@ -627,14 +628,22 @@ Panic detected. Here's some useful information if you're filing a bug report.
         }
     }
 
-    fn hover(&mut self, state: &mut ContextState, args: &Option<String>) -> Result<EvalOutputs, Error> {
+    fn hover(
+        &mut self, 
+        state: 
+        &mut ContextState, 
+        args: &Option<String>
+    ) -> Result<EvalOutputs, Error> {
         let args = if let Some(x) = args {
             x.trim()
         } else {
             bail!("Input required")
         };
-        let res = self.eval_context.hover(args, state)?;
-        Ok(EvalOutputs::text_html(res.clone(), res))
+        let (hover_text, hover_markdown) = self.eval_context.hover(args, state)?;
+        let mut hover_html = String::new();
+        let parser = pulldown_cmark::Parser::new(&hover_markdown);
+        pulldown_cmark::html::push_html(&mut hover_html, parser);
+        Ok(EvalOutputs::text_html(hover_text, hover_html))
     }
 }
 
