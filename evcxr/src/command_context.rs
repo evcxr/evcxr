@@ -569,6 +569,13 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 writeln!(html, "</table>")?;
                 Ok(EvalOutputs::text_html(text, html))
             }),
+            AvailableCommand::new(
+                ":doc",
+                "show the docmentation of a variable, keysword, type or module",
+                |ctx, state, args| {
+                    ctx.hover(state, args)
+                }
+            )
         ]
     }
 
@@ -618,6 +625,23 @@ Panic detected. Here's some useful information if you're filing a bug report.
         } else {
             bail!("Variable does not exist: {}", args)
         }
+    }
+
+    fn hover(
+        &mut self,
+        state: &mut ContextState,
+        args: &Option<String>,
+    ) -> Result<EvalOutputs, Error> {
+        let args = if let Some(x) = args {
+            x.trim()
+        } else {
+            bail!("Input required")
+        };
+        let (hover_text, hover_markdown) = self.eval_context.hover(args, state)?;
+        let mut hover_html = String::new();
+        let parser = pulldown_cmark::Parser::new(&hover_markdown);
+        pulldown_cmark::html::push_html(&mut hover_html, parser);
+        Ok(EvalOutputs::text_html(hover_text, hover_html))
     }
 }
 

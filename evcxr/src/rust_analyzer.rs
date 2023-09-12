@@ -11,6 +11,7 @@ use anyhow::Context;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use ra_ap_base_db::FileId;
+use ra_ap_base_db::FileRange;
 use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
@@ -25,9 +26,11 @@ use ra_ap_project_model::ProjectWorkspace;
 use ra_ap_project_model::RustLibSource;
 use ra_ap_syntax::ast::AstNode;
 use ra_ap_syntax::ast::{self};
+use ra_ap_syntax::TextRange;
 use ra_ap_vfs as ra_vfs;
 use ra_ap_vfs_notify as vfs_notify;
 use ra_ide::CallableSnippets;
+use ra_ide::{HoverConfig, HoverResult, RangeInfo};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
@@ -327,6 +330,37 @@ impl RustAnalyzer {
             start_offset: range.map(|range| range.start().into()).unwrap_or(position),
             end_offset: range.map(|range| range.end().into()).unwrap_or(position),
         })
+    }
+
+    pub(crate) fn hover(
+        &self,
+        text_range: TextRange,
+        is_mark_down: bool,
+    ) -> Result<Option<RangeInfo<HoverResult>>> {
+        use ra_ide::HoverDocFormat as hdf;
+        let hover_config: HoverConfig = HoverConfig {
+            links_in_hover: true,
+            memory_layout: None,
+            documentation: true,
+            keywords: true,
+            format: if is_mark_down {
+                hdf::Markdown
+            } else {
+                hdf::PlainText
+            },
+        };
+        let file_range = FileRange {
+            file_id: self.source_file_id,
+            range: text_range,
+        };
+        match self
+            .analysis_host
+            .analysis()
+            .hover(&hover_config, file_range)
+        {
+            Ok(range_info) => Ok(range_info),
+            _ => bail!("hover fail"),
+        }
     }
 }
 

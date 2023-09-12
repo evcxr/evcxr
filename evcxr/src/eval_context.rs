@@ -508,6 +508,32 @@ impl EvalContext {
         Ok(completions)
     }
 
+    pub fn hover(&mut self, code: &str, state: &mut ContextState) -> Result<(String, String)> {
+        let (modified_code, hover_offset) = if code == "let" {
+            (String::from("let _ = 1;"), 0)
+        } else {
+            (format!("{};", code), code.len())
+        };
+        let (user_code, code_info) = CodeBlock::from_original_user_code(&modified_code);
+        let user_code = state.apply(user_code, &code_info.nodes)?;
+        let pad_code = state.analysis_code(user_code);
+        self.analyzer.set_source(pad_code.code_string())?;
+        let wrapped_offset = pad_code.user_offset_to_output_offset(hover_offset)? as u32;
+        let text_range = TextRange::new(wrapped_offset.into(), wrapped_offset.into());
+        let hover_text = self.analyzer.hover(text_range, false)?;
+        let hover_markdown = self.analyzer.hover(text_range, true)?;
+        match (hover_text, hover_markdown) {
+            (Some(data_text), Some(data_markdown)) => Ok((
+                data_text.info.markup.into(),
+                data_markdown.info.markup.into(),
+            )),
+            _ => Ok((
+                "No documatation found".into(),
+                "No documentation found".into(),
+            )),
+        }
+    }
+
     pub fn last_source(&self) -> Result<String, std::io::Error> {
         std::fs::read_to_string(self.state().config.src_dir().join("lib.rs"))
     }
