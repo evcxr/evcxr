@@ -417,7 +417,19 @@ impl Server {
                         .send(&mut connection)
                         .await?
                 }
-                "shutdown_request" => self.signal_shutdown().await,
+                "shutdown_request" => {
+                    let is_restart = message.get_content()["restart"].as_bool().unwrap_or(false);
+                    let response = object! {
+                        "status": "ok",
+                        "restart": is_restart,
+                    };
+                    message
+                        .new_reply()
+                        .with_content(response)
+                        .send(&mut connection)
+                        .await?;
+                    self.signal_shutdown().await
+                }
                 "interrupt_request" => {
                     let process_handle = process_handle.clone();
                     tokio::task::spawn_blocking(move || {
