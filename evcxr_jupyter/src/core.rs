@@ -324,14 +324,22 @@ impl Server {
     ) -> Result<()> {
         loop {
             let message = JupyterMessage::read(&mut connection).await?;
-            self.handle_shell_message(
-                message,
-                &mut connection,
-                execution_channel,
-                execution_reply_receiver,
-                &context,
-            )
-            .await?;
+            let message_type = message.message_type().to_owned();
+            let r = self
+                .handle_shell_message(
+                    message,
+                    &mut connection,
+                    execution_channel,
+                    execution_reply_receiver,
+                    &context,
+                )
+                .await;
+            if let Err(error) = r {
+                // We see this often after issuing a restart-kernel from the Jupyter UI. Not sure
+                // why, but provided we continue to handle subsequent shell requests, things seem to
+                // work. So for now, we just print the error and continue.
+                eprintln!("Error handling shell message `{message_type}`: {error:#}");
+            }
         }
     }
 
