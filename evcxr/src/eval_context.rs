@@ -508,11 +508,7 @@ impl EvalContext {
         Ok(completions)
     }
 
-    pub fn hover(
-        &mut self,
-        code: &str,
-        state: &mut ContextState,
-    ) -> Result<(String, String)> {
+    pub fn hover(&mut self, code: &str, state: &mut ContextState) -> Result<(String, String)> {
         let (modified_code, hover_offset) = if code == "let" {
             (String::from("let _ = 1;"), 0)
         } else {
@@ -527,9 +523,14 @@ impl EvalContext {
         let hover_text = self.analyzer.hover(text_range, false)?;
         let hover_markdown = self.analyzer.hover(text_range, true)?;
         match (hover_text, hover_markdown) {
-            (Some(data_text), Some(data_markdown)) => 
-                Ok((data_text.info.markup.into(), data_markdown.info.markup.into())),
-            _ => Ok(("No documatation found".into(), "No documentation found".into())),
+            (Some(data_text), Some(data_markdown)) => Ok((
+                data_text.info.markup.into(),
+                data_markdown.info.markup.into(),
+            )),
+            _ => Ok((
+                "No documatation found".into(),
+                "No documentation found".into(),
+            )),
         }
     }
 

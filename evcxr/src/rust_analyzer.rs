@@ -19,8 +19,6 @@ use ra_ap_ide_db::imports::insert_use::ImportGranularity;
 use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
 use ra_ap_ide_db::FxHashMap;
 use ra_ap_ide_db::SnippetCap;
-use ra_ap_syntax::TextRange;
-use ra_ide::{RangeInfo, HoverResult, HoverConfig};
 use ra_ap_paths::AbsPathBuf;
 use ra_ap_project_model::CargoConfig;
 use ra_ap_project_model::ProjectManifest;
@@ -28,15 +26,16 @@ use ra_ap_project_model::ProjectWorkspace;
 use ra_ap_project_model::RustLibSource;
 use ra_ap_syntax::ast::AstNode;
 use ra_ap_syntax::ast::{self};
+use ra_ap_syntax::TextRange;
 use ra_ap_vfs as ra_vfs;
 use ra_ap_vfs_notify as vfs_notify;
 use ra_ide::CallableSnippets;
+use ra_ide::{HoverConfig, HoverResult, RangeInfo};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
 use triomphe::Arc;
-
 
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
@@ -333,25 +332,35 @@ impl RustAnalyzer {
         })
     }
 
-    pub(crate) fn hover(&self, text_range: TextRange, is_mark_down: bool) -> Result<Option<RangeInfo<HoverResult>>> {
+    pub(crate) fn hover(
+        &self,
+        text_range: TextRange,
+        is_mark_down: bool,
+    ) -> Result<Option<RangeInfo<HoverResult>>> {
         use ra_ide::HoverDocFormat as hdf;
         let hover_config: HoverConfig = HoverConfig {
             links_in_hover: true,
             memory_layout: None,
             documentation: true,
             keywords: true,
-            format: if is_mark_down { hdf::Markdown } else { hdf::PlainText },
+            format: if is_mark_down {
+                hdf::Markdown
+            } else {
+                hdf::PlainText
+            },
         };
         let file_range = FileRange {
             file_id: self.source_file_id,
             range: text_range,
         };
-        match self.analysis_host
+        match self
+            .analysis_host
             .analysis()
-            .hover(&hover_config, file_range) {
-                Ok(range_info) => Ok(range_info),
-                _ => bail!("hover fail"), 
-            }
+            .hover(&hover_config, file_range)
+        {
+            Ok(range_info) => Ok(range_info),
+            _ => bail!("hover fail"),
+        }
     }
 }
 

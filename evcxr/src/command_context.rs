@@ -28,7 +28,6 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
-use pulldown_cmark;
 
 /// A higher level interface to EvalContext. A bit closer to a Repl. Provides commands (start with
 /// ':') that alter context state or print information.
@@ -629,10 +628,9 @@ Panic detected. Here's some useful information if you're filing a bug report.
     }
 
     fn hover(
-        &mut self, 
-        state: 
-        &mut ContextState, 
-        args: &Option<String>
+        &mut self,
+        state: &mut ContextState,
+        args: &Option<String>,
     ) -> Result<EvalOutputs, Error> {
         let args = if let Some(x) = args {
             x.trim()
