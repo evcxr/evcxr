@@ -64,7 +64,7 @@ fn send_output<T: io::Write + Send + 'static>(
 }
 fn context_pool() -> &'static Mutex<Vec<CommandContext>> {
     static CONTEXT_POOL: Lazy<Mutex<Vec<CommandContext>>> = Lazy::new(|| Mutex::new(vec![]));
-    &*CONTEXT_POOL
+    &CONTEXT_POOL
 }
 
 struct ContextHolder {
