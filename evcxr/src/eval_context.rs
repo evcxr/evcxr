@@ -63,7 +63,7 @@ pub struct EvalContext {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Config {
-    tmpdir: PathBuf,
+    pub tmpdir: PathBuf,
     pub(crate) debug_mode: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
