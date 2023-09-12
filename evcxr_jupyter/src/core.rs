@@ -12,6 +12,7 @@ use anyhow::bail;
 use anyhow::Result;
 use ariadne::sources;
 use colored::*;
+use crossbeam_channel::RecvTimeoutError;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
 use evcxr::Theme;
@@ -464,9 +465,15 @@ impl Server {
                 // stdout - we can't guarantee the order in which they get sent,
                 // but we'd like to try to make sure that we don't interleave
                 // their lines if possible.
-                while let Ok(line) = channel.recv_timeout(Duration::from_millis(1)) {
-                    let server = self.clone();
-                    handle.block_on(server.pass_output_line(output_name, line));
+                loop {
+                    match channel.recv_timeout(Duration::from_millis(1)) {
+                        Ok(line) => {
+                            let server = self.clone();
+                            handle.block_on(server.pass_output_line(output_name, line));
+                        }
+                        Err(RecvTimeoutError::Timeout) => break,
+                        Err(RecvTimeoutError::Disconnected) => return,
+                    }
                 }
             }
         });
