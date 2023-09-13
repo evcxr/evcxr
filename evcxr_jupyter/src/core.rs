@@ -31,15 +31,8 @@ pub(crate) struct Server {
     iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
     stdin: Arc<Mutex<Connection<zeromq::RouterSocket>>>,
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
-    shutdown_sender: Arc<Mutex<Option<crossbeam_channel::Sender<()>>>>,
+    io_thread_shutdown_sender: Arc<Mutex<Option<crossbeam_channel::Sender<()>>>>,
     tokio_handle: tokio::runtime::Handle,
-}
-
-struct ShutdownReceiver {
-    // Note, this needs to be a crossbeam channel because
-    // start_output_pass_through_thread selects on this and other crossbeam
-    // channels.
-    recv: crossbeam_channel::Receiver<()>,
 }
 
 impl Server {
@@ -59,19 +52,14 @@ impl Server {
             .build()
             .unwrap();
         let handle = runtime.handle().clone();
-        runtime.block_on(async {
-            let shutdown_receiver = Self::start(config, handle).await?;
-            shutdown_receiver.wait_for_shutdown().await;
-            let result: Result<()> = Ok(());
-            result
-        })?;
+        runtime.block_on(Self::run_async(config, handle))?;
         Ok(())
     }
 
-    async fn start(
+    async fn run_async(
         config: &control_file::Control,
         tokio_handle: tokio::runtime::Handle,
-    ) -> Result<ShutdownReceiver> {
+    ) -> Result<()> {
         let (connection_group, group_shutdown) = ConnectionGroup::new();
         let mut heartbeat = bind_socket::<zeromq::RepSocket>(
             config,
@@ -97,13 +85,16 @@ impl Server {
             bind_socket::<zeromq::PubSocket>(config, config.iopub_port, None).await?;
         let iopub = Arc::new(Mutex::new(iopub_socket));
 
+        // Create a channel pair that's used to signal to the IO thread when to shut down. This
+        // needs to be a crossbeam channel because the IO thread uses select together with other
+        // crossbeam channels.
         let (shutdown_sender, shutdown_receiver) = crossbeam_channel::unbounded();
 
         let server = Server {
             iopub,
             latest_execution_request: Arc::new(Mutex::new(None)),
             stdin: Arc::new(Mutex::new(stdin_socket)),
-            shutdown_sender: Arc::new(Mutex::new(Some(shutdown_sender))),
+            io_thread_shutdown_sender: Arc::new(Mutex::new(Some(shutdown_sender))),
             tokio_handle,
         };
 
@@ -120,17 +111,6 @@ impl Server {
         context.execute(":load_config")?;
         let process_handle = context.process_handle();
         let context = Arc::new(std::sync::Mutex::new(context));
-        {
-            let server = server.clone();
-            tokio::spawn(async move {
-                if let Err(error) = server
-                    .handle_control(control_socket, process_handle, group_shutdown)
-                    .await
-                {
-                    eprintln!("control error: {error:?}");
-                }
-            });
-        }
         {
             let context = context.clone();
             let server = server.clone();
@@ -170,13 +150,21 @@ impl Server {
                 shutdown_receiver.clone(),
             )
             .await;
-        Ok(ShutdownReceiver {
-            recv: shutdown_receiver,
-        })
+
+        // Don't keep any outstanding instances of our connection group, otherwise things won't shut
+        // down properly.
+        drop(connection_group);
+
+        // Run the control channel on the main task. Once the control channel handler terminates,
+        // we're done.
+        server
+            .handle_control(control_socket, process_handle, group_shutdown)
+            .await?;
+        Ok(())
     }
 
-    async fn signal_shutdown(&mut self) {
-        self.shutdown_sender.lock().await.take();
+    async fn shutdown_io_thread(&mut self) {
+        self.io_thread_shutdown_sender.lock().await.take();
     }
 
     async fn handle_hb(connection: &mut Connection<zeromq::RepSocket>) -> Result<()> {
@@ -465,12 +453,12 @@ impl Server {
                         "restart": is_restart,
                     };
                     connection.shutdown_all_connections(group_shutdown).await;
+                    self.shutdown_io_thread().await;
                     message
                         .new_reply()
                         .with_content(response)
                         .send(&mut connection)
                         .await?;
-                    self.signal_shutdown().await;
                     return Ok(());
                 }
                 "interrupt_request" => {
@@ -641,12 +629,6 @@ impl Server {
             }
         }
         Ok(())
-    }
-}
-
-impl ShutdownReceiver {
-    async fn wait_for_shutdown(self) {
-        let _ = tokio::task::spawn_blocking(move || self.recv.recv()).await;
     }
 }
 
