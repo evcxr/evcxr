@@ -441,7 +441,7 @@ impl EvalContext {
         let mut phases = PhaseDetailsBuilder::new();
         let code_out = state.apply(user_code.clone(), &code_info.nodes)?;
 
-        let mut outputs = match self.run_statements(code_out, &mut state, &mut phases, callbacks) {
+        let mut outputs = match self.run_statements(code_out, code_info, &mut state, &mut phases, callbacks) {
             error @ Err(Error::SubprocessTerminated(_)) => {
                 self.restart_child_process()?;
                 return error;
@@ -511,6 +511,11 @@ impl EvalContext {
     pub fn hover(&mut self, code: &str, state: &mut ContextState) -> Result<(String, String)> {
         let (modified_code, hover_offset) = if code == "let" {
             (String::from("let _ = 1;"), 0)
+        } else if code.ends_with('(') {
+            //If code is a function like `Option::ok_or_else`, the hover works fine, but if it is 
+            // method like `None.ok_or_else`, the hover show nothing, in order to show that, the code
+            // has to end with "(", like `None.ok_or_else(`
+            (format!("{});", code), code.len() - 1)
         } else {
             (format!("{};", code), code.len())
         };
@@ -614,12 +619,20 @@ impl EvalContext {
     fn run_statements(
         &mut self,
         mut user_code: CodeBlock,
+        code_info: &UserCodeInfo,
         state: &mut ContextState,
         phases: &mut PhaseDetailsBuilder,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
         self.write_cargo_toml(state)?;
-        self.fix_variable_types(state, state.analysis_code(user_code.clone()))?;
+        let analysis_code = state.analysis_code(user_code.clone());
+        if let Err(errors) = self.fix_variable_types(state, analysis_code) {
+            let check_res = self.check(user_code.clone(), state.clone(), code_info)?;
+            if check_res.is_empty() {
+                return Err(errors)
+            }
+            return Err(Error::CompilationErrors(check_res))
+        }
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
         // fix. The limit is really to prevent retrying indefinitely in case our "fixing" of things
