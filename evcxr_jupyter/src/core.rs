@@ -6,6 +6,9 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::connection::Connection;
+use crate::connection::ConnectionGroup;
+use crate::connection::ConnectionShutdownRequester;
+use crate::connection::RecvError;
 use crate::control_file;
 use crate::jupyter_message::JupyterMessage;
 use anyhow::bail;
@@ -69,12 +72,29 @@ impl Server {
         config: &control_file::Control,
         tokio_handle: tokio::runtime::Handle,
     ) -> Result<ShutdownReceiver> {
-        let mut heartbeat = bind_socket::<zeromq::RepSocket>(config, config.hb_port).await?;
-        let shell_socket = bind_socket::<zeromq::RouterSocket>(config, config.shell_port).await?;
-        let control_socket =
-            bind_socket::<zeromq::RouterSocket>(config, config.control_port).await?;
-        let stdin_socket = bind_socket::<zeromq::RouterSocket>(config, config.stdin_port).await?;
-        let iopub_socket = bind_socket::<zeromq::PubSocket>(config, config.iopub_port).await?;
+        let (connection_group, group_shutdown) = ConnectionGroup::new();
+        let mut heartbeat = bind_socket::<zeromq::RepSocket>(
+            config,
+            config.hb_port,
+            Some(connection_group.clone()),
+        )
+        .await?;
+        let shell_socket = bind_socket::<zeromq::RouterSocket>(
+            config,
+            config.shell_port,
+            Some(connection_group.clone()),
+        )
+        .await?;
+        let control_socket = bind_socket::<zeromq::RouterSocket>(
+            config,
+            config.control_port,
+            Some(connection_group.clone()),
+        )
+        .await?;
+        let stdin_socket =
+            bind_socket::<zeromq::RouterSocket>(config, config.stdin_port, None).await?;
+        let iopub_socket =
+            bind_socket::<zeromq::PubSocket>(config, config.iopub_port, None).await?;
         let iopub = Arc::new(Mutex::new(iopub_socket));
 
         let (shutdown_sender, shutdown_receiver) = crossbeam_channel::unbounded();
@@ -103,7 +123,10 @@ impl Server {
         {
             let server = server.clone();
             tokio::spawn(async move {
-                if let Err(error) = server.handle_control(control_socket, process_handle).await {
+                if let Err(error) = server
+                    .handle_control(control_socket, process_handle, group_shutdown)
+                    .await
+                {
                     eprintln!("control error: {error:?}");
                 }
             });
@@ -157,12 +180,13 @@ impl Server {
     }
 
     async fn handle_hb(connection: &mut Connection<zeromq::RepSocket>) -> Result<()> {
-        use zeromq::SocketRecv;
-        use zeromq::SocketSend;
         loop {
-            connection.socket.recv().await?;
+            match connection.recv().await {
+                Ok(_) => {}
+                Err(RecvError::ShutdownRequested) => return Ok(()),
+                Err(RecvError::Other(e)) => return Err(e),
+            }
             connection
-                .socket
                 .send(zeromq::ZmqMessage::from(b"ping".to_vec()))
                 .await?;
         }
@@ -315,7 +339,7 @@ impl Server {
             .map(|value| value.to_owned())
     }
 
-    async fn handle_shell<S: zeromq::SocketRecv + zeromq::SocketSend>(
+    async fn handle_shell<S: zeromq::Socket + zeromq::SocketRecv + zeromq::SocketSend>(
         self,
         mut connection: Connection<S>,
         execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
@@ -323,7 +347,11 @@ impl Server {
         context: Arc<std::sync::Mutex<CommandContext>>,
     ) -> Result<()> {
         loop {
-            let message = JupyterMessage::read(&mut connection).await?;
+            let message = match JupyterMessage::read(&mut connection).await {
+                Ok(m) => m,
+                Err(RecvError::ShutdownRequested) => return Ok(()),
+                Err(RecvError::Other(error)) => return Err(error),
+            };
             let message_type = message.message_type().to_owned();
             let r = self
                 .handle_shell_message(
@@ -414,9 +442,14 @@ impl Server {
         mut self,
         mut connection: Connection<zeromq::RouterSocket>,
         process_handle: Arc<std::sync::Mutex<std::process::Child>>,
+        group_shutdown: ConnectionShutdownRequester,
     ) -> Result<()> {
         loop {
-            let message = JupyterMessage::read(&mut connection).await?;
+            let message = match JupyterMessage::read(&mut connection).await {
+                Ok(m) => m,
+                Err(RecvError::ShutdownRequested) => return Ok(()),
+                Err(RecvError::Other(error)) => return Err(error),
+            };
             match message.message_type() {
                 "kernel_info_request" => {
                     message
@@ -431,12 +464,14 @@ impl Server {
                         "status": "ok",
                         "restart": is_restart,
                     };
+                    connection.shutdown_all_connections(group_shutdown).await;
                     message
                         .new_reply()
                         .with_content(response)
                         .send(&mut connection)
                         .await?;
-                    self.signal_shutdown().await
+                    self.signal_shutdown().await;
+                    return Ok(());
                 }
                 "interrupt_request" => {
                     let process_handle = process_handle.clone();
@@ -694,11 +729,12 @@ async fn cargo_check(code: String, context: Arc<std::sync::Mutex<CommandContext>
 async fn bind_socket<S: zeromq::Socket>(
     config: &control_file::Control,
     port: u16,
+    group: Option<ConnectionGroup>,
 ) -> Result<Connection<S>> {
     let endpoint = format!("{}://{}:{}", config.transport, config.ip, port);
     let mut socket = S::new();
     socket.bind(&endpoint).await?;
-    Connection::new(socket, &config.key)
+    Connection::new(socket, &config.key, group)
 }
 
 /// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)
