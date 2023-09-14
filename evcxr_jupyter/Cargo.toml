@@ -27,6 +27,7 @@ mimalloc = { version = "0.1", default-features = false, optional = true }
 crossbeam-channel = "0.5.5"
 ariadne = "0.3.0"
 zeromq = { version = "0.3.3", default_features = false, features = [ "tokio-runtime", "tcp-transport" ] }
+tokio-util = "0.7.8"
 
 [features]
 default = ["mimalloc"]
