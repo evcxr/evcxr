@@ -786,9 +786,6 @@ allow_apis = [
     "fs",
 ]
 
-[pkg.unic-char-range]
-allow_unsafe = true
-
 [pkg.stable_deref_trait]
 allow_unsafe = true
 
@@ -805,4 +802,7 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.flate2]
+allow_unsafe = true
+
+[pkg.ra-ap-rustc_index]
 allow_unsafe = true
