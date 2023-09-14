@@ -100,7 +100,7 @@ mod tests {
         let string = "\u{0000} \u{0008} \t \n \u{000C} \r \u{001F} \u{007F}";
         assert_eq!(
             escape_toml_string(string),
-            r#"\u0000 \b \t \n \f \r \u001F \u007F"#
+            r"\u0000 \b \t \n \f \r \u001F \u007F"
         );
     }
 
