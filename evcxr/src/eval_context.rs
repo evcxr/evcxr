@@ -440,9 +440,6 @@ impl EvalContext {
         }
         let mut phases = PhaseDetailsBuilder::new();
         let code_out = state.apply(user_code.clone(), &code_info.nodes)?;
-
-        write_to("/root/arcta/notebook/merge/state2.txt", &format!("{:?}", &state.items_by_name));
-
         let mut outputs =
             match self.run_statements(code_out, code_info, &mut state, &mut phases, callbacks) {
                 error @ Err(Error::SubprocessTerminated(_)) => {
@@ -462,7 +459,7 @@ impl EvalContext {
                 Ok(x) => x,
             };
 
-        fn write_to(path: &str, data: &str) {
+        fn _write_to(path: &str, data: &str) {
             use std::io::Write;
             let mut path = std::fs::File::create(path).unwrap();
             write!(path, "{}", data).unwrap();
@@ -471,7 +468,6 @@ impl EvalContext {
         // Once, we reach here, our code has successfully executed, so we
         // conclude that variable changes are now applied.
         self.commit_state(state.clone());
-        write_to("/root/arcta/notebook/merge/state1.txt", &format!("{:?}", &state.items_by_name));
 
         phases.phase_complete("Execution");
         outputs.phases = phases.phases;
