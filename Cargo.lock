@@ -829,7 +829,6 @@ dependencies = [
  "crossbeam-channel 0.5.8",
  "dirs",
  "evcxr",
- "generic-array",
  "hex",
  "hmac",
  "json",

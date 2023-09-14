@@ -13,7 +13,6 @@ use anyhow::bail;
 use anyhow::Result;
 use bytes::Bytes;
 use chrono::Utc;
-use generic_array::GenericArray;
 use json::JsonValue;
 use json::{self};
 use std::fmt;
@@ -56,7 +55,7 @@ impl RawMessage {
             let mut mac = mac_template.clone();
             raw_message.digest(&mut mac);
             use hmac::Mac;
-            if let Err(error) = mac.verify(GenericArray::from_slice(&hex::decode(&hmac)?)) {
+            if let Err(error) = mac.verify_slice(&hex::decode(&hmac)?) {
                 bail!("{}", error);
             }
         }
