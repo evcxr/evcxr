@@ -38,7 +38,7 @@ jobs:
           profile: minimal
           toolchain: ${{ matrix.rust }}
           override: true
-          components: rustfmt, clippy
+          components: rustfmt, clippy, rust-src
 
       - uses: actions-rs/cargo@v1
         with:
