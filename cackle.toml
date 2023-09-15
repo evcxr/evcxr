@@ -255,14 +255,6 @@ allow_unsafe = true
 [pkg.ra_ap_profile]
 allow_unsafe = true
 
-[pkg.io-lifetimes]
-allow_unsafe = true
-
-[pkg.io-lifetimes.build]
-allow_apis = [
-    "process",
-]
-
 [pkg.anymap]
 allow_unsafe = true
 
@@ -299,9 +291,6 @@ allow_apis = [
 ]
 
 [pkg.serde_json.build]
-allow_apis = [
-    "process",
-]
 
 [pkg.linux-raw-sys]
 allow_unsafe = true
@@ -553,9 +542,6 @@ allow_unsafe = true
 [pkg.is-terminal]
 allow_unsafe = true
 
-[pkg.static_assertions]
-allow_unsafe = true
-
 [pkg.anstyle]
 allow_unsafe = true
 
@@ -587,6 +573,11 @@ allow_unsafe = true
 
 [pkg.backtrace]
 allow_unsafe = true
+allow_apis = [
+    "fs",
+]
+
+[pkg.backtrace.build]
 allow_apis = [
     "fs",
 ]
@@ -786,9 +777,6 @@ allow_apis = [
     "fs",
 ]
 
-[pkg.unic-char-range]
-allow_unsafe = true
-
 [pkg.stable_deref_trait]
 allow_unsafe = true
 
@@ -805,4 +793,7 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.flate2]
+allow_unsafe = true
+
+[pkg.ra-ap-rustc_index]
 allow_unsafe = true

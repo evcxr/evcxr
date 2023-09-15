@@ -2019,10 +2019,9 @@ mod tests {
     fn test_attributes() {
         let mut state = create_state();
         let (user_code, code_info) = CodeBlock::from_original_user_code(stringify!(
-            #![feature(box_syntax)]
             #![feature(some_other_feature)]
             fn foo() {}
-            let x = box 10;
+            let x = 10;
         ));
         let user_code = state.apply(user_code, &code_info.nodes).unwrap();
         let final_code = state.code_to_compile(user_code, CompilationMode::NoCatch);
@@ -2036,7 +2035,6 @@ mod tests {
             attrs,
             vec![
                 "#![allow(unused_imports,unused_mut,dead_code)]".to_owned(),
-                "#![feature(box_syntax)]".to_owned(),
                 "#![feature(some_other_feature)]".to_owned(),
             ]
         );

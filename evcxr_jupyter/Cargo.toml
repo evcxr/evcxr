@@ -22,7 +22,6 @@ colored = "2.0.0"
 dirs = "5.0.1"
 chrono = { version = "0.4.19", default-features = false, features = [ "clock" ] }
 unicode-segmentation = "1.7.1"
-generic-array = "0.14.4"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 crossbeam-channel = "0.5.5"
 ariadne = "0.3.0"
