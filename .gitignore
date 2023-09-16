@@ -2,3 +2,7 @@ target
 **/*.rs.bk
 /reval_runtime/Cargo.lock
 .ipynb_checkpoints
+evcxr/examples/kk.rs
+.gitignore
+evcxr/examples/bench.rs
+evcxr/examples/kk.rs
