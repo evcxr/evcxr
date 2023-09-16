@@ -181,16 +181,16 @@ impl CodeBlock {
         self.with(CodeKind::OtherUserCode, user_code)
     }
 
-    fn get_block_command(user_code:  &str) -> (CodeBlock, UserCodeInfo) {
+    fn get_block_command(user_code: &str) -> (CodeBlock, UserCodeInfo) {
         let mut input_iter = user_code.trim().splitn(2, '\n');
         let command_str = input_iter.next().unwrap_or_default().to_string();
         let input_str = input_iter.next().map(|x| x.to_string());
         let code_block = CodeBlock::new().with(
-            CodeKind::Command(CommandCall { 
-                command: command_str, 
-                args: input_str.clone(), 
-                start_byte: 0, 
-                line_number: 0, 
+            CodeKind::Command(CommandCall {
+                command: command_str,
+                args: input_str.clone(),
+                start_byte: 0,
+                line_number: 0,
             }),
             input_str.unwrap_or_default(),
         );

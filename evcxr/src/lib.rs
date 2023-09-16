@@ -11,6 +11,7 @@ extern crate sig;
 
 #[macro_use]
 mod errors;
+mod bench_util;
 mod cargo_metadata;
 mod child_process;
 mod code_block;
@@ -26,7 +27,6 @@ mod runtime;
 mod rust_analyzer;
 mod statement_splitter;
 mod use_trees;
-mod bench_util;
 
 pub use crate::command_context::CommandContext;
 pub use crate::errors::CompilationError;
