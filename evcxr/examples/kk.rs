@@ -148,8 +148,10 @@ fn variable_names(ctx: &CommandContext) -> Vec<&str> {
 fn main() {
     let (mut e, _) = new_command_context_and_outputs();
     let r = e.execute(r#"
-    :dep pytest = { path = "/root/arcta/pytest" }
-    let a = ol(10usize);
+    ::bench
+    pub fn benchmark_fn() { 
+        let a = 1;
+    }
     "#);
-    println!("{:?}", r);
+    // println!("{:?}", r);
 }

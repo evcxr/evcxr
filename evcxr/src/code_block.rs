@@ -181,6 +181,26 @@ impl CodeBlock {
         self.with(CodeKind::OtherUserCode, user_code)
     }
 
+    fn get_block_command(user_code:  &str) -> (CodeBlock, UserCodeInfo) {
+        let mut input_iter = user_code.trim().splitn(2, '\n');
+        let command_str = input_iter.next().unwrap_or_default().to_string();
+        let input_str = input_iter.next().map(|x| x.to_string());
+        let code_block = CodeBlock::new().with(
+            CodeKind::Command(CommandCall { 
+                command: command_str, 
+                args: input_str.clone(), 
+                start_byte: 0, 
+                line_number: 0, 
+            }),
+            input_str.unwrap_or_default(),
+        );
+        let user_code_info = UserCodeInfo {
+            nodes: Default::default(),
+            original_lines: Default::default(),
+        };
+        (code_block, user_code_info)
+    }
+
     pub(crate) fn from_original_user_code(user_code: &str) -> (CodeBlock, UserCodeInfo) {
         static COMMAND_RE: Lazy<Regex> = Lazy::new(|| Regex::new("^ *(:[^ ]*)( +(.*))?$").unwrap());
         let mut code_block = CodeBlock::new();
@@ -189,6 +209,10 @@ impl CodeBlock {
         let mut lines = user_code.lines();
         let mut line_number = 1;
         let mut current_line = lines.next().unwrap_or(user_code);
+
+        if user_code.trim().starts_with("::") {
+            return Self::get_block_command(user_code);
+        }
 
         for (command_line_offset, line) in user_code.lines().enumerate() {
             // We only accept commands up until the first non-command.

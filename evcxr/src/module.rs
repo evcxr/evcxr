@@ -27,14 +27,14 @@ fn shared_object_name_from_crate_name(crate_name: &str) -> String {
     }
 }
 
-fn create_dir(dir: &Path) -> Result<(), Error> {
+pub(crate) fn create_dir(dir: &Path) -> Result<(), Error> {
     if let Err(err) = fs::create_dir_all(dir) {
         bail!("Error creating directory '{:?}': {}", dir, err);
     }
     Ok(())
 }
 
-fn write_file(dir: &Path, basename: &str, contents: &str) -> Result<(), Error> {
+pub(crate) fn write_file(dir: &Path, basename: &str, contents: &str) -> Result<(), Error> {
     create_dir(dir)?;
     let filename = dir.join(basename);
     // If the file contents is already correct, then skip writing it again. This
@@ -331,7 +331,7 @@ fn run_cargo(
 /// Process one line from cargo, either copying it to stderr or ignoring.
 ///
 /// At this point it looks for messages about compiling dependency crates.
-fn tee_error_line(line: &[u8]) {
+pub(crate) fn tee_error_line(line: &[u8]) {
     use std::io::Write;
     static CRATE_COMPILING: Lazy<regex::bytes::Regex> =
         Lazy::new(|| regex::bytes::Regex::new("^\\s*Compiling (\\w+)(?:\\s+.*)?$").unwrap());

@@ -26,6 +26,7 @@ mod runtime;
 mod rust_analyzer;
 mod statement_splitter;
 mod use_trees;
+mod bench_util;
 
 pub use crate::command_context::CommandContext;
 pub use crate::errors::CompilationError;

@@ -23,6 +23,7 @@ use crate::rust_analyzer::Completions;
 use crate::EvalContext;
 use crate::EvalContextOutputs;
 use crate::EvalOutputs;
+use crate::bench_util::BenchmarkObj;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -574,6 +575,20 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "show the docmentation of a variable, keysword, type or module",
                 |ctx, state, args| {
                     ctx.hover(state, args)
+                }
+            ),
+            AvailableCommand::new(
+                "::bench",
+                "benchmark a function with `criterion`, like `rust bench` and return the report",
+                |_ctx, state, args| {
+                    let bm_obj = BenchmarkObj(state.config.clone());
+                    let input = match args {
+                        Some(input) => input,
+                        None => bail!("Input required"),
+                    };
+                    bm_obj
+                        .run_then_get(input)
+                        .map(|(std_out, report)| EvalOutputs::text_html(std_out, report))
                 }
             )
         ]
