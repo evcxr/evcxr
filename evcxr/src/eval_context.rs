@@ -440,6 +440,7 @@ impl EvalContext {
         }
         let mut phases = PhaseDetailsBuilder::new();
         let code_out = state.apply(user_code.clone(), &code_info.nodes)?;
+        
         let mut outputs =
             match self.run_statements(code_out, code_info, &mut state, &mut phases, callbacks) {
                 error @ Err(Error::SubprocessTerminated(_)) => {
@@ -458,12 +459,6 @@ impl EvalContext {
                 error @ Err(_) => return error,
                 Ok(x) => x,
             };
-
-        fn _write_to(path: &str, data: &str) {
-            use std::io::Write;
-            let mut path = std::fs::File::create(path).unwrap();
-            write!(path, "{}", data).unwrap();
-        }
 
         // Once, we reach here, our code has successfully executed, so we
         // conclude that variable changes are now applied.

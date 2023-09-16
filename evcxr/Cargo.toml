@@ -52,7 +52,6 @@ ariadne = "0.3.0"
 triomphe = "0.1.8"
 
 pulldown-cmark = { version = "0.9.3", default-features = false, features = ["simd"] }
-
 tl = "0.7"
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
