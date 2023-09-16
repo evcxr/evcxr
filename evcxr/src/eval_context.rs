@@ -440,7 +440,7 @@ impl EvalContext {
         }
         let mut phases = PhaseDetailsBuilder::new();
         let code_out = state.apply(user_code.clone(), &code_info.nodes)?;
-        
+
         let mut outputs =
             match self.run_statements(code_out, code_info, &mut state, &mut phases, callbacks) {
                 error @ Err(Error::SubprocessTerminated(_)) => {

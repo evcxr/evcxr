@@ -5,6 +5,7 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::bench_util::BenchmarkObj;
 use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
@@ -23,7 +24,6 @@ use crate::rust_analyzer::Completions;
 use crate::EvalContext;
 use crate::EvalContextOutputs;
 use crate::EvalOutputs;
-use crate::bench_util::BenchmarkObj;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
