@@ -462,7 +462,7 @@ impl EvalContext {
 
         // Once, we reach here, our code has successfully executed, so we
         // conclude that variable changes are now applied.
-        self.commit_state(state.clone());
+        self.commit_state(state);
 
         phases.phase_complete("Execution");
         outputs.phases = phases.phases;
