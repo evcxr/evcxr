@@ -1531,12 +1531,16 @@ impl ContextState {
         }
         if self.async_mode {
             user_code = CodeBlock::new()
-                .generated(stringify!(evcxr_variable_store
-                    .lazy_arc("evcxr_tokio_runtime", || std::sync::Mutex::new(
-                        tokio::runtime::Runtime::new().unwrap()
-                    ))
-                    .lock()
-                    .unwrap()))
+                .generated(stringify!(
+                let mut mutex = evcxr_variable_store.lazy_arc("evcxr_tokio_runtime",
+                    || std::sync::Mutex::new(tokio::runtime::Runtime::new().unwrap())
+                );
+                // If a previous cell execution did panic, then the mutex may be poisoned.
+                match mutex.lock() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => poisoned.into_inner(),
+                }
+                ))
                 .generated(".block_on(async {")
                 .add_all(user_code);
             if self.allow_question_mark {
