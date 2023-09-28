@@ -48,7 +48,7 @@ use std::time::Instant;
 
 pub struct EvalContext {
     // Order is important here. We need to drop child_process before _tmpdir,
-    // since if the subprocess hasn't terminted before we clean up the temporary
+    // since if the subprocess hasn't terminated before we clean up the temporary
     // directory, then on some platforms (e.g. Windows), files in the temporary
     // directory will still be locked, so won't be deleted.
     child_process: ChildProcess,
