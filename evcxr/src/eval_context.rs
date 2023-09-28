@@ -93,6 +93,7 @@ pub(crate) struct Config {
     pub(crate) rustc_path: PathBuf,
     /// The host target that we're compiling for. e.g. x86_64-unknown-linux-gnu
     pub(crate) target: String,
+    pub(crate) allow_static_linking: bool,
 }
 
 fn create_initial_config(tmpdir: PathBuf) -> Result<Config> {
@@ -130,6 +131,7 @@ impl Config {
             cargo_path: default_cargo_path()?,
             rustc_path,
             target,
+            allow_static_linking: false,
         })
     }
 
@@ -347,7 +349,7 @@ impl EvalContext {
         }
 
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
-        let module = Module::new()?;
+        let module = Module::new(subprocess_command.get_program().into())?;
 
         let initial_config = create_initial_config(tmpdir_path)?;
         Self::apply_platform_specific_vars(&initial_config, &mut subprocess_command);
@@ -1152,6 +1154,10 @@ impl ContextState {
 
     pub fn set_offline_mode(&mut self, value: bool) {
         self.config.offline_mode = value;
+    }
+
+    pub fn set_allow_static_linking(&mut self, value: bool) {
+        self.config.allow_static_linking = value;
     }
 
     pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {

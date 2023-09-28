@@ -475,8 +475,17 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 ":offline",
                 "Set offline mode when invoking cargo (0/1)",
                 |_ctx, state, args| {
-                    state.set_offline_mode(args.as_ref().map(String::as_str) == Some("1"));
+                    state.set_offline_mode(args.as_deref() == Some("1"));
                     text_output(format!("Offline mode: {}", state.offline_mode()))
+                },
+            ),
+            AvailableCommand::new(
+                ":allow_static_linking",
+                "Set whether to allow static linking of dependencies (0/1)",
+                |_ctx, state, args| {
+                    let allow_static_linking = args.as_deref() == Some("1");
+                    state.set_allow_static_linking(allow_static_linking);
+                    text_output(format!("Static linking: {}", allow_static_linking))
                 },
             ),
             AvailableCommand::new(

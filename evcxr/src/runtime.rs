@@ -16,12 +16,17 @@ use std::{self};
 
 pub(crate) const EVCXR_IS_RUNTIME_VAR: &str = "EVCXR_IS_RUNTIME";
 pub(crate) const EVCXR_EXECUTION_COMPLETE: &str = "EVCXR_EXECUTION_COMPLETE";
+pub(crate) const EVCXR_NEXT_RUSTC_WRAPPER: &str = "EVCXR_NEXT_RUSTC_WRAPPER";
 
-/// Binaries can call this just after staring. If we detect that we're actually
-/// running as a subprocess, control will not return.
+/// Binaries can call this just after staring. If we detect that we're actually running as a
+/// subprocess, control will not return. There are two kinds of subprocesses that we may be acting
+/// as (1) the process that loads and runs the user code and (2) a wrapper around rustc.
 pub fn runtime_hook() {
     if std::env::var(EVCXR_IS_RUNTIME_VAR).is_ok() {
         Runtime::new().run_loop();
+    }
+    if let Ok(next_wrapper) = std::env::var(EVCXR_NEXT_RUSTC_WRAPPER) {
+        crate::module::wrap_rustc(&next_wrapper);
     }
 }
 

@@ -406,16 +406,45 @@ fn crate_deps() {
        40"#,
     );
     assert!(r.is_err());
-    let crate1 = TmpCrate::new("crate1", "pub fn r20() -> i32 {20}").unwrap();
+    let crate1 = TmpCrate::new(
+        "crate1",
+        stringify! {
+            use std::sync::atomic::AtomicU32;
+
+            static FOO: AtomicU32 = AtomicU32::new(0);
+
+            pub fn r20() -> i32 {20}
+
+            pub fn set_value(v: u32) {
+                FOO.store(v, std::sync::atomic::Ordering::SeqCst);
+            }
+
+            pub fn get_value() -> u32 {
+                FOO.load(std::sync::atomic::Ordering::SeqCst)
+            }
+        },
+    )
+    .unwrap();
     let error = e
         .execute(&crate1.dep_command(r#"features = ["no_such_feature"]"#))
         .unwrap_err();
     assert!(error.to_string().contains("no_such_feature"));
     let crate2 = TmpCrate::new("crate2", "pub fn r22() -> i32 {22}").unwrap();
-    let to_run =
-        crate1.dep_command("") + "\n" + &crate2.dep_command("") + "\ncrate1::r20() + crate2::r22()";
+    let mut to_run = crate1.dep_command("");
+    to_run += "\n";
+    to_run += &crate2.dep_command("");
+    to_run += "\n";
+    to_run += stringify! {
+        crate1::set_value(765);
+        crate1::r20() + crate2::r22()
+    };
     let outputs = e.execute(&to_run).unwrap();
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
+
+    // In a separate evaluation, make sure that a value stored into a static variable, by the call
+    // to crate1::set_value above, is still set.
+    let outputs = e.execute("crate1::get_value()").unwrap();
+    assert_eq!(outputs.content_by_mime_type, text_plain("765"));
 }
 
 #[test]

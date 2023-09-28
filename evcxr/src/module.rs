@@ -11,20 +11,41 @@ use crate::errors::CompilationError;
 use crate::errors::Error;
 use crate::eval_context::Config;
 use crate::eval_context::ContextState;
+use crate::runtime::EVCXR_NEXT_RUSTC_WRAPPER;
+use anyhow::anyhow;
+use anyhow::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::ffi::OsString;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-fn shared_object_name_from_crate_name(crate_name: &str) -> String {
+fn shared_object_prefix() -> &'static str {
     if cfg!(target_os = "macos") {
-        format!("lib{crate_name}.dylib")
+        "lib"
     } else if cfg!(target_os = "windows") {
-        format!("{crate_name}.dll")
+        ""
     } else {
-        format!("lib{crate_name}.so")
+        "lib"
     }
+}
+
+fn shared_object_extension() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "dylib"
+    } else if cfg!(target_os = "windows") {
+        "dll"
+    } else {
+        "so"
+    }
+}
+
+fn shared_object_name_from_crate_name(crate_name: &str) -> String {
+    let prefix = shared_object_prefix();
+    let extension = shared_object_extension();
+    format!("{prefix}{crate_name}.{extension}")
 }
 
 fn create_dir(dir: &Path) -> Result<(), Error> {
@@ -82,16 +103,22 @@ fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Default)]
 pub(crate) struct Module {
     build_num: i32,
+    last_allow_static: Option<bool>,
+    subprocess_path: PathBuf,
 }
 
 const CRATE_NAME: &str = "ctx";
 
 impl Module {
-    pub(crate) fn new() -> Result<Module, Error> {
-        let module = Module { build_num: 0 };
-        Ok(module)
+    pub(crate) fn new(subprocess_path: PathBuf) -> Result<Module, Error> {
+        Ok(Module {
+            build_num: 0,
+            last_allow_static: None,
+            subprocess_path,
+        })
     }
 
     pub(crate) fn so_path(&self, config: &Config) -> PathBuf {
@@ -144,6 +171,11 @@ impl Module {
         code_block: &CodeBlock,
         config: &Config,
     ) -> Result<SoFile, Error> {
+        if self.last_allow_static == Some(!config.allow_static_linking) {
+            // If allow_static_linking has changed, then we need to rebuild everything.
+            config.cargo_command("clean").output()?;
+        }
+        self.last_allow_static = Some(config.allow_static_linking);
         let mut command = config.cargo_command("rustc");
         if config.time_passes && config.toolchain != "nightly" {
             bail!("time_passes option requires nightly compiler");
@@ -163,8 +195,16 @@ impl Module {
                 .arg("-C")
                 .arg(format!("link-arg=-fuse-ld={}", config.linker));
         }
-        if let Some(sccache) = &config.sccache {
-            command.env("RUSTC_WRAPPER", sccache);
+        if config.allow_static_linking {
+            if let Some(sccache) = &config.sccache {
+                command.env("RUSTC_WRAPPER", sccache);
+            }
+        } else {
+            command.env("RUSTC_WRAPPER", &self.subprocess_path);
+            command.env(
+                EVCXR_NEXT_RUSTC_WRAPPER,
+                config.sccache.as_deref().unwrap_or(Path::new("")),
+            );
         }
         if config.time_passes {
             command.arg("-Ztime-passes");
@@ -263,6 +303,85 @@ offline = {}
     }
 }
 
+pub(crate) fn wrap_rustc(next_wrapper: &str) {
+    match wrap_rustc_helper(next_wrapper) {
+        Err(error) => {
+            eprintln!("Failed to wrap rustc: {error}");
+            std::process::exit(-1);
+        }
+        Ok(exit_code) => {
+            std::process::exit(exit_code);
+        }
+    }
+}
+
+pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
+    let num_crate_types = std::env::args_os()
+        .filter(|arg| arg == "--crate-type")
+        .count();
+    let mut args = std::env::args().peekable();
+    args.next();
+    let rustc = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
+    let mut command;
+    if next_wrapper.is_empty() {
+        command = std::process::Command::new(rustc);
+    } else {
+        command = std::process::Command::new(next_wrapper);
+        command.arg(rustc);
+    }
+    let mut got_prefer_dynamic = false;
+    while let Some(arg) = args.next() {
+        if arg == "-C" {
+            let next = args.peek();
+            if next.map(|n| n == "prefer-dynamic").unwrap_or_default() {
+                got_prefer_dynamic = true;
+            }
+        }
+        command.arg(&arg);
+
+        // If we're compiling as a crate-type of lib and nothing else, then we tell rustc to also
+        // compile as a dylib. We still need compile as type lib though, since otherwise cargo
+        // recompiles every time - presumably because it detects that the lib file it asked for
+        // isn't present.
+        if arg == "--crate-type" && num_crate_types == 1 {
+            if let Some(crate_type) = args.next() {
+                command.arg(&crate_type);
+                if crate_type == "lib" {
+                    command.arg("--crate-type");
+                    command.arg("dylib");
+                }
+            }
+        }
+        // Make paths to our dependencies to use dylibs rather than rlibs.
+        if arg == "--extern" {
+            let ext = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
+            let so_arg = map_extern_arg(&ext);
+            command.arg(so_arg);
+        }
+    }
+    if !got_prefer_dynamic {
+        command.arg("-C").arg("prefer-dynamic");
+    }
+
+    let output = command.output()?;
+
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+
+    Ok(output.status.code().unwrap_or(-1))
+}
+
+fn map_extern_arg(ext: &str) -> OsString {
+    if let Some((crate_name, path)) = ext.split_once('=') {
+        let path = Path::new(path);
+        let mut so_arg = OsString::from(crate_name);
+        so_arg.push("=");
+        so_arg.push(path.with_extension(shared_object_extension()));
+        return so_arg;
+    }
+    OsString::from(ext)
+}
+
 /// Run a cargo command prepared for the provided `code_block`, processing the
 /// command's output.
 fn run_cargo(
@@ -332,7 +451,6 @@ fn run_cargo(
 ///
 /// At this point it looks for messages about compiling dependency crates.
 fn tee_error_line(line: &[u8]) {
-    use std::io::Write;
     static CRATE_COMPILING: Lazy<regex::bytes::Regex> =
         Lazy::new(|| regex::bytes::Regex::new("^\\s*Compiling (\\w+)(?:\\s+.*)?$").unwrap());
     if let Some(captures) = CRATE_COMPILING.captures(line) {
