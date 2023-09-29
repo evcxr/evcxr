@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -ev
 if ! git diff-index --quiet HEAD --; then
   echo "Please commit all changes first" >&2
   exit 1
@@ -17,7 +17,11 @@ cargo +${MIN_RUST_VER} --version >/dev/null 2>&1 \
   || rustup toolchain install $MIN_RUST_VER
 git pull --rebase
 cargo fmt --all -- --check
-cackle check
+cargo acl
+if ! git diff-index --quiet HEAD --; then
+  echo "Please commit all changes first" >&2
+  exit 1
+fi
 cargo build
 cargo clippy -- -D warnings
 cargo +stable test --all || fail "Tests failed on stable"
