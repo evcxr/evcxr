@@ -17,7 +17,6 @@ use ariadne::Label;
 use ariadne::Report;
 use ariadne::ReportKind;
 use json::JsonValue;
-use json::{self};
 use ra_ap_ide::TextRange;
 use ra_ap_ide::TextSize;
 use std::fmt;

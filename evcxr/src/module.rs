@@ -363,12 +363,44 @@ pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
         command.arg("-C").arg("prefer-dynamic");
     }
 
-    let output = command.output()?;
+    let mut output = command.output()?;
+
+    // If rustc failed and from the error, it looks like it failed due to a missing language
+    // feature, then this can often be fixed by enabling the "std" feature on the crate being
+    // compiled.
+    if did_rustc_fail_due_to_dylib(&output) {
+        command.arg("--cfg").arg("feature=\"std\"");
+        let alt_output = command.output()?;
+        if alt_output.status.success() {
+            output = alt_output;
+        }
+    }
 
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
 
     Ok(output.status.code().unwrap_or(-1))
+}
+
+/// Returns whether rustc emitted an error due to us compiling a dylib.
+fn did_rustc_fail_due_to_dylib(output: &std::process::Output) -> bool {
+    if output.status.success() {
+        return false;
+    }
+    let Ok(stderr) = std::str::from_utf8(&output.stderr) else {
+        return false;
+    };
+    stderr
+        .lines()
+        .filter_map(|line| {
+            let json_value = json::parse(line).ok()?;
+            let message = json_value["message"].as_str()?;
+            Some(
+                message == "`#[panic_handler]` function required, but not found"
+                    || message.starts_with("language item required, but not found:"),
+            )
+        })
+        .any(|b| b)
 }
 
 fn map_extern_arg(ext: &str) -> OsString {
