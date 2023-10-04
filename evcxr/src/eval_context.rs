@@ -536,7 +536,7 @@ impl EvalContext {
                 data_markdown.info.markup.into(),
             )),
             _ => Ok((
-                "No documatation found".into(),
+                "No documentation found".into(),
                 "No documentation found".into(),
             )),
         }
@@ -1397,7 +1397,7 @@ impl ContextState {
         }
     }
 
-    /// Returns code suitable for analysis purposes. Doesn't attempt to preserve runtime behavior.
+    /// Returns code suitable for analysis purposes. Doesn't attempt to preserve runtime behaviour.
     fn analysis_code(&self, user_code: CodeBlock) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
@@ -1912,7 +1912,7 @@ impl ContextState {
 // Returns the path to `tool` (rustc or cargo) that rustup will use, or None if anything goes wrong
 // (e.g. rustup isn't available). By invoking this binary directly, we avoid having rustup decide
 // which binary to invoke each time we compile. Doing this for cargo reduces eval time for a trivial
-// bit of code from about 140ms to 109ms. Doing it for rustc as well futher reduces it to about
+// bit of code from about 140ms to 109ms. Doing it for rustc as well further reduces it to about
 // 75ms.
 fn rustup_tool_path(toolchain: Option<&str>, tool: &str) -> Option<PathBuf> {
     let mut cmd = Command::new("rustup");

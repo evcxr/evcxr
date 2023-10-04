@@ -580,7 +580,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             }),
             AvailableCommand::new(
                 ":doc",
-                "show the docmentation of a variable, keysword, type or module",
+                "show the documentation of a variable, keyword, type or module",
                 |ctx, state, args| {
                     ctx.hover(state, args)
                 }
