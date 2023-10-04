@@ -409,6 +409,11 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 |_ctx, state, args| process_dep_command(state, args),
             ),
             AvailableCommand::new(
+                ":show_deps",
+                "Show the current dependencies",
+                |_ctx, state, _args| process_show_deps_command(state),
+            ),
+            AvailableCommand::new(
                 ":last_compile_dir",
                 "Print the directory in which we last compiled",
                 |ctx, _state, _args| {
@@ -676,6 +681,20 @@ fn process_dep_command(
     } else {
         bail!("Invalid :dep command. Expected: name = ... or just name");
     }
+}
+
+fn process_show_deps_command(state: &ContextState) -> Result<EvalOutputs, Error> {
+    let external_deps = &state.external_deps;
+    if external_deps.is_empty() {
+        return Ok(EvalOutputs::new());
+    }
+
+    let mut deps: Vec<String> = external_deps
+        .values()
+        .map(|dep| format!("{} = {}", dep.name, dep.config))
+        .collect();
+    deps.sort();
+    text_output(deps.join("\n"))
 }
 
 type CallbackFn = dyn Fn(&mut CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>

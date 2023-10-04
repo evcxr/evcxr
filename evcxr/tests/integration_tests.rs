@@ -356,6 +356,7 @@ fn moved_value() {
 struct TmpCrate {
     name: String,
     tempdir: tempfile::TempDir,
+    path: Option<String>,
 }
 
 impl TmpCrate {
@@ -379,11 +380,13 @@ impl TmpCrate {
         Ok(TmpCrate {
             name: name.to_owned(),
             tempdir,
+            path: None,
         })
     }
 
-    fn dep_command(&self, extra_options: &str) -> String {
+    fn dep_command(&mut self, extra_options: &str) -> String {
         let path = self.tempdir.path().to_string_lossy().replace('\\', "\\\\");
+        self.path = Some(path.clone());
         if extra_options.is_empty() {
             format!(":dep {}", path)
         } else {
@@ -392,6 +395,10 @@ impl TmpCrate {
                 self.name, path, extra_options
             )
         }
+    }
+
+    fn last_path(&self) -> Option<&String> {
+        self.path.as_ref()
     }
 }
 
@@ -406,7 +413,7 @@ fn crate_deps() {
        40"#,
     );
     assert!(r.is_err());
-    let crate1 = TmpCrate::new(
+    let mut crate1 = TmpCrate::new(
         "crate1",
         stringify! {
             use std::sync::atomic::AtomicU32;
@@ -429,7 +436,7 @@ fn crate_deps() {
         .execute(&crate1.dep_command(r#"features = ["no_such_feature"]"#))
         .unwrap_err();
     assert!(error.to_string().contains("no_such_feature"));
-    let crate2 = TmpCrate::new("crate2", "pub fn r22() -> i32 {22}").unwrap();
+    let mut crate2 = TmpCrate::new("crate2", "pub fn r22() -> i32 {22}").unwrap();
     let mut to_run = crate1.dep_command("");
     to_run += "\n";
     to_run += &crate2.dep_command("");
@@ -450,11 +457,34 @@ fn crate_deps() {
 #[test]
 fn crate_name_with_hyphens() {
     let (mut e, _) = new_command_context_and_outputs();
-    let crate1 = TmpCrate::new("crate-name-with-hyphens", "pub fn r42() -> i32 {42}").unwrap();
+    let mut crate1 = TmpCrate::new("crate-name-with-hyphens", "pub fn r42() -> i32 {42}").unwrap();
     let to_run =
         crate1.dep_command("") + "\nuse crate_name_with_hyphens;\ncrate_name_with_hyphens::r42()";
     let outputs = e.execute(&to_run).unwrap();
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
+}
+
+#[test]
+fn crate_show_deps() {
+    let (mut e, _) = new_command_context_and_outputs();
+    assert!(e.execute(":show_deps").unwrap().is_empty());
+
+    let mut crate1 = TmpCrate::new("crate1", "").unwrap();
+    let option1 = "version = \"0.0.1\"";
+    assert!(e.execute(&crate1.dep_command(option1)).is_ok());
+
+    let mut crate2 = TmpCrate::new("crate2", "").unwrap();
+    assert!(e.execute(&crate2.dep_command("")).is_ok());
+
+    let outputs = e.execute(":show_deps").unwrap();
+    assert_eq!(
+        outputs.get("text/plain").unwrap(),
+        format!(
+            "crate1 = {{ path = \"{path1}\", {option1} }}\ncrate2 = {{ path = \"{path2}\" }}\n",
+            path1 = crate1.last_path().unwrap(),
+            path2 = crate2.last_path().unwrap()
+        )
+    );
 }
 
 // A collection of bits of code that are invalid. Our bar here is that we don't
