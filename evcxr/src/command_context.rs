@@ -466,7 +466,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "Set which toolchain to use (e.g. nightly)",
                 |_ctx, state, args| {
                     if let Some(arg) = args {
-                        state.set_toolchain(arg);
+                        state.set_toolchain(arg)?;
                     }
                     text_output(format!("Toolchain: {}", state.toolchain()))
                 },

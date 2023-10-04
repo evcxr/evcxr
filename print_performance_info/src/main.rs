@@ -49,7 +49,7 @@ fn main() -> Result<(), evcxr::Error> {
     send_output(outputs.stderr, io::stdout());
     ctx.set_time_passes(true);
     let mut state = ctx.state();
-    state.set_toolchain("nightly");
+    state.set_toolchain("nightly")?;
     ctx.eval_with_state("println!(\"41\");", state)?;
     let start = Instant::now();
     let output = ctx.eval_with_state("println!(\"42\");", ctx.state())?;

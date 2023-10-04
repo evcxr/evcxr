@@ -13,6 +13,7 @@ use crate::eval_context::Config;
 use crate::eval_context::ContextState;
 use crate::runtime::EVCXR_NEXT_RUSTC_WRAPPER;
 use anyhow::anyhow;
+use anyhow::Context;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use regex::Regex;
@@ -22,7 +23,9 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-fn shared_object_prefix() -> &'static str {
+const CORE_EXTERN_ENV: &str = "EVCXR_CORE_EXTERN";
+
+pub(crate) fn shared_object_prefix() -> &'static str {
     if cfg!(target_os = "macos") {
         "lib"
     } else if cfg!(target_os = "windows") {
@@ -32,7 +35,7 @@ fn shared_object_prefix() -> &'static str {
     }
 }
 
-fn shared_object_extension() -> &'static str {
+pub(crate) fn shared_object_extension() -> &'static str {
     if cfg!(target_os = "macos") {
         "dylib"
     } else if cfg!(target_os = "windows") {
@@ -189,7 +192,8 @@ impl Module {
             .arg("-C")
             .arg("prefer-dynamic")
             .env("CARGO_TARGET_DIR", "target")
-            .env("RUSTC", &config.rustc_path);
+            .env("RUSTC", &config.rustc_path)
+            .env(CORE_EXTERN_ENV, &config.core_extern);
         if config.linker == "lld" {
             command
                 .arg("-C")
@@ -319,15 +323,17 @@ pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
     let num_crate_types = std::env::args_os()
         .filter(|arg| arg == "--crate-type")
         .count();
+    let core_extern = std::env::var(CORE_EXTERN_ENV)
+        .with_context(|| format!("Internal env var {CORE_EXTERN_ENV}` not set"))?;
     let mut args = std::env::args().peekable();
     args.next();
     let rustc = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
     let mut command;
     if next_wrapper.is_empty() {
-        command = std::process::Command::new(rustc);
+        command = std::process::Command::new(&rustc);
     } else {
         command = std::process::Command::new(next_wrapper);
-        command.arg(rustc);
+        command.arg(&rustc);
     }
     let mut got_prefer_dynamic = false;
     while let Some(arg) = args.next() {
@@ -359,48 +365,17 @@ pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
             command.arg(so_arg);
         }
     }
+    command.arg("--extern").arg(core_extern);
     if !got_prefer_dynamic {
         command.arg("-C").arg("prefer-dynamic");
     }
 
-    let mut output = command.output()?;
-
-    // If rustc failed and from the error, it looks like it failed due to a missing language
-    // feature, then this can often be fixed by enabling the "std" feature on the crate being
-    // compiled.
-    if did_rustc_fail_due_to_dylib(&output) {
-        command.arg("--cfg").arg("feature=\"std\"");
-        let alt_output = command.output()?;
-        if alt_output.status.success() {
-            output = alt_output;
-        }
-    }
+    let output = command.output()?;
 
     std::io::stdout().write_all(&output.stdout)?;
     std::io::stderr().write_all(&output.stderr)?;
 
     Ok(output.status.code().unwrap_or(-1))
-}
-
-/// Returns whether rustc emitted an error due to us compiling a dylib.
-fn did_rustc_fail_due_to_dylib(output: &std::process::Output) -> bool {
-    if output.status.success() {
-        return false;
-    }
-    let Ok(stderr) = std::str::from_utf8(&output.stderr) else {
-        return false;
-    };
-    stderr
-        .lines()
-        .filter_map(|line| {
-            let json_value = json::parse(line).ok()?;
-            let message = json_value["message"].as_str()?;
-            Some(
-                message == "`#[panic_handler]` function required, but not found"
-                    || message.starts_with("language item required, but not found:"),
-            )
-        })
-        .any(|b| b)
 }
 
 fn map_extern_arg(ext: &str) -> OsString {

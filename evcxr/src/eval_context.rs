@@ -38,6 +38,7 @@ use ra_ap_syntax::SyntaxNode;
 use regex::Regex;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -91,6 +92,9 @@ pub(crate) struct Config {
     pub(crate) toolchain: String,
     cargo_path: PathBuf,
     pub(crate) rustc_path: PathBuf,
+    /// A string of the form "core:/path/to/libstd-...so". This must be libstd that corresponds to
+    /// the rust compiler in `rustc_path` so must be updated whenever `rustc_path` is updated.
+    pub(crate) core_extern: OsString,
     /// The host target that we're compiling for. e.g. x86_64-unknown-linux-gnu
     pub(crate) target: String,
     pub(crate) allow_static_linking: bool,
@@ -112,6 +116,7 @@ fn create_initial_config(tmpdir: PathBuf) -> Result<Config> {
 impl Config {
     pub fn new(tmpdir: PathBuf) -> Result<Self> {
         let rustc_path = default_rustc_path()?;
+        let core_extern = core_extern(&rustc_path)?;
         let target = get_host_target(Path::new(&rustc_path))?;
         Ok(Config {
             tmpdir,
@@ -130,6 +135,7 @@ impl Config {
             toolchain: String::new(),
             cargo_path: default_cargo_path()?,
             rustc_path,
+            core_extern,
             target,
             allow_static_linking: false,
         })
@@ -301,7 +307,6 @@ impl EvalContext {
         }
         // Windows doesn't support rpath, so we need to set PATH so that it
         // knows where to find dlls.
-        use std::ffi::OsString;
         let mut path_var_value = OsString::new();
         path_var_value.push(&config.deps_dir());
         path_var_value.push(";");
@@ -1248,14 +1253,16 @@ impl ContextState {
         self.config.display_types = display_types;
     }
 
-    pub fn set_toolchain(&mut self, value: &str) {
+    pub fn set_toolchain(&mut self, value: &str) -> Result<()> {
         if let Some(rustc_path) = rustup_tool_path(Some(value), "rustc") {
+            self.config.core_extern = core_extern(&rustc_path)?;
             self.config.rustc_path = rustc_path;
         }
         if let Some(cargo_path) = rustup_tool_path(Some(value), "cargo") {
             self.config.cargo_path = cargo_path;
         }
         self.config.toolchain = value.to_owned();
+        Ok(())
     }
 
     pub fn toolchain(&mut self) -> &str {
@@ -1996,6 +2003,41 @@ fn replace_reserved_words_in_type(ty: &str) -> String {
     static RESERVED_WORDS: Lazy<Regex> =
         Lazy::new(|| Regex::new("(^|:|<)(async|try)(>|$|:)").unwrap());
     RESERVED_WORDS.replace_all(ty, "${1}r#${2}${3}").to_string()
+}
+
+fn core_extern(rustc: &Path) -> Result<OsString> {
+    let std_lib = std_lib_path(rustc)?;
+    let mut result = OsString::from("core=");
+    result.push(std_lib.as_os_str());
+    Ok(result)
+}
+
+/// Returns the path to the shared object for the rust standard library.
+fn std_lib_path(rustc: &Path) -> Result<PathBuf> {
+    let libdir_bytes = std::process::Command::new(rustc)
+        .arg("--print")
+        .arg("target-libdir")
+        .output()?
+        .stdout;
+    let libdir = std::str::from_utf8(&libdir_bytes)?;
+    let dir = std::fs::read_dir(libdir.trim())?;
+    let prefix = format!("{}std-", crate::module::shared_object_prefix());
+    for entry in dir {
+        let Ok(entry) = entry else { continue };
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|file_name| file_name.starts_with(&prefix))
+            && entry
+                .path()
+                .extension()
+                .map(|ext| ext == crate::module::shared_object_extension())
+                .unwrap_or(false)
+        {
+            return Ok(entry.path());
+        }
+    }
+    anyhow::bail!("No libstd found in {libdir}");
 }
 
 #[cfg(test)]
