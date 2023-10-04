@@ -343,6 +343,26 @@ pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
                 got_prefer_dynamic = true;
             }
         }
+
+        // If a static library is being linked into this crate, then we modify the linker arguments
+        // to make sure that the whole archive gets linked in, otherwise any symbol not referenced
+        // by the functions in this crate (most of them) will be garbage collected by the linker.
+        // This would be slightly nicer if we could just pass `-l static:+whole-archive=...` to
+        // rustc, however rustc doesn't permit `+whole-archive` and `+bundle` at the same time which
+        // is what we want.
+        if arg == "-l" {
+            let Some(next) = args.next() else { continue };
+            if let Some(rest) = next.strip_prefix("static=") {
+                command.arg("-Clink-arg=-Wl,--whole-archive");
+                command.arg("-l").arg(rest);
+                command.arg("-Clink-arg=-Wl,--no-whole-archive");
+            } else {
+                command.arg(arg);
+                command.arg(next);
+            }
+            continue;
+        }
+
         command.arg(&arg);
 
         // If we're compiling as a crate-type of lib and nothing else, then we tell rustc to also
