@@ -11,7 +11,6 @@ use crate::errors::CompilationError;
 use crate::errors::Error;
 use crate::eval_context::Config;
 use crate::eval_context::ContextState;
-use crate::runtime::EVCXR_NEXT_RUSTC_WRAPPER;
 use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
@@ -23,7 +22,7 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 
-const CORE_EXTERN_ENV: &str = "EVCXR_CORE_EXTERN";
+pub(crate) const CORE_EXTERN_ENV: &str = "EVCXR_CORE_EXTERN";
 
 pub(crate) fn shared_object_prefix() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -110,17 +109,15 @@ fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
 pub(crate) struct Module {
     build_num: i32,
     last_allow_static: Option<bool>,
-    subprocess_path: PathBuf,
 }
 
 const CRATE_NAME: &str = "ctx";
 
 impl Module {
-    pub(crate) fn new(subprocess_path: PathBuf) -> Result<Module, Error> {
+    pub(crate) fn new() -> Result<Module, Error> {
         Ok(Module {
             build_num: 0,
             last_allow_static: None,
-            subprocess_path,
         })
     }
 
@@ -156,10 +153,7 @@ impl Module {
         config: &Config,
     ) -> Result<Vec<CompilationError>, Error> {
         self.write_code(code_block, config)?;
-        let output = config
-            .cargo_command("check")
-            .arg("--message-format=json")
-            .output();
+        let output = config.cargo_command("check").output();
 
         let cargo_output = match output {
             Ok(out) => out,
@@ -179,40 +173,11 @@ impl Module {
             config.cargo_command("clean").output()?;
         }
         self.last_allow_static = Some(config.allow_static_linking);
-        let mut command = config.cargo_command("rustc");
+        let command = config.cargo_command("build");
         if config.time_passes && config.toolchain != "nightly" {
             bail!("time_passes option requires nightly compiler");
         }
 
-        command
-            .arg("--target")
-            .arg(&config.target)
-            .arg("--message-format=json")
-            .arg("--")
-            .arg("-C")
-            .arg("prefer-dynamic")
-            .env("CARGO_TARGET_DIR", "target")
-            .env("RUSTC", &config.rustc_path)
-            .env(CORE_EXTERN_ENV, &config.core_extern);
-        if config.linker == "lld" {
-            command
-                .arg("-C")
-                .arg(format!("link-arg=-fuse-ld={}", config.linker));
-        }
-        if config.allow_static_linking {
-            if let Some(sccache) = &config.sccache {
-                command.env("RUSTC_WRAPPER", sccache);
-            }
-        } else {
-            command.env("RUSTC_WRAPPER", &self.subprocess_path);
-            command.env(
-                EVCXR_NEXT_RUSTC_WRAPPER,
-                config.sccache.as_deref().unwrap_or(Path::new("")),
-            );
-        }
-        if config.time_passes {
-            command.arg("-Ztime-passes");
-        }
         self.write_code(code_block, config)?;
         let cargo_output = run_cargo(command, code_block)?;
         if config.time_passes {

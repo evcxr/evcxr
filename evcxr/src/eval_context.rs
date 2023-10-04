@@ -98,10 +98,11 @@ pub(crate) struct Config {
     /// The host target that we're compiling for. e.g. x86_64-unknown-linux-gnu
     pub(crate) target: String,
     pub(crate) allow_static_linking: bool,
+    subprocess_path: PathBuf,
 }
 
-fn create_initial_config(tmpdir: PathBuf) -> Result<Config> {
-    let mut config = Config::new(tmpdir)?;
+fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Config> {
+    let mut config = Config::new(tmpdir, subprocess_path)?;
     // default the linker to mold, then lld, first checking if either are installed
     // neither linkers support macos, so fallback to system (aka default)
     // https://github.com/rui314/mold/issues/132
@@ -114,7 +115,7 @@ fn create_initial_config(tmpdir: PathBuf) -> Result<Config> {
 }
 
 impl Config {
-    pub fn new(tmpdir: PathBuf) -> Result<Self> {
+    pub fn new(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Self> {
         let rustc_path = default_rustc_path()?;
         let core_extern = core_extern(&rustc_path)?;
         let target = get_host_target(Path::new(&rustc_path))?;
@@ -138,6 +139,7 @@ impl Config {
             core_extern,
             target,
             allow_static_linking: false,
+            subprocess_path,
         })
     }
 
@@ -170,8 +172,42 @@ impl Config {
         if self.offline_mode {
             command.arg("--offline");
         }
-        command.arg(command_name);
-        command.current_dir(self.crate_dir());
+
+        let mut rustflags = vec!["-Cprefer-dynamic".to_owned()];
+        if self.linker == "lld" {
+            rustflags.push(format!("-Clink-arg=-fuse-ld={}", self.linker));
+        }
+        if self.time_passes {
+            rustflags.push("-Ztime-passes".to_owned());
+        }
+
+        command
+            .arg(command_name)
+            .current_dir(self.crate_dir())
+            .env("CARGO_TARGET_DIR", "target")
+            .env("RUSTC", &self.rustc_path)
+            .env("RUSTFLAGS", rustflags.join(" "))
+            .env(crate::module::CORE_EXTERN_ENV, &self.core_extern);
+
+        if command_name == "build" || command_name == "check" {
+            command
+                .arg("--target")
+                .arg(&self.target)
+                .arg("--message-format=json");
+        }
+
+        if self.allow_static_linking {
+            if let Some(sccache) = &self.sccache {
+                command.env("RUSTC_WRAPPER", sccache);
+            }
+        } else {
+            command.env("RUSTC_WRAPPER", &self.subprocess_path);
+            command.env(
+                runtime::EVCXR_NEXT_RUSTC_WRAPPER,
+                self.sccache.as_deref().unwrap_or(Path::new("")),
+            );
+        }
+
         command
     }
 
@@ -354,9 +390,10 @@ impl EvalContext {
         }
 
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
-        let module = Module::new(subprocess_command.get_program().into())?;
+        let module = Module::new()?;
 
-        let initial_config = create_initial_config(tmpdir_path)?;
+        let initial_config =
+            create_initial_config(tmpdir_path, subprocess_command.get_program().into())?;
         Self::apply_platform_specific_vars(&initial_config, &mut subprocess_command);
 
         let (stdout_sender, stdout_receiver) = crossbeam_channel::unbounded();
@@ -2058,7 +2095,11 @@ mod tests {
     }
 
     fn create_state() -> ContextState {
-        let config = Config::new(PathBuf::from("/dummy_path")).unwrap();
+        let config = Config::new(
+            PathBuf::from("/dummy_path"),
+            PathBuf::from("/dummy_evcxr_bin"),
+        )
+        .unwrap();
         ContextState::new(config)
     }
 
