@@ -34,6 +34,11 @@ pub(crate) fn shared_object_prefix() -> &'static str {
     }
 }
 
+pub(crate) fn rlib_prefix() -> &'static str {
+    // Rlibs are, fortunately consistent in that they always start with "lib" for all platforms.
+    "lib"
+}
+
 pub(crate) fn shared_object_extension() -> &'static str {
     if cfg!(target_os = "macos") {
         "dylib"
@@ -285,6 +290,14 @@ pub(crate) fn wrap_rustc(next_wrapper: &str) {
 }
 
 pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
+    let args = std::env::args();
+    std::fs::OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open("/tmp/a.log")
+        .unwrap()
+        .write_all(format!("{args:?}\n").as_bytes())
+        .unwrap();
     let num_crate_types = std::env::args_os()
         .filter(|arg| arg == "--crate-type")
         .count();
@@ -365,8 +378,19 @@ pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
 
 fn map_extern_arg(ext: &str) -> OsString {
     if let Some((crate_name, path)) = ext.split_once('=') {
-        let path = Path::new(path);
+        let mut path = PathBuf::from(path);
         let mut so_arg = OsString::from(crate_name);
+        // Remove the rlib prefix and add the shared object prefix (if any). On unix platforms this
+        // is redundant because both are "lib", but it's necessary on Windows. We do it
+        // unconditionally though because it's cheap and it makes sure the code always gets tested.
+        if let Some(without_prefix) = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .and_then(|f| f.strip_prefix(rlib_prefix()))
+        {
+            let prefix = shared_object_prefix();
+            path = path.with_file_name(format!("{prefix}{without_prefix}"));
+        }
         so_arg.push("=");
         so_arg.push(path.with_extension(shared_object_extension()));
         return so_arg;
