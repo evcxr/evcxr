@@ -290,14 +290,6 @@ pub(crate) fn wrap_rustc(next_wrapper: &str) {
 }
 
 pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
-    let args = std::env::args();
-    std::fs::OpenOptions::new()
-        .append(true)
-        .create(true)
-        .open("/tmp/a.log")
-        .unwrap()
-        .write_all(format!("{args:?}\n").as_bytes())
-        .unwrap();
     let num_crate_types = std::env::args_os()
         .filter(|arg| arg == "--crate-type")
         .count();
