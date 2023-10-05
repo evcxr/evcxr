@@ -384,8 +384,13 @@ fn map_extern_arg(ext: &str) -> OsString {
             path = path.with_file_name(format!("{prefix}{without_prefix}"));
         }
         so_arg.push("=");
-        so_arg.push(path.with_extension(shared_object_extension()));
-        return so_arg;
+        let path = path.with_extension(shared_object_extension());
+        // The shared object might not exist yet if we're doing a `cargo check`, so we only attempt
+        // to use it if it actually exists.
+        if path.exists() {
+            so_arg.push(path);
+            return so_arg;
+        }
     }
     OsString::from(ext)
 }
