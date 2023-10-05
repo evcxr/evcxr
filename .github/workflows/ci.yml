@@ -11,17 +11,10 @@ env:
 
 jobs:
   ci-linux:
-    # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'evcxr/evcxr'
+    name: Build and test (Linux)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-
     steps:
-      - uses: actions/checkout@v2
-
+      - uses: actions/checkout@v3
       - uses: actions/cache@v2
         # https://github.com/actions/cache/blob/main/examples.md#rust---cargo
         with:
@@ -32,28 +25,37 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ runner.os }}-cargo-check-${{ hashFiles('**/Cargo.lock') }}
-
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          override: true
-          components: rustfmt, clippy, rust-src
+          components: rust-src
+      - run: cargo build
+      - run: cargo test
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
+  rustfmt:
+    name: Check formatting
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt
+    - run: cargo fmt --all -- --check
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: clippy
+    - run: cargo clippy --target x86_64-unknown-linux-gnu
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+  cackle:
+    name: Cackle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: cackle-rs/cackle-action@latest
+      - run: cargo acl -n

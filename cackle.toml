@@ -9,11 +9,6 @@ import_std = [
 [sandbox]
 kind = "Bubblewrap"
 
-[rustc.sandbox]
-# TODO: Enable once it's working here. Right now typenum is failing to build because the environment
-# variable TYPENUM_BUILD_OP isn't making it into rustc.
-kind = "Disabled"
-
 [api.net]
 include = [
     "mio::net",
