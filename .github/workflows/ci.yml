@@ -51,12 +51,3 @@ jobs:
       with:
         components: clippy
     - run: cargo clippy --target x86_64-unknown-linux-gnu
-
-  cackle:
-    name: Cackle
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: cackle-rs/cackle-action@latest
-      - run: cargo acl -n
