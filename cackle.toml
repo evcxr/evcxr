@@ -246,16 +246,10 @@ allow_unsafe = true
 [pkg.arrayvec]
 allow_unsafe = true
 
-[pkg.hkalbasi-rustc-ap-rustc_index]
-allow_unsafe = true
-
 [pkg.crossbeam-channel]
 allow_unsafe = true
 
 [pkg.ra_ap_profile]
-allow_unsafe = true
-
-[pkg.anymap]
 allow_unsafe = true
 
 [pkg.petgraph]
@@ -505,9 +499,6 @@ allow_apis = [
 [pkg.futures-util.build]
 allow_apis = [
 ]
-
-[pkg.hkalbasi-rustc-ap-rustc_abi]
-allow_unsafe = true
 
 [pkg.chalk-ir]
 allow_unsafe = true
@@ -796,4 +787,7 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.ra-ap-rustc_index]
+allow_unsafe = true
+
+[pkg.ra-ap-rustc_abi]
 allow_unsafe = true

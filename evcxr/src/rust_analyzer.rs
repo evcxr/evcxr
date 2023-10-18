@@ -276,6 +276,7 @@ impl RustAnalyzer {
             enable_self_on_the_fly: true,
             enable_private_editable: true,
             prefer_no_std: false,
+            full_function_signatures: true,
             snippets: vec![],
             insert_use: InsertUseConfig {
                 prefix_kind: ra_hir::PrefixKind::ByCrate,
