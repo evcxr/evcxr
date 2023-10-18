@@ -277,8 +277,8 @@ offline = {}
     }
 }
 
-pub(crate) fn wrap_rustc(next_wrapper: &str) {
-    match wrap_rustc_helper(next_wrapper) {
+pub(crate) fn wrap_rustc() {
+    match wrap_rustc_helper() {
         Err(error) => {
             eprintln!("Failed to wrap rustc: {error}");
             std::process::exit(-1);
@@ -289,7 +289,7 @@ pub(crate) fn wrap_rustc(next_wrapper: &str) {
     }
 }
 
-pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
+pub(crate) fn wrap_rustc_helper() -> Result<i32> {
     let num_crate_types = std::env::args_os()
         .filter(|arg| arg == "--crate-type")
         .count();
@@ -299,12 +299,7 @@ pub(crate) fn wrap_rustc_helper(next_wrapper: &str) -> Result<i32> {
     args.next();
     let rustc = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
     let mut command;
-    if next_wrapper.is_empty() {
-        command = std::process::Command::new(&rustc);
-    } else {
-        command = std::process::Command::new(next_wrapper);
-        command.arg(&rustc);
-    }
+    command = std::process::Command::new(&rustc);
     let mut got_prefer_dynamic = false;
     while let Some(arg) = args.next() {
         if arg == "-C" {

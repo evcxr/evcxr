@@ -202,10 +202,7 @@ impl Config {
             }
         } else {
             command.env("RUSTC_WRAPPER", &self.subprocess_path);
-            command.env(
-                runtime::EVCXR_NEXT_RUSTC_WRAPPER,
-                self.sccache.as_deref().unwrap_or(Path::new("")),
-            );
+            command.env(runtime::WRAP_RUSTC_ENV, "1");
         }
 
         command
