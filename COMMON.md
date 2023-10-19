@@ -128,20 +128,12 @@ Executing prelude from "~/.config/evcxr/prelude.rs"
 
 ### Caching
 
-You can optionally cache compilation outputs with [sccache](https://github.com/mozilla/sccache). If
-you frequently use the same crates, this can speed things up quite a bit.
+You can optionally cache compilation outputs. To do so, add `:cache {size in MB}` to your
+`init.evcxr`. e.g. to have a 500 MB cache, add the following:
 
-You can install sccache with cargo:
-```sh
-$ cargo install sccache
 ```
-
-And set the sccache configuration option:
-```sh
-:sccache 1
+:cache 500
 ```
-
-To always use sccache, add `:sccache 1` to your init.evcxr (see Startup options above).
 
 ### Variable Persistence
 

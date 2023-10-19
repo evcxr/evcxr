@@ -191,7 +191,7 @@ impl Server {
             let message = match receiver.recv().await {
                 Some(x) => x,
                 None => {
-                    // Other end has closed. This is expected when we're shuting
+                    // Other end has closed. This is expected when we're shutting
                     // down.
                     return Ok(());
                 }

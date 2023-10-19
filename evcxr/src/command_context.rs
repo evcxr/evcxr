@@ -23,6 +23,7 @@ use crate::rust_analyzer::Completions;
 use crate::EvalContext;
 use crate::EvalContextOutputs;
 use crate::EvalOutputs;
+use anyhow::anyhow;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -521,6 +522,17 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 |_ctx, state, args| {
                     state.set_sccache(args.as_ref().map(String::as_str) != Some("0"))?;
                     text_output(format!("sccache: {}", state.sccache()))
+                },
+            ),
+            AvailableCommand::new(
+                ":cache",
+                "Set cache size in MB, or 0 to disable.",
+                |_ctx, state, args| {
+                    if let Some(arg) = args.as_ref() {
+                        let bytes: u64 = arg.parse().map_err(|_| anyhow!("Invalid value"))?;
+                        state.set_cache_bytes(bytes * 1024 * 1024);
+                    }
+                    text_output(format!("cache: {} bytes", state.cache_bytes()))
                 },
             ),
             AvailableCommand::new(

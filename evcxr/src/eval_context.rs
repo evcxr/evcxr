@@ -28,7 +28,6 @@ use crate::rust_analyzer::TypeName;
 use crate::rust_analyzer::VariableInfo;
 use crate::use_trees::Import;
 use anyhow::Result;
-use dirs::home_dir;
 use once_cell::sync::Lazy;
 use ra_ap_ide::TextRange;
 use ra_ap_syntax::ast;
@@ -92,6 +91,7 @@ pub(crate) struct Config {
     pub(crate) toolchain: String,
     cargo_path: PathBuf,
     pub(crate) rustc_path: PathBuf,
+    cache_bytes: u64,
     /// A string of the form "core:/path/to/libstd-...so". This must be libstd that corresponds to
     /// the rust compiler in `rustc_path` so must be updated whenever `rustc_path` is updated.
     pub(crate) core_extern: OsString,
@@ -131,6 +131,7 @@ impl Config {
             error_fmt: &ERROR_FORMATS[0],
             time_passes: false,
             linker: "system".to_owned(),
+            cache_bytes: 0,
             sccache: None,
             offline_mode: false,
             toolchain: String::new(),
@@ -158,6 +159,14 @@ impl Config {
 
     pub fn sccache(&self) -> bool {
         self.sccache.is_some()
+    }
+
+    pub fn set_cache_bytes(&mut self, bytes: u64) {
+        self.cache_bytes = bytes;
+    }
+
+    pub fn cache_bytes(&self) -> u64 {
+        self.cache_bytes
     }
 
     pub(crate) fn cargo_command(&self, command_name: &str) -> Command {
@@ -188,6 +197,13 @@ impl Config {
             .env("RUSTC", &self.rustc_path)
             .env("RUSTFLAGS", rustflags.join(" "))
             .env(crate::module::CORE_EXTERN_ENV, &self.core_extern);
+        if self.cache_bytes > 0 {
+            command.env(crate::module::CACHE_ENABLED_ENV, "1");
+            command.env(
+                crate::module::cache::TARGET_DIR_ENV,
+                self.common_target_dir(),
+            );
+        }
 
         if command_name == "build" || command_name == "check" {
             command
@@ -196,13 +212,16 @@ impl Config {
                 .arg("--message-format=json");
         }
 
-        if self.allow_static_linking {
+        if self.allow_static_linking && self.cache_bytes == 0 {
             if let Some(sccache) = &self.sccache {
                 command.env("RUSTC_WRAPPER", sccache);
             }
         } else {
             command.env("RUSTC_WRAPPER", &self.subprocess_path);
             command.env(runtime::WRAP_RUSTC_ENV, "1");
+            if !self.allow_static_linking {
+                command.env(runtime::FORCE_DYLIB_ENV, "1");
+            }
         }
 
         command
@@ -221,7 +240,11 @@ impl Config {
     }
 
     pub(crate) fn target_dir(&self) -> PathBuf {
-        self.tmpdir.join("target").join(&self.target)
+        self.common_target_dir().join(&self.target)
+    }
+
+    pub(crate) fn common_target_dir(&self) -> PathBuf {
+        self.tmpdir.join("target")
     }
 }
 
@@ -1203,6 +1226,14 @@ impl ContextState {
         self.config.set_sccache(enabled)
     }
 
+    pub fn set_cache_bytes(&mut self, bytes: u64) {
+        self.config.set_cache_bytes(bytes)
+    }
+
+    pub fn cache_bytes(&mut self) -> u64 {
+        self.config.cache_bytes()
+    }
+
     pub fn sccache(&self) -> bool {
         self.config.sccache()
     }
@@ -1990,7 +2021,7 @@ fn default_tool_path(tool: &str, fallback: &str) -> Result<PathBuf> {
         // downloads a pre-built evcxr binary and runs it and someone else on the system knows
         // they're going to do this, so puts a malicious cargo/rustc binary at the location of the
         // fallback path.
-        if let Some(home) = home_dir() {
+        if let Some(home) = dirs::home_dir() {
             if path.starts_with(home) {
                 // Note, if the user is using rustup, then we're likely returning the path to the
                 // rustup proxy, so they won't in this case get the speedup from bypassing the

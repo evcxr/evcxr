@@ -5,6 +5,8 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use self::artifacts::read_artifacts;
+use self::cache::CacheResult;
 use crate::code_block::CodeBlock;
 use crate::errors::bail;
 use crate::errors::CompilationError;
@@ -21,8 +23,13 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
+
+mod artifacts;
+pub(crate) mod cache;
 
 pub(crate) const CORE_EXTERN_ENV: &str = "EVCXR_CORE_EXTERN";
+pub(crate) const CACHE_ENABLED_ENV: &str = "EVCXR_CACHE_ENABLED";
 
 pub(crate) fn shared_object_prefix() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -196,11 +203,13 @@ impl Module {
                 "code_{}",
                 self.build_num
             )));
-        // Every time we compile, the output file is the same. We need to
-        // renamed it so that we have a unique filename, otherwise we wouldn't
-        // be able to load the result of the next compilation. Also, on Windows,
-        // a loaded dll gets locked, so we couldn't even compile a second time
-        // if we didn't load a different file.
+        if config.cache_bytes() > 0 {
+            crate::module::cache::cleanup(config.cache_bytes())?;
+        }
+        // Every time we compile, the output file is the same. We need to rename it so that we have
+        // a unique filename, otherwise we wouldn't be able to load the result of the next
+        // compilation. Also, on Windows, a loaded dll gets locked, so we couldn't even compile a
+        // second time if we didn't load a different file.
         rename_or_copy_so_file(&self.so_path(config), &copied_so_file)?;
         Ok(SoFile {
             path: copied_so_file,
@@ -290,16 +299,46 @@ pub(crate) fn wrap_rustc() {
 }
 
 pub(crate) fn wrap_rustc_helper() -> Result<i32> {
+    let mut command = rustc_command()?;
+
+    let cache_result = cache::access_cache(&command)?;
+    if matches!(cache_result, CacheResult::Hit) {
+        return Ok(0);
+    }
+
+    let output = command.output()?;
+
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+
+    if output.status.code() == Some(0) {
+        let stderr = std::str::from_utf8(&output.stderr).context("Rustc emitted invalid UTF-8")?;
+        let artifacts = read_artifacts(stderr);
+        if let CacheResult::Miss(cache_miss) = cache_result {
+            cache_miss.update_cache(&artifacts)?;
+        }
+    }
+
+    Ok(output.status.code().unwrap_or(-1))
+}
+
+fn rustc_command() -> Result<Command> {
+    let mut args = std::env::args().peekable();
+    args.next();
+    let rustc = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
+    let mut command = std::process::Command::new(&rustc);
+
+    if !should_force_dylibs() {
+        command.args(args);
+        return Ok(command);
+    }
+
     let num_crate_types = std::env::args_os()
         .filter(|arg| arg == "--crate-type")
         .count();
     let core_extern = std::env::var(CORE_EXTERN_ENV)
         .with_context(|| format!("Internal env var {CORE_EXTERN_ENV}` not set"))?;
-    let mut args = std::env::args().peekable();
-    args.next();
-    let rustc = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
-    let mut command;
-    command = std::process::Command::new(&rustc);
+
     let mut got_prefer_dynamic = false;
     while let Some(arg) = args.next() {
         if arg == "-C" {
@@ -307,6 +346,9 @@ pub(crate) fn wrap_rustc_helper() -> Result<i32> {
             if next.map(|n| n == "prefer-dynamic").unwrap_or_default() {
                 got_prefer_dynamic = true;
             }
+        }
+        if arg == "-Cprefer-dynamic" {
+            got_prefer_dynamic = true;
         }
 
         // If a static library is being linked into this crate, then we modify the linker arguments
@@ -354,13 +396,11 @@ pub(crate) fn wrap_rustc_helper() -> Result<i32> {
     if !got_prefer_dynamic {
         command.arg("-C").arg("prefer-dynamic");
     }
+    Ok(command)
+}
 
-    let output = command.output()?;
-
-    std::io::stdout().write_all(&output.stdout)?;
-    std::io::stderr().write_all(&output.stderr)?;
-
-    Ok(output.status.code().unwrap_or(-1))
+fn should_force_dylibs() -> bool {
+    std::env::var(crate::runtime::FORCE_DYLIB_ENV).is_ok()
 }
 
 fn map_extern_arg(ext: &str) -> OsString {

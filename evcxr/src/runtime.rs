@@ -17,6 +17,7 @@ use std::{self};
 pub(crate) const EVCXR_IS_RUNTIME_VAR: &str = "EVCXR_IS_RUNTIME";
 pub(crate) const EVCXR_EXECUTION_COMPLETE: &str = "EVCXR_EXECUTION_COMPLETE";
 pub(crate) const WRAP_RUSTC_ENV: &str = "EVCXR_RUSTC_WRAPPER";
+pub(crate) const FORCE_DYLIB_ENV: &str = "EVCXR_FORCE_DYLIB";
 
 /// Binaries can call this just after staring. If we detect that we're actually running as a
 /// subprocess, control will not return. There are two kinds of subprocesses that we may be acting
