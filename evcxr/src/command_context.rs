@@ -531,13 +531,23 @@ Panic detected. Here's some useful information if you're filing a bug report.
             ),
             AvailableCommand::new(
                 ":cache",
-                "Set cache size in MB, or 0 to disable.",
+                "Set cache size in MiB, or 0 to disable.",
                 |_ctx, state, args| {
                     if let Some(arg) = args.as_ref() {
                         let bytes: u64 = arg.parse().map_err(|_| anyhow!("Invalid value"))?;
                         state.set_cache_bytes(bytes * 1024 * 1024);
+                    } else if let Ok(stats) = crate::module::cache::CacheStats::get() {
+                        return text_output(format!("{stats}Size limit: {} MiB", state.cache_bytes() / 1024 / 1024));
                     }
-                    text_output(format!("cache: {} bytes", state.cache_bytes()))
+                    text_output(format!("cache: {} MiB", state.cache_bytes() / 1024 / 1024))
+                },
+            ),
+            AvailableCommand::new(
+                ":clear_cache",
+                "Clear the cache used by the :cache command",
+                |_ctx, _state, _args| {
+                        let freed = crate::module::cache::cleanup(0)?;
+                        text_output(format!("Deleted {} MiB from cache", freed / 1024 / 1024))
                 },
             ),
             AvailableCommand::new(

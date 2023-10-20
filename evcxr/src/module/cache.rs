@@ -4,6 +4,7 @@ use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
 use std::borrow::Cow;
+use std::fmt::Display;
 use std::fmt::Write;
 use std::hash::Hasher;
 use std::path::PathBuf;
@@ -216,11 +217,13 @@ impl CacheMiss {
     }
 }
 
-pub(crate) fn cleanup(cache_bytes: u64) -> Result<()> {
+/// Reduces cache usage to <= `cache_bytes`. Returns the number of bytes freed.
+pub(crate) fn cleanup(cache_bytes: u64) -> Result<u64> {
+    let mut freed = 0;
     let mut entries = read_cache_entries()?;
     let total_size: u64 = entries.iter().map(|e| e.size).sum();
     if total_size <= cache_bytes {
-        return Ok(());
+        return Ok(freed);
     }
     entries.sort_by_key(|e| e.last_access);
     entries.reverse();
@@ -231,9 +234,43 @@ pub(crate) fn cleanup(cache_bytes: u64) -> Result<()> {
         };
         std::fs::remove_dir_all(entry.subdirectory)?;
         to_free -= entry.size as i64;
+        freed += entry.size;
     }
 
-    Ok(())
+    Ok(freed)
+}
+
+#[derive(Default)]
+pub(crate) struct CacheStats {
+    num_entries: u64,
+    disk_used: u64,
+    num_hits: u64,
+}
+
+impl CacheStats {
+    pub(crate) fn get() -> Result<Self> {
+        let mut result = CacheStats::default();
+        for entry in read_cache_entries()? {
+            result.num_entries += 1;
+            result.disk_used += entry.size;
+            if let Some(hits) = std::fs::read_to_string(entry.subdirectory.join("hits"))
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+            {
+                result.num_hits += hits;
+            }
+        }
+        Ok(result)
+    }
+}
+
+impl Display for CacheStats {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Entries: {}", self.num_entries)?;
+        writeln!(f, "Disk used: {} MiB", self.disk_used / 1024 / 1024)?;
+        writeln!(f, "Hits: {}", self.num_hits)?;
+        Ok(())
+    }
 }
 
 struct CacheEntry {

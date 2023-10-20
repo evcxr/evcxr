@@ -135,6 +135,9 @@ You can optionally cache compilation outputs. To do so, add `:cache {size in MB}
 :cache 500
 ```
 
+To disable the cache, use `:cache 0`. Running with the cache disabled doesn't clear the cache. To
+clear the cache, run `:clear_cache`.
+
 ### Variable Persistence
 
 The `:vars` command will list all the variables defined in the current context:
