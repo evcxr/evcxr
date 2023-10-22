@@ -1,3 +1,20 @@
+# Version 0.16.0 (unreleased)
+* Now compiles dependencies as dylibs. This means that mutable static variables in dependencies are
+  now preserved between executions. If you hit problems with this, please file a bug report. You can
+  restore the old behaviour with `:allow_static_linking 1`.
+* New built-in caching mechanism. Enable a 500MiB cache by adding `:cache 500` to your
+  `~/.config/evcxr/init.evcxr`.
+* Use of sccache is now deprecated, since it doesn't work with dylibs. Switching to the new caching
+  mechanism is recommended.
+* Update to latest rust-analyzer
+* New command to show current dependencies: `:show_deps`. Thanks momori256.
+* Fixed some issues with the jupyter kernel not shutting down cleanly.
+* Fixed Tokio runtime being poisoned after panic. Thanks martinitus.
+* Added a `:doc` command to show documentation for something. Thanks baiguoname.
+* Improvements to an error message. Thanks baiguoname.
+* Improved docs for how to determine config path. Thanks anandijain.
+* Now requires rust version 1.70 or later
+
 # Version 0.15.1
 * Fix miscompilation when there's a trailing comment after an expression.
 * Fix out-of-order printing in evcxr_jupyter
