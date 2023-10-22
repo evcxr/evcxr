@@ -1,4 +1,4 @@
-# Version 0.16.0 (unreleased)
+# Version 0.16.0
 * Now compiles dependencies as dylibs. This means that mutable static variables in dependencies are
   now preserved between executions. If you hit problems with this, please file a bug report. You can
   restore the old behaviour with `:allow_static_linking 1`.
