@@ -12,35 +12,33 @@ If you don't already have Rust installed, [follow these
 instructions](https://www.rust-lang.org/tools/install).
 
 You can either download a pre-built binary from the
-[Releases](https://github.com/evcxr/evcxr/releases) page, extract it from the
-archive and put it somewhere on your path, or build from source by running:
+[Releases](https://github.com/evcxr/evcxr/releases) page, extract it from the archive and put it
+somewhere on your path, or build from source by running:
 ```sh
 cargo install --locked evcxr_jupyter
 ```
 
-Whether using a prebuilt binary or one you built yourself, you'll need to run
-the following command in order to register the kernel with Jupyter.
+Whether using a prebuilt binary or one you built yourself, you'll need to run the following command
+in order to register the kernel with Jupyter.
 
 ```sh
 evcxr_jupyter --install
 ```
 
-By default, `evcxr_jupyter --install` will install the kernel into a user local
-directory, e.g., `$HOME/.local/share/jupyter/kernels`.
+By default, `evcxr_jupyter --install` will install the kernel into a user local directory, e.g.,
+`$HOME/.local/share/jupyter/kernels`.
 
-If your operating system is an older version, or has a different libc than what
-the pre-built binaries were compiled with, then you'll need to build from source
-using the command above.
+If your operating system is an older version, or has a different libc than what the pre-built
+binaries were compiled with, then you'll need to build from source using the command above.
 
-To actually use evcxr_jupyter, you'll need Jupyter notbook to be installed.
+To actually use evcxr_jupyter, you'll need Jupyter notebook to be installed.
 * Debian or Ubuntu Linux: `sudo apt install jupyter-notebook`
 * Mac: You might be able to `brew install jupyter`
-* Windows, or if the above options don't work for you, see
-  https://jupyter.org/install
+* Windows, or if the above options don't work for you, see https://jupyter.org/install
 
-You'll also need the source for the Rust standard library installed. If you
-already use rust-analyzer, you'll likely have this installed. To install this
-using rustup, run:
+You'll also need the source for the Rust standard library installed. If you already use
+rust-analyzer, you'll likely have this installed. To install this using rustup, run:
+
 ```sh
 rustup component add rust-src
 ```
@@ -53,27 +51,25 @@ To start Jupyter Notebook, run:
 jupyter notebook
 ```
 
-Once started, it should open a page in your web browser. Look for the "New" menu
-on the right and from it, select "Rust".
+Once started, it should open a page in your web browser. Look for the "New" menu on the right and
+from it, select "Rust".
 
 ## Usage information
 
 Evcxr is both a REPL and a Jupyter kernel. See [Evcxr common
-usage](https://github.com/evcxr/evcxr/blob/main/COMMON.md) for information that is common
-to both.
+usage](https://github.com/evcxr/evcxr/blob/main/COMMON.md) for information that is common to both.
 
 ## Custom output
 
-The last expression in a cell gets printed. By default, we'll use the debug
-formatter to emit plain text. If you'd like, you can provide a function to show
-your type (or someone else's type) as HTML (or an image). To do this, the type
-needs to implement a method called ```evcxr_display``` which should then print
-one or more mime-typed blocks to stdout. Each block starts with a line
-containing EVCXR\_BEGIN\_CONTENT followed by the mime type, then a newline, the
-content then ends with a line containing EVCXR\_END\_CONTENT.
+The last expression in a cell gets printed. By default, we'll use the debug formatter to emit plain
+text. If you'd like, you can provide a function to show your type (or someone else's type) as HTML
+(or an image). To do this, the type needs to implement a method called ```evcxr_display``` which
+should then print one or more mime-typed blocks to stdout. Each block starts with a line containing
+EVCXR\_BEGIN\_CONTENT followed by the mime type, then a newline, the content then ends with a line
+containing EVCXR\_END\_CONTENT.
 
-For example, the following shows how you might provide a custom display function for a
-type Matrix. You can copy this code into a Jupyter notebook cell to try it out.
+For example, the following shows how you might provide a custom display function for a type Matrix.
+You can copy this code into a Jupyter notebook cell to try it out.
 
 ```rust
 use std::fmt::Debug;
@@ -99,12 +95,11 @@ let m = Matrix {values: vec![1,2,3,4,5,6,7,8,9], row_size: 3};
 m
 ```
 
-It's probably a good idea to either print the whole block at once, or to lock
-stdout then print the block. This should ensure that nothing else prints to
-stdout at the same time (at least no other Rust code).
+It's probably a good idea to either print the whole block at once, or to lock stdout then print the
+block. This should ensure that nothing else prints to stdout at the same time (at least no other
+Rust code).
 
-If the content is binary (e.g. mime type "image/png") then it should be base64
-encoded.
+If the content is binary (e.g. mime type "image/png") then it should be base64 encoded.
 
 ## Prompting for input
 
@@ -116,8 +111,8 @@ let password = evcxr_input::get_password("Password?");
 
 ## Installing from git head
 
-If there's a bugfix in git that you'd like to try out, you can install directly
-from git with the command:
+If there's a bugfix in git that you'd like to try out, you can install directly from git with the
+command:
 
 ```sh
 cargo install --force --git https://github.com/evcxr/evcxr.git evcxr_jupyter
