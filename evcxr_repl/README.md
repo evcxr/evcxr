@@ -75,7 +75,8 @@ $ cargo install --force --git https://github.com/evcxr/evcxr.git evcxr_repl
 ## Similar projects
 
 * [irust](https://crates.io/crates/irust). Looks to have quite a sophisticated command line
-  interface. If you don't need variable preservation, this is probably worth checking out.
+  interface. All your code gets rerun each time. For many uses this is fine and has the advantage
+  that you can have variables reference other variables.
 * [cargo-eval](https://github.com/reitermarkus/cargo-eval) Not interactive, but it gives you a quick
   way to evaluate Rust code from the command line and/or scripts.
 * [rusti](https://github.com/murarth/rusti). Deprecated since 2019. Also, rusti requires a nightly
