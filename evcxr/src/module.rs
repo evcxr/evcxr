@@ -326,7 +326,7 @@ fn rustc_command() -> Result<Command> {
     let mut args = std::env::args().peekable();
     args.next();
     let rustc = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
-    let mut command = std::process::Command::new(&rustc);
+    let mut command = std::process::Command::new(rustc);
 
     if !should_force_dylibs() {
         command.args(args);
