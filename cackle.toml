@@ -51,22 +51,11 @@ include = [
 [pkg.salsa-macros]
 allow_proc_macro = true
 
-[pkg.enum-primitive-derive]
-allow_proc_macro = true
-
 [pkg.chalk-derive]
 allow_proc_macro = true
 
 [pkg.thiserror-impl]
 allow_proc_macro = true
-
-[pkg.proc-macro-hack]
-allow_proc_macro = true
-
-[pkg.proc-macro-hack.build]
-allow_apis = [
-    "process",
-]
 
 [pkg.futures-macro]
 allow_proc_macro = true
@@ -91,9 +80,6 @@ allow_proc_macro = true
 allow_proc_macro = true
 
 [pkg.serde_derive]
-allow_proc_macro = true
-
-[pkg.const-random-macro]
 allow_proc_macro = true
 
 [pkg.clap_derive]
@@ -296,9 +282,6 @@ allow_apis = [
 
 [pkg.rayon-core]
 allow_unsafe = true
-allow_apis = [
-    "fs",
-]
 
 [pkg.cc]
 allow_unsafe = true
@@ -355,11 +338,6 @@ allow_apis = [
 [pkg.unicode-normalization]
 allow_unsafe = true
 
-[pkg.crunchy.build]
-allow_apis = [
-    "fs",
-]
-
 [pkg.num-traits]
 allow_unsafe = true
 
@@ -388,11 +366,6 @@ allow_unsafe = true
 [pkg.anyhow.build]
 allow_apis = [
     "fs",
-    "process",
-]
-
-[pkg.maybe-uninit.build]
-allow_apis = [
     "process",
 ]
 
@@ -510,9 +483,6 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.slab]
-allow_unsafe = true
-
-[pkg.tiny-keccak]
 allow_unsafe = true
 
 [pkg.sig]
@@ -716,9 +686,6 @@ allow_apis = [
 ]
 
 [pkg.home]
-allow_apis = [
-    "fs",
-]
 
 [pkg.libmimalloc-sys]
 allow_unsafe = true
@@ -727,9 +694,6 @@ allow_unsafe = true
 allow_build_instructions = [
     "cargo:rustc-link-*",
 ]
-
-[pkg.ahash]
-allow_unsafe = true
 
 [pkg.zeromq]
 allow_unsafe = true
