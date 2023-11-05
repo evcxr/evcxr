@@ -185,6 +185,27 @@ $ sudo apt install lld
 ```
 `lld` will be used automatically if detected on all systems with the exception of Mac OS. You can check which linker is being used by running `:linker`.
 
+### Using cranelift backend
+
+If you'd like to try using cranelift rather than llvm to do codegen, you can do so using recent rust
+nightly releases.
+
+First update your nightly toolchain with `rustup update nightly` or, if you don't already have it
+installed, `rustup install nightly`.
+
+Install the cranelift preview component:
+
+```sh
+rustup component add rustc-codegen-cranelift-preview --toolchain nightly
+```
+
+Then use the following commands from evcxr or in your init.evcxr.
+
+```
+:toolchain nightly
+:codegen_backend cranelift
+```
+
 ### Commands
 
 Here is a complete list of the configuration options you can set to customize your Evcxr experience:

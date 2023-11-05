@@ -561,6 +561,16 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 },
             ),
             AvailableCommand::new(
+                ":codegen_backend",
+                "Set/print the codegen backend. Requires nightly",
+                |_ctx, state, args| {
+                    if let Some(backend) = args {
+                        state.set_codegen_backend(backend.to_owned());
+                    }
+                    text_output(format!("codegen backend: {}", state.codegen_backend()))
+                },
+            ),
+            AvailableCommand::new(
                 ":explain",
                 "Print explanation of last error",
                 |ctx, _state, _args| {

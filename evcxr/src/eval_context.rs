@@ -85,6 +85,7 @@ pub(crate) struct Config {
     /// Causes the nightly compiler, which must be installed to be selected.
     pub(crate) time_passes: bool,
     pub(crate) linker: String,
+    pub(crate) codegen_backend: Option<String>,
     pub(crate) sccache: Option<PathBuf>,
     /// Whether to attempt to avoid network access.
     pub(crate) offline_mode: bool,
@@ -141,6 +142,7 @@ impl Config {
             target,
             allow_static_linking: false,
             subprocess_path,
+            codegen_backend: None,
         })
     }
 
@@ -188,6 +190,9 @@ impl Config {
         }
         if self.time_passes {
             rustflags.push("-Ztime-passes".to_owned());
+        }
+        if let Some(backend) = self.codegen_backend.as_ref() {
+            rustflags.push(format!("-Zcodegen-backend={backend}"));
         }
 
         command
@@ -1269,6 +1274,18 @@ impl ContextState {
 
     pub fn linker(&self) -> &str {
         &self.config.linker
+    }
+
+    pub fn set_codegen_backend(&mut self, value: String) {
+        self.config.codegen_backend = if value == "default" {
+            None
+        } else {
+            Some(value)
+        };
+    }
+
+    pub fn codegen_backend(&mut self) -> &str {
+        self.config.codegen_backend.as_deref().unwrap_or("default")
     }
 
     pub fn preserve_vars_on_panic(&self) -> bool {
