@@ -140,7 +140,8 @@ impl Config {
             rustc_path,
             core_extern,
             target,
-            allow_static_linking: false,
+            // Our dynamic linking code appears to cause linking to fail on mac.
+            allow_static_linking: cfg!(target_os = "macos"),
             subprocess_path,
             codegen_backend: None,
         })
