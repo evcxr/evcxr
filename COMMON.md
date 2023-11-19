@@ -173,9 +173,12 @@ If you really need `some_values` to persist, you can make `all_values` into a st
 leaking it:
 
 ```rust
-let all_values = Box::leak(Box::new(vec![10, 20, 30, 40, 50]));
+let all_values: &'static Vec<i32> = Box::leak(Box::new(vec![10, 20, 30, 40, 50]));
 let some_values = &all_values[2..3];
 ```
+
+Note that we need to give `all_values` a type here because otherwise the type ends up being a
+mutable reference, which would result in us still having borrow checker problems.
 
 ### Linker
 
