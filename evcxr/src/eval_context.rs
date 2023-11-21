@@ -105,68 +105,65 @@ pub(crate) struct Config {
 #[derive(Default)]
 pub(crate) struct InitConfig {
     tmpdir: Option<PathBuf>,
-    pub(crate) init: Option<String>,
-    pub(crate) prelude: Option<String>,
+    pub(crate) init: Option<PathBuf>,
+    pub(crate) prelude: Option<PathBuf>,
 }
 
 impl InitConfig {
-    pub(crate) fn check_if_exists(path: &Path) -> bool {
-        if !path.is_dir() {
-            return false;
-        }
-        path.read_dir().map_or_else(
-            |_| false,
-            |mut dir| {
-                dir.position(|entry| {
-                    entry.map_or_else(|_| false, |x| x.file_name() == "init.evcxr")
-                })
-                .map_or_else(|| false, |_| true)
-            },
-        )
+    fn check_if_exists(path: &Path) -> bool {
+        path.join("evcxr.toml").exists()
     }
 
-    pub(crate) fn parse_from_path(path: &Path) -> Result<Self, Error> {
-        let content = std::fs::read_to_string(path.join("init.evcxr"))?;
-        let mut res = Self::default();
-        let mut last_config_attr = String::default();
-        for line in content.lines() {
-            if line.trim().starts_with('[') && line.ends_with(']') {
-                last_config_attr = line[1..line.len() - 1].to_string();
-                match last_config_attr.as_str() {
+    fn parse_from_current_dir(path: &Path) -> Result<Self, Error> {
+        let mut res = InitConfig::default();
+        let lines = std::fs::read_to_string(path.join("evcxr.toml"))?;
+        let mut is_start = false;
+        fn modify_value(value: &str) -> Result<&str, Error> {
+            let res = value
+                .trim()
+                .strip_prefix('"')
+                .ok_or_else(|| Error::Message("Syntax is wrong".into()))?
+                .strip_suffix('"')
+                .ok_or_else(|| Error::Message("Syntax is wrong".into()))?;
+            Ok(res)
+        }
+        for line in lines.lines() {
+            if line.trim() == "[config]" {
+                is_start = true;
+                continue;
+            }
+            if !is_start {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = modify_value(value)?;
+                match key {
                     "tmpdir" => {
-                        res.tmpdir = PathBuf::from(String::default()).into();
+                        res.tmpdir = PathBuf::from(value).into();
                     }
                     "init" => {
-                        res.init = String::default().into();
+                        res.init = PathBuf::from(value).into();
                     }
                     "prelude" => {
-                        res.prelude = String::default().into();
+                        res.prelude = PathBuf::from(value).into();
                     }
-                    _ => {
-                        bail!("attribute {} not implemented", last_config_attr);
-                    }
+                    _ => {}
                 }
-                continue;
             }
-            if last_config_attr.is_empty() {
-                continue;
-            }
-            match last_config_attr.as_str() {
-                "tmpdir" => {
-                    res.tmpdir.as_mut().unwrap().push(line);
-                }
-                "init" => {
-                    let data = res.init.as_mut().unwrap();
-                    data.push_str(line);
-                    data.push('\n');
-                }
-                "prelude" => {
-                    let data = res.prelude.as_mut().unwrap();
-                    data.push_str(line);
-                    data.push('\n');
-                }
-                _ => {}
-            }
+        }
+        Ok(res)
+    }
+
+    fn parse_from_config_dir(path: &Path) -> Result<Self, Error> {
+        let mut res = InitConfig::default();
+        let init_path = path.join("init.evcxr");
+        if init_path.exists() {
+            res.init = Some(init_path);
+        }
+        let prelude_path = path.join("prelude.rs");
+        if prelude_path.exists() {
+            res.prelude = Some(prelude_path);
         }
         Ok(res)
     }
@@ -187,13 +184,11 @@ impl InitConfig {
         let mut init_config = InitConfig::default();
         let current_dir = std::env::current_dir()?;
         if Self::check_if_exists(&current_dir) {
-            init_config.update(Self::parse_from_path(&current_dir)?);
+            init_config.update(Self::parse_from_current_dir(&current_dir)?);
         }
         let config_path = crate::config_dir();
         if let Some(config_path) = config_path {
-            if Self::check_if_exists(&config_path) {
-                init_config.update(Self::parse_from_path(&config_path)?);
-            }
+            init_config.update(Self::parse_from_config_dir(&config_path)?);
         }
         if let (None, Ok(from_env)) = (&init_config.tmpdir, std::env::var("EVCXR_TMPDIR")) {
             let tmpdir_path = PathBuf::from(from_env);

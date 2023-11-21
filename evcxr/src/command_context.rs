@@ -226,14 +226,22 @@ Panic detected. Here's some useful information if you're filing a bug report.
         Ok(completions)
     }
 
-    fn load_config(&mut self, _quiet: bool) -> Result<EvalOutputs, Error> {
+    fn load_config(&mut self, quiet: bool) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
         let init_config = InitConfig::parse_as_one_step()?;
-        if let Some(init) = init_config.init {
-            outputs.merge(self.execute(&init)?);
+        if let Some(init_path) = init_config.init {
+            if !quiet {
+                println!("Loading startup commands from {init_path:?}");
+            }
+            let init_content = std::fs::read_to_string(init_path)?;
+            outputs.merge(self.execute(&init_content)?);
         }
-        if let Some(prelude) = init_config.prelude {
-            outputs.merge(self.execute(&prelude)?);
+        if let Some(prelude_path) = init_config.prelude {
+            if !quiet {
+                println!("Executing prelude from {prelude_path:?}");
+            }
+            let prelude_content = std::fs::read_to_string(prelude_path)?;
+            outputs.merge(self.execute(&prelude_content)?);
         }
         Ok(outputs)
     }
