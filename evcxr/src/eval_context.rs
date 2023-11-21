@@ -102,6 +102,108 @@ pub(crate) struct Config {
     subprocess_path: PathBuf,
 }
 
+#[derive(Default)]
+pub(crate) struct InitConfig {
+    tmpdir: Option<PathBuf>,
+    pub(crate) init: Option<String>,
+    pub(crate) prelude: Option<String>,
+}
+
+impl InitConfig {
+    pub(crate) fn check_if_exists(path: &Path) -> bool {
+        if !path.is_dir() {
+            return false
+        }
+        path
+            .read_dir()
+            .map_or_else(
+                |_| false,
+                |mut dir| {
+                    dir
+                        .position(|entry| entry.map_or_else(|_| false, |x| x.file_name() == "init.evcxr"))
+                        .map_or_else(|| false, |_| true)
+                }
+            )
+    }
+
+    pub(crate) fn parse_from_path(path: &Path) -> Result<Self, Error> {
+        let content = std::fs::read_to_string(path.join("init.evcxr"))?;
+        let mut res = Self::default();
+        let mut last_config_attr = String::default();
+        for line in content.lines() {
+            if line.trim().starts_with('[') && line.ends_with(']') {
+                last_config_attr = line[1..line.len() - 1].to_string();
+                match last_config_attr.as_str() {
+                    "tmpdir" => {
+                        res.tmpdir = PathBuf::from(String::default()).into();
+                    }
+                    "init" => {
+                        res.init = String::default().into();
+                    }
+                    "prelude" => {
+                        res.prelude =String::default().into();
+                    }
+                    _ => {
+                        bail!("attribute {} not implemented", last_config_attr);
+                    }
+                }
+                continue
+            }
+            if last_config_attr.is_empty() {
+                continue
+            }
+            match last_config_attr.as_str() {
+                "tmpdir" => {
+                    res.tmpdir.as_mut().unwrap().push(line);
+                }
+                "init" => {
+                    let data = res.init.as_mut().unwrap();
+                    data.push_str(line);
+                    data.push('\n');
+                }
+                "prelude" => {
+                    let data = res.prelude.as_mut().unwrap();
+                    data.push_str(line);
+                    data.push('\n');
+                }
+                _ => {}
+            }
+        }
+        Ok(res)
+    }
+
+    pub(crate) fn update(&mut self, other: Self) {
+        if self.tmpdir.is_none() && other.tmpdir.is_some() {
+            self.tmpdir = other.tmpdir;
+        }
+        if self.init.is_none() && other.init.is_some() {
+            self.init = other.init;
+        }
+        if self.prelude.is_none() && other.prelude.is_some() {
+            self.prelude = other.prelude;
+        }
+    }
+
+    pub(crate) fn parse_as_one_step() -> Result<Self, Error> {
+        let mut init_config = InitConfig::default();
+        let current_dir = std::env::current_dir()?;
+        if Self::check_if_exists(&current_dir) {
+            init_config.update(Self::parse_from_path(&current_dir)?);
+        }
+        let config_path = crate::config_dir();
+        if let Some(config_path) = config_path {
+            if Self::check_if_exists(&config_path) {
+                init_config.update(Self::parse_from_path(&config_path)?);
+            }
+        }
+        if let (None, Ok(from_env)) = (&init_config.tmpdir, std::env::var("EVCXR_TMPDIR")) {
+            let tmpdir_path = PathBuf::from(from_env);
+            init_config.tmpdir = Some(tmpdir_path);
+        }
+        Ok(init_config)
+    }
+}
+
 fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Config> {
     let mut config = Config::new(tmpdir, subprocess_path)?;
     // default the linker to mold, then lld, first checking if either are installed
@@ -406,15 +508,18 @@ impl EvalContext {
         mut subprocess_command: std::process::Command,
     ) -> Result<(EvalContext, EvalContextOutputs), Error> {
         let mut opt_tmpdir = None;
-        let tmpdir_path;
-        if let Ok(from_env) = std::env::var("EVCXR_TMPDIR") {
-            tmpdir_path = PathBuf::from(from_env);
+        let mut tmpdir_path;
+        let init_config = InitConfig::parse_as_one_step()?;
+        if let Some(from_config) = init_config.tmpdir {
+            tmpdir_path = from_config;
         } else {
             let tmpdir = tempfile::tempdir()?;
             tmpdir_path = PathBuf::from(tmpdir.path());
             opt_tmpdir = Some(tmpdir);
         }
-
+        if !tmpdir_path.is_absolute() {
+            tmpdir_path = std::env::current_dir()?.join(tmpdir_path);
+        }
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
         let module = Module::new()?;
 
