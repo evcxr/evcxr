@@ -102,6 +102,102 @@ pub(crate) struct Config {
     subprocess_path: PathBuf,
 }
 
+#[derive(Default)]
+pub(crate) struct InitConfig {
+    tmpdir: Option<PathBuf>,
+    pub(crate) init: Option<PathBuf>,
+    pub(crate) prelude: Option<PathBuf>,
+}
+
+impl InitConfig {
+    fn check_if_exists(path: &Path) -> bool {
+        path.join("evcxr.toml").exists()
+    }
+
+    fn parse_from_current_dir(path: &Path) -> Result<Self, Error> {
+        let mut res = InitConfig::default();
+        let lines = std::fs::read_to_string(path.join("evcxr.toml"))?;
+        let mut is_start = false;
+        fn modify_value(value: &str) -> Result<&str, Error> {
+            let res = value
+                .trim()
+                .strip_prefix('"')
+                .ok_or_else(|| Error::Message("Syntax is wrong".into()))?
+                .strip_suffix('"')
+                .ok_or_else(|| Error::Message("Syntax is wrong".into()))?;
+            Ok(res)
+        }
+        for line in lines.lines() {
+            if line.trim() == "[config]" {
+                is_start = true;
+                continue;
+            }
+            if !is_start {
+                continue;
+            }
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                let value = modify_value(value)?;
+                match key {
+                    "tmpdir" => {
+                        res.tmpdir = PathBuf::from(value).into();
+                    }
+                    "init" => {
+                        res.init = PathBuf::from(value).into();
+                    }
+                    "prelude" => {
+                        res.prelude = PathBuf::from(value).into();
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Ok(res)
+    }
+
+    fn parse_from_config_dir(path: &Path) -> Result<Self, Error> {
+        let mut res = InitConfig::default();
+        let init_path = path.join("init.evcxr");
+        if init_path.exists() {
+            res.init = Some(init_path);
+        }
+        let prelude_path = path.join("prelude.rs");
+        if prelude_path.exists() {
+            res.prelude = Some(prelude_path);
+        }
+        Ok(res)
+    }
+
+    pub(crate) fn update(&mut self, other: Self) {
+        if self.tmpdir.is_none() && other.tmpdir.is_some() {
+            self.tmpdir = other.tmpdir;
+        }
+        if self.init.is_none() && other.init.is_some() {
+            self.init = other.init;
+        }
+        if self.prelude.is_none() && other.prelude.is_some() {
+            self.prelude = other.prelude;
+        }
+    }
+
+    pub(crate) fn parse_as_one_step() -> Result<Self, Error> {
+        let mut init_config = InitConfig::default();
+        let current_dir = std::env::current_dir()?;
+        if Self::check_if_exists(&current_dir) {
+            init_config.update(Self::parse_from_current_dir(&current_dir)?);
+        }
+        let config_path = crate::config_dir();
+        if let Some(config_path) = config_path {
+            init_config.update(Self::parse_from_config_dir(&config_path)?);
+        }
+        if let (None, Ok(from_env)) = (&init_config.tmpdir, std::env::var("EVCXR_TMPDIR")) {
+            let tmpdir_path = PathBuf::from(from_env);
+            init_config.tmpdir = Some(tmpdir_path);
+        }
+        Ok(init_config)
+    }
+}
+
 fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Config> {
     let mut config = Config::new(tmpdir, subprocess_path)?;
     // default the linker to mold, then lld, first checking if either are installed
@@ -406,15 +502,18 @@ impl EvalContext {
         mut subprocess_command: std::process::Command,
     ) -> Result<(EvalContext, EvalContextOutputs), Error> {
         let mut opt_tmpdir = None;
-        let tmpdir_path;
-        if let Ok(from_env) = std::env::var("EVCXR_TMPDIR") {
-            tmpdir_path = PathBuf::from(from_env);
+        let mut tmpdir_path;
+        let init_config = InitConfig::parse_as_one_step()?;
+        if let Some(from_config) = init_config.tmpdir {
+            tmpdir_path = from_config;
         } else {
             let tmpdir = tempfile::tempdir()?;
             tmpdir_path = PathBuf::from(tmpdir.path());
             opt_tmpdir = Some(tmpdir);
         }
-
+        if !tmpdir_path.is_absolute() {
+            tmpdir_path = std::env::current_dir()?.join(tmpdir_path);
+        }
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
         let module = Module::new()?;
 

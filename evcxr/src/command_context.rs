@@ -18,6 +18,7 @@ use crate::errors::Span;
 use crate::errors::SpannedMessage;
 use crate::eval_context::ContextState;
 use crate::eval_context::EvalCallbacks;
+use crate::eval_context::InitConfig;
 use crate::rust_analyzer::Completion;
 use crate::rust_analyzer::Completions;
 use crate::EvalContext;
@@ -227,25 +228,20 @@ Panic detected. Here's some useful information if you're filing a bug report.
 
     fn load_config(&mut self, quiet: bool) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
-        if let Some(config_dir) = crate::config_dir() {
-            let config_file = config_dir.join("init.evcxr");
-            if config_file.exists() {
-                if !quiet {
-                    println!("Loading startup commands from {config_file:?}");
-                }
-                let contents = std::fs::read_to_string(config_file)?;
-                outputs.merge(self.execute(&contents)?);
+        let init_config = InitConfig::parse_as_one_step()?;
+        if let Some(init_path) = init_config.init {
+            if !quiet {
+                println!("Loading startup commands from {init_path:?}");
             }
-            // Note: Loaded *after* init.evcxr so that it can access `:dep`s (or
-            // any other state changed by :commands) specified in the init file.
-            let prelude_file = config_dir.join("prelude.rs");
-            if prelude_file.exists() {
-                if !quiet {
-                    println!("Executing prelude from {prelude_file:?}");
-                }
-                let prelude = std::fs::read_to_string(prelude_file)?;
-                outputs.merge(self.execute(&prelude)?);
+            let init_content = std::fs::read_to_string(init_path)?;
+            outputs.merge(self.execute(&init_content)?);
+        }
+        if let Some(prelude_path) = init_config.prelude {
+            if !quiet {
+                println!("Executing prelude from {prelude_path:?}");
             }
+            let prelude_content = std::fs::read_to_string(prelude_path)?;
+            outputs.merge(self.execute(&prelude_content)?);
         }
         Ok(outputs)
     }
