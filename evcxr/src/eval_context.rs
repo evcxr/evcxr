@@ -112,18 +112,17 @@ pub(crate) struct InitConfig {
 impl InitConfig {
     pub(crate) fn check_if_exists(path: &Path) -> bool {
         if !path.is_dir() {
-            return false
+            return false;
         }
-        path
-            .read_dir()
-            .map_or_else(
-                |_| false,
-                |mut dir| {
-                    dir
-                        .position(|entry| entry.map_or_else(|_| false, |x| x.file_name() == "init.evcxr"))
-                        .map_or_else(|| false, |_| true)
-                }
-            )
+        path.read_dir().map_or_else(
+            |_| false,
+            |mut dir| {
+                dir.position(|entry| {
+                    entry.map_or_else(|_| false, |x| x.file_name() == "init.evcxr")
+                })
+                .map_or_else(|| false, |_| true)
+            },
+        )
     }
 
     pub(crate) fn parse_from_path(path: &Path) -> Result<Self, Error> {
@@ -141,16 +140,16 @@ impl InitConfig {
                         res.init = String::default().into();
                     }
                     "prelude" => {
-                        res.prelude =String::default().into();
+                        res.prelude = String::default().into();
                     }
                     _ => {
                         bail!("attribute {} not implemented", last_config_attr);
                     }
                 }
-                continue
+                continue;
             }
             if last_config_attr.is_empty() {
-                continue
+                continue;
             }
             match last_config_attr.as_str() {
                 "tmpdir" => {
