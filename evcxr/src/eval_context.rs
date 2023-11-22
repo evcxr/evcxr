@@ -99,6 +99,7 @@ pub(crate) struct Config {
     /// The host target that we're compiling for. e.g. x86_64-unknown-linux-gnu
     pub(crate) target: String,
     pub(crate) allow_static_linking: bool,
+    pub(crate) build_envs: HashMap<String, String>,
     subprocess_path: PathBuf,
 }
 
@@ -240,6 +241,7 @@ impl Config {
             allow_static_linking: cfg!(target_os = "macos"),
             subprocess_path,
             codegen_backend: None,
+            build_envs: Default::default(),
         })
     }
 
@@ -298,6 +300,7 @@ impl Config {
             .env("CARGO_TARGET_DIR", "target")
             .env("RUSTC", &self.rustc_path)
             .env("RUSTFLAGS", rustflags.join(" "))
+            .envs(&self.build_envs)
             .env(crate::module::CORE_EXTERN_ENV, &self.core_extern);
         if self.cache_bytes > 0 {
             command.env(crate::module::CACHE_ENABLED_ENV, "1");
@@ -1445,6 +1448,12 @@ impl ContextState {
         }
         self.config.toolchain = value.to_owned();
         Ok(())
+    }
+
+    pub fn set_build_env(&mut self, key: &str, value: &str) {
+        self.config
+            .build_envs
+            .insert(key.to_owned(), value.to_owned());
     }
 
     pub fn toolchain(&mut self) -> &str {

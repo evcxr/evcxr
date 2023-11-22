@@ -586,6 +586,19 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 },
             ),
             AvailableCommand::new(
+                ":build_env",
+                "Set environment variables when building code (key=value)",
+                |_ctx, state, args| {
+                    if let Some(arg) = args {
+                        if let Some((key, value)) = arg.split_once('=') {
+                            state.set_build_env(key, value);
+                            return text_output(format!("Set {key}={value} for build"));
+                        }
+                    }
+                    bail!("Please supply key=value");
+                },
+            ),
+            AvailableCommand::new(
                 ":last_error_json",
                 "Print the last compilation error as JSON (for debugging)",
                 |ctx, _state, _args| {
