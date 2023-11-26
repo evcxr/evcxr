@@ -18,6 +18,7 @@ use colored::*;
 use crossbeam_channel::RecvTimeoutError;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
+use evcxr::StdoutEvent;
 use evcxr::Theme;
 use json::JsonValue;
 use std::collections::HashMap;
@@ -33,6 +34,8 @@ pub(crate) struct Server {
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
     io_thread_shutdown_sender: Arc<Mutex<Option<crossbeam_channel::Sender<()>>>>,
     tokio_handle: tokio::runtime::Handle,
+    /// An idle message that we'll send to iopub once the current execution completes.
+    pending_idle_message: Arc<Mutex<Option<JupyterMessage>>>,
 }
 
 impl Server {
@@ -96,6 +99,7 @@ impl Server {
             stdin: Arc::new(Mutex::new(stdin_socket)),
             io_thread_shutdown_sender: Arc::new(Mutex::new(Some(shutdown_sender))),
             tokio_handle,
+            pending_idle_message: Arc::new(Mutex::new(None)),
         };
 
         let (execution_sender, mut execution_receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -146,7 +150,8 @@ impl Server {
         server
             .clone()
             .start_output_pass_through_thread(
-                vec![("stdout", outputs.stdout), ("stderr", outputs.stderr)],
+                outputs.stdout,
+                outputs.stderr,
                 shutdown_receiver.clone(),
             )
             .await;
@@ -375,9 +380,11 @@ impl Server {
             .with_content(object! {"execution_state" => "busy"})
             .send(&mut *self.iopub.lock().await)
             .await?;
-        let idle = message
-            .new_message("status")
-            .with_content(object! {"execution_state" => "idle"});
+        let mut idle = Some(
+            message
+                .new_message("status")
+                .with_content(object! {"execution_state" => "idle"}),
+        );
         if message.message_type() == "kernel_info_request" {
             message
                 .new_reply()
@@ -391,6 +398,11 @@ impl Server {
                 .send(connection)
                 .await?;
         } else if message.message_type() == "execute_request" {
+            // We don't want to send our idle message as soon as execution completes, because there
+            // might still be output from the user code that hasn't been sent to the iopub yet.
+            // Instead we send the idle message later, once the stdout receiver has gotten
+            // confirmation that all output has been sent to the iopub.
+            *self.pending_idle_message.lock().await = idle.take();
             execution_channel.send(message)?;
             if let Some(reply) = execution_reply_receiver.recv().await {
                 reply.send(connection).await?;
@@ -422,7 +434,9 @@ impl Server {
                 message.message_type()
             );
         }
-        idle.send(&mut *self.iopub.lock().await).await?;
+        if let Some(idle) = idle.take() {
+            idle.send(&mut *self.iopub.lock().await).await?;
+        }
         Ok(())
     }
 
@@ -483,24 +497,21 @@ impl Server {
 
     async fn start_output_pass_through_thread(
         self,
-        channels: Vec<(&'static str, crossbeam_channel::Receiver<String>)>,
+        stdout_recv: crossbeam_channel::Receiver<StdoutEvent>,
+        stderr_recv: crossbeam_channel::Receiver<String>,
         shutdown_recv: crossbeam_channel::Receiver<()>,
     ) {
         let handle = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || {
             let mut select = Select::new();
-            for (_, channel) in &channels {
-                select.recv(channel);
-            }
+            let stdout_index = select.recv(&stdout_recv);
+            select.recv(&stderr_recv);
             let shutdown_index = select.recv(&shutdown_recv);
             loop {
                 let index = select.ready();
                 if index == shutdown_index {
                     return;
                 }
-                let (output_name, channel) = &channels[index];
-                // Needed in order to make the borrow checker happy.
-                let output_name: &'static str = output_name;
                 // Read from the channel that has output until it has been idle
                 // for 1ms before we return to checking other channels. This
                 // reduces the extent to which outputs interleave. e.g. a
@@ -509,13 +520,28 @@ impl Server {
                 // but we'd like to try to make sure that we don't interleave
                 // their lines if possible.
                 loop {
-                    match channel.recv_timeout(Duration::from_millis(1)) {
-                        Ok(line) => {
-                            let server = self.clone();
-                            handle.block_on(server.pass_output_line(output_name, line));
+                    if index == stdout_index {
+                        match stdout_recv.recv_timeout(Duration::from_millis(1)) {
+                            Ok(StdoutEvent::Line(line)) => {
+                                let server = self.clone();
+                                handle.block_on(server.pass_output_line("stdout", line));
+                            }
+                            Ok(StdoutEvent::ExecutionComplete) => {
+                                let server = self.clone();
+                                handle.block_on(server.execution_complete());
+                            }
+                            Err(RecvTimeoutError::Timeout) => break,
+                            Err(RecvTimeoutError::Disconnected) => return,
                         }
-                        Err(RecvTimeoutError::Timeout) => break,
-                        Err(RecvTimeoutError::Disconnected) => return,
+                    } else {
+                        match stderr_recv.recv_timeout(Duration::from_millis(1)) {
+                            Ok(line) => {
+                                let server = self.clone();
+                                handle.block_on(server.pass_output_line("stderr", line));
+                            }
+                            Err(RecvTimeoutError::Timeout) => break,
+                            Err(RecvTimeoutError::Disconnected) => return,
+                        }
                     }
                 }
             }
@@ -538,6 +564,13 @@ impl Server {
             {
                 eprintln!("output {output_name} error: {}", error);
             }
+        }
+    }
+
+    async fn execution_complete(&self) {
+        let idle_message = self.pending_idle_message.lock().await.take();
+        if let Some(idle_message) = idle_message {
+            let _ = idle_message.send(&mut *self.iopub.lock().await).await;
         }
     }
 
