@@ -401,6 +401,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 Ok(EvalOutputs::default())
             }),
             AvailableCommand::new(
+                ":restart",
+                "Restart child process",
+                |ctx, _state, _args| {
+                    ctx.eval_context.restart_child_process()?;
+                    text_output("Child process restarted")
+                },
+            ),
+            AvailableCommand::new(
                 ":dep",
                 "Add dependency. e.g. :dep regex = \"1.0\"",
                 |_ctx, state, args| process_dep_command(state, args),
@@ -593,6 +601,25 @@ Panic detected. Here's some useful information if you're filing a bug report.
                         if let Some((key, value)) = arg.split_once('=') {
                             state.set_build_env(key, value);
                             return text_output(format!("Set {key}={value} for build"));
+                        }
+                    }
+                    bail!("Please supply key=value");
+                },
+            ),
+            AvailableCommand::new(
+                ":env",
+                "Set an environment variable (key=value)",
+                |_ctx, _state, args| {
+                    if let Some(arg) = args {
+                        if let Some((key, value)) = arg.split_once('=') {
+                            std::env::set_var(key, value);
+                            // For simplicity of implementation, we require that the user restarts
+                            // the child process in order to obtain the new environment variables.
+                            // If they wanted to set them straight away, they could just have called
+                            // `std::env::set_var` from their code. So the main use case for this is
+                            // setting variables that need to be set on startup, such as
+                            // LD_LIBRARY_PATH.
+                            return text_output(format!("Set {key}={value} (use :restart command to reload child process)"));
                         }
                     }
                     bail!("Please supply key=value");

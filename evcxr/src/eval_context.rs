@@ -768,7 +768,7 @@ impl EvalContext {
         self.child_process.process_handle()
     }
 
-    fn restart_child_process(&mut self) -> Result<(), Error> {
+    pub(crate) fn restart_child_process(&mut self) -> Result<(), Error> {
         self.committed_state.variable_states.clear();
         self.committed_state.stored_variable_states.clear();
         self.child_process = self.child_process.restart()?;
