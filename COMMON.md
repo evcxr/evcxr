@@ -84,6 +84,58 @@ If `:efmt` is set to `Debug`, this will also work for `Option`:
 NoneError
 ```
 
+**Support for async-await**
+
+If you use `await` in your code, evcxr will automatically build and start a Tokio runtime. You can
+test this out with a trival example as follows:
+
+```
+>> async fn foo() -> u32 { 42 }
+>> foo().await
+   Compiling libc v0.2.150
+   Compiling num_cpus v1.16.0
+   Compiling tokio v1.34.0
+42
+```
+
+If you'd like to use more non-default features of tokio, then you need to add the dependency on
+tokio before you first try to use the await keywork. For example:
+
+```
+:dep tokio = {version = "1.34.0", features = ["full"]}
+```
+
+You can then write code that uses await and can optionally use the `?` operator as well.
+
+The following code will attempt to connect to localhost on port 1234.
+
+```
+let mut stream = tokio::net::TcpStream::connect("127.0.0.1:1234").await?;
+```
+
+Unless you happen to have a program listening on this port, this should report the error:
+
+```
+Connection refused (os error 111)
+```
+
+If you're on Linux, you can use netcat (you may need to install it) to listen on an arbitrary port.
+For example:
+
+```sh
+nc -t -l 1234
+```
+
+Leave that running in one shell, then back in evcxr, run the following:
+
+```rust
+use tokio::io::AsyncWriteExt;
+stream.write(b"Hello, world!\n").await?;
+```
+
+You should hopefully see the "Hello, world!" message appear in the shell where netcat (nc) is
+running. You can stop nc by pressing control-c.
+
 ## Limitations
 
 * There is currently no way to import macros from external crates.
