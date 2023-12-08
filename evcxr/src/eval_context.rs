@@ -1088,7 +1088,10 @@ impl EvalContext {
                     if error.code() == Some("E0728") && !state.async_mode {
                         state.async_mode = true;
                         if !state.external_deps.contains_key("tokio") {
-                            state.add_dep("tokio", "\"1.20.1\"")?;
+                            state.add_dep(
+                                "tokio",
+                                "{version=\"1.34.0\", features=[\"rt\", \"rt-multi-thread\"]}",
+                            )?;
                             // Rewrite Cargo.toml, since the dependency will probably have been
                             // validated in the process of being added, which will have overwritten
                             // Cargo.toml
@@ -1749,7 +1752,6 @@ impl ContextState {
                 .add_all(user_code);
             if self.allow_question_mark {
                 user_code = CodeBlock::new()
-                    .generated("let _ =")
                     .add_all(user_code)
                     .generated("Ok::<(), EvcxrUserCodeError>(())");
             }
