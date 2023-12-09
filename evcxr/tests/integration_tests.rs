@@ -405,6 +405,7 @@ impl TmpCrate {
 #[test]
 fn crate_deps() {
     let (mut e, _) = new_command_context_and_outputs();
+    e.execute(":allow_static_linking 0").unwrap();
     // Try loading a crate that doesn't exist. This it to make sure that we
     // don't keep this bad crate around for subsequent execution attempts.
     let r = e.execute(
@@ -450,12 +451,9 @@ fn crate_deps() {
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
 
     // In a separate evaluation, make sure that a value stored into a static variable, by the call
-    // to crate1::set_value above, is still set. This is disabled on macos because we disable
-    // dynamic linking due to issues on that platform.
-    if !cfg!(target_os = "macos") {
-        let outputs = e.execute("crate1::get_value()").unwrap();
-        assert_eq!(outputs.content_by_mime_type, text_plain("765"));
-    }
+    // to crate1::set_value above, is still set.
+    let outputs = e.execute("crate1::get_value()").unwrap();
+    assert_eq!(outputs.content_by_mime_type, text_plain("765"));
 }
 
 #[test]

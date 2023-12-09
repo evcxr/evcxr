@@ -237,8 +237,9 @@ impl Config {
             rustc_path,
             core_extern,
             target,
-            // Our dynamic linking code appears to cause linking to fail on mac.
-            allow_static_linking: cfg!(target_os = "macos"),
+            // Forcing dynamic linking causes hard-to-diagnose problems in some cases, so it's off
+            // by default.
+            allow_static_linking: true,
             subprocess_path,
             codegen_backend: None,
             build_envs: Default::default(),
