@@ -287,6 +287,7 @@ impl RustAnalyzer {
             },
             callable: Some(CallableSnippets::FillArguments),
             limit: None,
+            prefer_prelude: false,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,

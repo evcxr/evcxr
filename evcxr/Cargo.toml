@@ -7,7 +7,7 @@ repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.74"
 
 [dependencies]
 anyhow = "1.0.33"
@@ -24,15 +24,15 @@ unicode-segmentation = "1.7.1"
 crossbeam-channel = "0.5.5"
 toml = { version = "0.8.0", default-features = false, features = [ "parse" ] }
 
-ra_ap_ide = "0.0.183"
-ra_ap_ide_db = "0.0.183"
-ra_ap_project_model = "0.0.183"
-ra_ap_paths = "0.0.183"
-ra_ap_vfs = "0.0.183"
-ra_ap_vfs-notify = "0.0.183"
-ra_ap_hir = "0.0.183"
-ra_ap_base_db = "0.0.183"
-ra_ap_syntax = "0.0.183"
+ra_ap_ide = "0.0.189"
+ra_ap_ide_db = "0.0.189"
+ra_ap_project_model = "0.0.189"
+ra_ap_paths = "0.0.189"
+ra_ap_vfs = "0.0.189"
+ra_ap_vfs-notify = "0.0.189"
+ra_ap_hir = "0.0.189"
+ra_ap_base_db = "0.0.189"
+ra_ap_syntax = "0.0.189"
 
 # ra_ap_ide = { package = "ide", path = "../../rust-analyzer/crates/ide"}
 # ra_ap_ide_db = { package = "ide-db", path = "../../rust-analyzer/crates/ide-db"}
@@ -44,10 +44,6 @@ ra_ap_syntax = "0.0.183"
 # ra_ap_base_db = { package = "base-db", path = "../../rust-analyzer/crates/base-db"}
 # ra_ap_syntax = { package = "syntax", path = "../../rust-analyzer/crates/syntax"}
 
-# Rust-analyzer depends on pre-release versions of salsa which make breaking changes without a
-# semver bump. So we pin salsa to an exact version and update as needed together with the ra_ap_*
-# packages.
-salsa = "=0.17.0-pre.2"
 ariadne = "0.3.0"
 triomphe = "0.1.8"
 

@@ -755,3 +755,19 @@ allow_unsafe = true
 
 [pkg.ra-ap-rustc_abi]
 allow_unsafe = true
+
+[pkg.rust-analyzer-salsa-macros]
+allow_proc_macro = true
+
+[pkg.ra-ap-rustc_index_macros]
+allow_proc_macro = true
+allow_unsafe = true
+
+[pkg.itertools]
+allow_unsafe = true
+
+[pkg.rust-analyzer-salsa]
+allow_unsafe = true
+
+[pkg.ra_ap_base_db]
+allow_unsafe = true
