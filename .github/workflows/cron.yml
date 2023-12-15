@@ -1,6 +1,7 @@
 on:
   schedule:
     - cron: '07 12 5,20 * *'
+  workflow_dispatch:
 
 name: Cron continuous integration
 
@@ -20,13 +21,11 @@ jobs:
           - nightly
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
+      - uses: dtolnay/rust-toolchain@master
         with:
-          profile: minimal
           toolchain: ${{ matrix.rust }}
-          override: true
           components: rustfmt, clippy, rust-src
 
       - uses: actions/cache@v3
@@ -39,42 +38,21 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+      - run: cargo build
+      - run: cargo test
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy -- -D warnings
 
 
   ci-windows:
     # Avoid running on people's forks, especially the scheduled runs.
     if: github.repository == 'evcxr/evcxr'
     runs-on: windows-2019
-    strategy:
-      matrix:
-        rust:
-          - stable
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/cache@v3
         with:
@@ -86,13 +64,8 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - run: cargo build
+      - run: cargo test
 
 
   ci-mac:
@@ -105,13 +78,9 @@ jobs:
           - stable
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-          override: true
+      - uses: dtolnay/rust-toolchain@stable
 
       - uses: actions/cache@v3
         with:
@@ -123,10 +92,5 @@ jobs:
             target/
           key: ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
 
-      - uses: actions-rs/cargo@v1
-        with:
-          command: build
-
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - run: cargo build
+      - run: cargo test
