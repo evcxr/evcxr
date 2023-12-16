@@ -1,4 +1,4 @@
-# Version 0.17.0 (unreleased)
+# Version 0.17.0
 * Reverted to static linking by default as we had prior to 0.16.0. You can still get dynamic linking
   by setting `:allow_static_linking 0` which is recommended if it works for you. Forcing dynamic
   linking was breaking in hard-to-debug ways for several people on both Mac and Linux.
