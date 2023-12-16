@@ -17,6 +17,7 @@ if [ -z "$MIN_RUST_VER" ]; then
   echo "Failed to determine minimum rust version" >&2
   exit 1
 fi
+echo "Min rust version $MIN_RUST_VER"
 echo "Releasing $VERSION"
 git pull --rebase
 perl -pi -e 's/(^# .*) \(unreleased\)$/$1/' RELEASE_NOTES.md
