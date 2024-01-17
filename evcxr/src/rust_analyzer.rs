@@ -101,7 +101,7 @@ impl RustAnalyzer {
 
     pub(crate) fn set_source(&mut self, source: String) -> Result<()> {
         self.current_source = Arc::from(source);
-        let mut change = ra_ide::Change::new();
+        let mut change = ra_hir::Change::new();
 
         std::fs::write(self.source_file.as_path(), &*self.current_source)
             .with_context(|| format!("Failed to write {:?}", self.source_file))?;
@@ -185,7 +185,7 @@ impl RustAnalyzer {
         result
     }
 
-    fn load_cargo_toml(&mut self, change: &mut ra_ide::Change) -> Result<()> {
+    fn load_cargo_toml(&mut self, change: &mut ra_hir::Change) -> Result<()> {
         let manifest = ProjectManifest::from_manifest_file(self.cargo_toml_filename())?;
         let sysroot = if self.with_sysroot {
             Some(RustLibSource::Discover)
@@ -227,7 +227,8 @@ impl RustAnalyzer {
                         break;
                     }
                 }
-                ra_vfs::loader::Message::Loaded { files } => {
+                ra_vfs::loader::Message::Loaded { files }
+                | ra_vfs::loader::Message::Changed { files } => {
                     for (path, contents) in files {
                         let vfs_path: ra_vfs::VfsPath = path.to_path_buf().into();
                         self.vfs
@@ -238,13 +239,12 @@ impl RustAnalyzer {
         }
 
         for changed_file in self.vfs.take_changes() {
-            let new_contents = if changed_file.exists() {
-                String::from_utf8(self.vfs.file_contents(changed_file.file_id).to_owned())
-                    .ok()
-                    .map(Arc::from)
-            } else {
-                None
-            };
+            let mut new_contents = None;
+            if let ra_vfs::Change::Create(v) | ra_vfs::Change::Modify(v) = changed_file.change {
+                if let Ok(text) = std::str::from_utf8(&v) {
+                    new_contents = Some(Arc::from(text));
+                }
+            }
             change.change_file(changed_file.file_id, new_contents);
         }
         change.set_roots(

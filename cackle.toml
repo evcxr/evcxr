@@ -48,9 +48,6 @@ include = [
     "nix",
 ]
 
-[pkg.salsa-macros]
-allow_proc_macro = true
-
 [pkg.chalk-derive]
 allow_proc_macro = true
 
@@ -144,11 +141,6 @@ allow_unsafe = true
 
 [pkg.syn]
 allow_unsafe = true
-
-[pkg.syn.build]
-allow_apis = [
-    "process",
-]
 
 [pkg.either]
 allow_unsafe = true
@@ -260,9 +252,6 @@ allow_apis = [
 allow_unsafe = true
 
 [pkg.typed-arena]
-allow_unsafe = true
-
-[pkg.ra_ap_test_utils]
 allow_unsafe = true
 
 [pkg.serde_json]
@@ -452,9 +441,6 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.tracing]
-allow_unsafe = true
-
-[pkg.salsa]
 allow_unsafe = true
 
 [pkg.utf8parse]
@@ -770,4 +756,7 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.ra_ap_base_db]
+allow_unsafe = true
+
+[pkg.ra_ap_span]
 allow_unsafe = true
