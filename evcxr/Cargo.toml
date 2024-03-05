@@ -18,7 +18,7 @@ regex = { version = "1.3.1", default-features = false, features = [ "std", "unic
 once_cell = "1.5.2"
 libloading = "0.8.0"
 dirs = "5.0.1"
-which = "5.0.0"
+which = "6.0.0"
 evcxr_input = "1.0.0"
 unicode-segmentation = "1.7.1"
 crossbeam-channel = "0.5.5"
@@ -44,7 +44,7 @@ ra_ap_syntax = "0.0.197"
 # ra_ap_base_db = { package = "base-db", path = "../../rust-analyzer/crates/base-db"}
 # ra_ap_syntax = { package = "syntax", path = "../../rust-analyzer/crates/syntax"}
 
-ariadne = "0.3.0"
+ariadne = "0.4.0"
 triomphe = "0.1.8"
 
 pulldown-cmark = { version = "0.9.3", default-features = false, features = ["simd"] }
@@ -57,4 +57,4 @@ sig = "1.0.0"
 filetime = "0.2.13"
 
 [build-dependencies]
-which = "5.0.0"
+which = "6.0.0"
