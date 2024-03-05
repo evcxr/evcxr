@@ -446,7 +446,8 @@ fn crate_deps() {
         crate1::set_value(765);
         crate1::r20() + crate2::r22()
     };
-    assert!(e.check(&to_run).unwrap().is_empty());
+    let errors = check(&mut e, &to_run);
+    assert!(errors.is_empty(), "{errors:?}");
     let outputs = e.execute(&to_run).unwrap();
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
 
