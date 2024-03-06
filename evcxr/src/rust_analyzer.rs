@@ -256,7 +256,24 @@ impl RustAnalyzer {
             &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
             &FxHashMap::default(),
         );
+        let num_crates = crate_graph.len();
         change.set_crate_graph(crate_graph);
+        match workspace {
+            ProjectWorkspace::Cargo {
+                target_layout,
+                toolchain,
+                ..
+            }
+            | ProjectWorkspace::Json {
+                toolchain,
+                target_layout,
+                ..
+            } => {
+                change.set_target_data_layouts(vec![target_layout; num_crates]);
+                change.set_toolchains(vec![toolchain; num_crates]);
+            }
+            _ => unimplemented!(),
+        }
         Ok(())
     }
 
@@ -286,6 +303,7 @@ impl RustAnalyzer {
             callable: Some(CallableSnippets::FillArguments),
             limit: None,
             prefer_prelude: false,
+            enable_term_search: true,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
