@@ -26,5 +26,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: cackle-rs/cackle-action@main
+      - uses: cackle-rs/cackle-action@latest
       - run: cargo acl -n
