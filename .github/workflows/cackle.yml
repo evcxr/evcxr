@@ -24,7 +24,7 @@ jobs:
     name: Cackle
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: cackle-rs/cackle-action@main
       - run: cargo acl -n

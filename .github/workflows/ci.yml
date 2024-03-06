@@ -20,7 +20,7 @@ jobs:
         id: rust-toolchain
         with:
           components: rust-src
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         # https://github.com/actions/cache/blob/main/examples.md#rust---cargo
         with:
           path: |
@@ -47,7 +47,7 @@ jobs:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@stable
       with:
         components: clippy
@@ -64,7 +64,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/cache@v3
+      - uses: actions/cache@v4
         with:
           path: |
             ~/.cargo/bin/
