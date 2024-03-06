@@ -219,11 +219,9 @@ impl RustAnalyzer {
         for message in &self.message_receiver {
             match message {
                 ra_vfs::loader::Message::Progress {
-                    n_total,
-                    n_done,
-                    config_version: _,
+                    n_total, n_done, ..
                 } => {
-                    if n_total == n_done {
+                    if Some(n_total) == n_done {
                         break;
                     }
                 }
