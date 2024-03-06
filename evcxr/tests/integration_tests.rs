@@ -9,6 +9,7 @@ use evcxr::CommandContext;
 use evcxr::Error;
 use evcxr::EvalContext;
 use evcxr::EvalContextOutputs;
+use evcxr::StdoutEvent;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -221,10 +222,17 @@ fn printing() {
         println!("Another stdout line");
         eprintln!("Another stderr line");
     );
-    assert_eq!(outputs.stdout.recv(), Ok("This is stdout".to_owned()));
+    assert_eq!(
+        outputs.stdout.recv(),
+        Ok(StdoutEvent::Line("This is stdout".to_owned()))
+    );
     assert_eq!(outputs.stderr.recv(), Ok("This is stderr".to_owned()));
-    assert_eq!(outputs.stdout.recv(), Ok("Another stdout line".to_owned()));
+    assert_eq!(
+        outputs.stdout.recv(),
+        Ok(StdoutEvent::Line("Another stdout line".to_owned()))
+    );
     assert_eq!(outputs.stderr.recv(), Ok("Another stderr line".to_owned()));
+    assert_eq!(outputs.stdout.recv(), Ok(StdoutEvent::ExecutionComplete));
 }
 
 #[test]
