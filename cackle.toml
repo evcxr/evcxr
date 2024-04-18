@@ -739,3 +739,6 @@ allow_proc_macro = true
 
 [pkg.ra_ap_salsa]
 allow_unsafe = true
+
+[pkg.lz4_flex]
+allow_unsafe = true
