@@ -30,12 +30,14 @@ use ra_ap_syntax::TextRange;
 use ra_ap_vfs as ra_vfs;
 use ra_ap_vfs_notify as vfs_notify;
 use ra_ide::CallableSnippets;
+use ra_ide::Edition;
 use ra_ide::{HoverConfig, HoverResult, RangeInfo};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
-use triomphe::Arc;
+
+pub(crate) const EDITION: Edition = Edition::Edition2021;
 
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
@@ -47,7 +49,7 @@ pub(crate) struct RustAnalyzer {
     last_cargo_toml: Option<Vec<u8>>,
     source_file: AbsPathBuf,
     source_file_id: FileId,
-    current_source: Arc<str>,
+    current_source: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -95,13 +97,13 @@ impl RustAnalyzer {
             last_cargo_toml: None,
             source_file,
             source_file_id,
-            current_source: Arc::from(String::new()),
+            current_source: String::new(),
         })
     }
 
     pub(crate) fn set_source(&mut self, source: String) -> Result<()> {
-        self.current_source = Arc::from(source);
-        let mut change = ra_hir::Change::new();
+        self.current_source = source;
+        let mut change = ra_hir::ChangeWithProcMacros::new();
 
         std::fs::write(self.source_file.as_path(), &*self.current_source)
             .with_context(|| format!("Failed to write {:?}", self.source_file))?;
@@ -185,7 +187,7 @@ impl RustAnalyzer {
         result
     }
 
-    fn load_cargo_toml(&mut self, change: &mut ra_hir::Change) -> Result<()> {
+    fn load_cargo_toml(&mut self, change: &mut ra_hir::ChangeWithProcMacros) -> Result<()> {
         let manifest = ProjectManifest::from_manifest_file(self.cargo_toml_filename())?;
         let sysroot = if self.with_sysroot {
             Some(RustLibSource::Discover)
@@ -240,7 +242,7 @@ impl RustAnalyzer {
             let mut new_contents = None;
             if let ra_vfs::Change::Create(v) | ra_vfs::Change::Modify(v) = changed_file.change {
                 if let Ok(text) = std::str::from_utf8(&v) {
-                    new_contents = Some(Arc::from(text));
+                    new_contents = Some(text.to_owned());
                 }
             }
             change.change_file(changed_file.file_id, new_contents);
@@ -366,6 +368,8 @@ impl RustAnalyzer {
             } else {
                 hdf::PlainText
             },
+            max_trait_assoc_items_count: None,
+            max_struct_field_count: None,
         };
         let file_range = FileRange {
             file_id: self.source_file_id,
@@ -461,7 +465,7 @@ pub struct Completion {
 pub(crate) fn is_type_valid(type_name: &str) -> bool {
     use ra_ap_syntax::SyntaxKind;
     let wrapped_source = format!("const _: {type_name} = foo();");
-    let parsed = ast::SourceFile::parse(&wrapped_source);
+    let parsed = ast::SourceFile::parse(&wrapped_source, EDITION);
     if !parsed.errors().is_empty() {
         return false;
     }

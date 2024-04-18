@@ -1142,7 +1142,7 @@ fn check_for_doc() {
     assert_eq!(
         res.get("text/plain"),
         Some(&String::from(
-            "ctx\n\nstruct MyStruct(usize);\n\n\nthis is my struct"
+            "ctx\n\nstruct MyStruct(usize)\n\n\nthis is my struct"
         )),
     );
 }

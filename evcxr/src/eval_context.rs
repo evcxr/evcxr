@@ -2270,7 +2270,10 @@ mod tests {
         ));
         let user_code = state.apply(user_code, &code_info.nodes).unwrap();
         let final_code = state.code_to_compile(user_code, CompilationMode::NoCatch);
-        let source_file = SourceFile::parse(&final_code.code_string()).ok().unwrap();
+        let source_file =
+            SourceFile::parse(&final_code.code_string(), crate::rust_analyzer::EDITION)
+                .ok()
+                .unwrap();
         let mut attrs: Vec<String> = source_file
             .attrs()
             .map(|attr| attr.syntax().text().to_string().replace(' ', ""))

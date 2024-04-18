@@ -22,7 +22,10 @@ pub(crate) struct OriginalUserCode<'a> {
 pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
     let mut output = Vec::new();
     let prelude = "fn f(){";
-    let parsed_file = SourceFile::parse(&(prelude.to_owned() + code + "\n}"));
+    let parsed_file = SourceFile::parse(
+        &(prelude.to_owned() + code + "\n}"),
+        crate::rust_analyzer::EDITION,
+    );
     let mut start_byte = 0;
     if let Some(stmt_list) = parsed_file
         .syntax_node()
