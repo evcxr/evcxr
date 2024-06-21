@@ -153,7 +153,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 Ok(eval_outputs)
             }
             Err(Error::CompilationErrors(errors)) => {
-                self.last_errors = errors.clone();
+                self.last_errors.clone_from(&errors);
                 Err(Error::CompilationErrors(errors))
             }
             x => x,

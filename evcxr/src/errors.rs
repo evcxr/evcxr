@@ -515,7 +515,7 @@ impl SpannedMessage {
                 let mut message = SpannedMessage::from_json(expansion_span_json, code_block, None);
                 if message.span.is_some() {
                     if let Some(label) = span_json["label"].as_str() {
-                        message.label = label.to_owned();
+                        label.clone_into(&mut message.label);
                     }
                     message.is_primary |= span_json["is_primary"].as_bool().unwrap_or(false);
                     return message;

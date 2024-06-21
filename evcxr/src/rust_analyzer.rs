@@ -534,7 +534,7 @@ mod test {
         assert_eq!(var_types["v2"].type_name, TypeName::named("&[bool; 1]"));
         assert!(!var_types["v2"].is_mutable);
         assert_eq!(var_types["v3"].type_name, TypeName::named("Foo<10>"));
-        assert!(var_types.get("v100").is_none());
+        assert!(!var_types.contains_key("v100"));
         assert_eq!(var_types["v4"].type_name, TypeName::named("u64"));
         assert_eq!(var_types["x"].type_name, TypeName::named("u8"));
         assert_eq!(var_types["y2"].type_name, TypeName::named("u8"));
@@ -548,7 +548,7 @@ mod test {
         )?;
         let var_types = ra.top_level_variables("foo");
         assert_eq!(var_types["v1"].type_name, TypeName::named("u16"));
-        assert!(var_types.get("v2").is_none());
+        assert!(!var_types.contains_key("v2"));
 
         Ok(())
     }

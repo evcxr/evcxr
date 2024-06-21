@@ -205,9 +205,9 @@ fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Co
     // neither linkers support macos, so fallback to system (aka default)
     // https://github.com/rui314/mold/issues/132
     if !cfg!(target_os = "macos") && which::which("mold").is_ok() {
-        config.linker = "mold".to_owned();
+        "mold".clone_into(&mut config.linker);
     } else if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
-        config.linker = "lld".to_owned();
+        "lld".clone_into(&mut config.linker);
     }
     Ok(config)
 }
@@ -785,7 +785,9 @@ impl EvalContext {
             // This span only makes sense when the variable is first defined.
             variable_state.definition_span = None;
         }
-        state.stored_variable_states = state.variable_states.clone();
+        state
+            .stored_variable_states
+            .clone_from(&state.variable_states);
         state.commit_old_user_code();
         self.committed_state = state;
     }
@@ -1423,7 +1425,7 @@ impl ContextState {
         if level.is_empty() {
             bail!("Optimization level cannot be an empty string");
         }
-        self.config.opt_level = level.to_owned();
+        level.clone_into(&mut self.config.opt_level);
         Ok(())
     }
     pub fn output_format(&self) -> &str {
@@ -1450,7 +1452,7 @@ impl ContextState {
         if let Some(cargo_path) = rustup_tool_path(Some(value), "cargo") {
             self.config.cargo_path = cargo_path;
         }
-        self.config.toolchain = value.to_owned();
+        value.clone_into(&mut self.config.toolchain);
         Ok(())
     }
 
