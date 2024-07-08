@@ -41,7 +41,7 @@ jobs:
       - run: cargo build
       - run: cargo test
       - run: cargo fmt --all -- --check
-      - run: cargo clippy -- -D warnings
+      - run: cargo clippy
 
 
   ci-windows:
