@@ -803,11 +803,23 @@ impl EvalContext {
         self.write_cargo_toml(state)?;
         let analysis_code = state.analysis_code(user_code.clone());
         if let Err(errors) = self.fix_variable_types(state, analysis_code) {
-            let check_res = self.check(user_code.clone(), state.clone(), code_info)?;
-            if check_res.is_empty() {
-                return Err(errors);
+            let mut check_res = self.check(user_code.clone(), state.clone(), code_info)?;
+            if !check_res.is_empty() {
+                // Do one round of trying to fix errors, otherwise code like the following can end
+                // up reporting `evcxr_display` not found. `fn foo<T: Default>() -> T
+                // {Default::default()} let v1 = foo(); "bar"`
+                let mut fixed = HashSet::new();
+                for error in &check_res {
+                    self.attempt_to_fix_error(error, &mut user_code, state, &mut fixed)?;
+                }
+                if !fixed.is_empty() {
+                    check_res = self.check(user_code.clone(), state.clone(), code_info)?;
+                }
+                if !check_res.is_empty() {
+                    return Err(Error::CompilationErrors(check_res));
+                }
             }
-            return Err(Error::CompilationErrors(check_res));
+            return Err(errors);
         }
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
