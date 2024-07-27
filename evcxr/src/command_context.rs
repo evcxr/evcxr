@@ -9,6 +9,7 @@ use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
 use crate::code_block::Segment;
+use crate::code_block::ShellCommand;
 use crate::code_block::{self};
 use crate::crash_guard::CrashGuard;
 use crate::errors::bail;
@@ -129,15 +130,21 @@ Panic detected. Here's some useful information if you're filing a bug report.
         let mut non_command_code = CodeBlock::new();
         let (user_code, code_info) = CodeBlock::from_original_user_code(to_run);
         for segment in user_code.segments {
-            if let CodeKind::Command(command) = &segment.kind {
-                eval_outputs.merge(self.execute_command(
-                    command,
-                    &segment,
-                    &mut state,
-                    &command.args,
-                )?);
-            } else {
-                non_command_code = non_command_code.with_segment(segment);
+            match &segment.kind {
+                CodeKind::Command(command) => {
+                    eval_outputs.merge(self.execute_command(
+                        command,
+                        &segment,
+                        &mut state,
+                        &command.args,
+                    )?);
+                }
+                CodeKind::ShellCommand(shell_command) => {
+                    eval_outputs.merge(self.execute_shell_command(shell_command)?);
+                }
+                _ => {
+                    non_command_code = non_command_code.with_segment(segment);
+                }
             }
         }
         let result =
@@ -157,6 +164,55 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 Err(Error::CompilationErrors(errors))
             }
             x => x,
+        }
+    }
+
+    fn execute_shell_command(
+        &mut self,
+        shell_command: &ShellCommand,
+    ) -> Result<EvalOutputs, Error> {
+        use std::process::Command;
+
+        let command_output = Command::new("sh")
+            .arg("-c")
+            .arg(&shell_command.command)
+            .output();
+
+        match command_output {
+            Ok(output) => {
+                let stdout_str = String::from_utf8_lossy(&output.stdout);
+                let stderr_str = String::from_utf8_lossy(&output.stderr);
+
+                let mut eval_outputs = EvalOutputs::default();
+
+                // Add the stdout and stderr to eval_outputs
+                eval_outputs
+                    .content_by_mime_type
+                    .insert("stdout".to_string(), stdout_str.into());
+                eval_outputs
+                    .content_by_mime_type
+                    .insert("stderr".to_string(), stderr_str.clone().into());
+
+                if !output.status.success() {
+                    // Handle non-zero exit status
+                    let error_message = format!(
+                        "Shell command failed with exit code {}: {}",
+                        output.status.code().unwrap_or_default(),
+                        stderr_str
+                    );
+                    // Handle this error
+                    return Err(Error::from(error_message));
+                }
+
+                Ok(eval_outputs)
+            }
+            Err(error) => {
+                // Handle the case when executing the command fails
+                Err(Error::from(format!(
+                    "Failed to execute shell command: {}",
+                    error
+                )))
+            }
         }
     }
 
