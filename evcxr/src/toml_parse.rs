@@ -9,26 +9,26 @@ use crate::eval_context::Config;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ConfigToml {
     #[serde(default = "EvcxrToml::new")]
-    pub evcxr: EvcxrToml,
+    evcxr: EvcxrToml,
     #[serde(default = "Default::default")]
-    pub dependencies: Table,
+    dependencies: Table,
     #[serde(skip)]
     pub source_path: Option<PathBuf>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
-pub struct EvcxrToml {
-    pub tmpdir: Option<String>,
+struct EvcxrToml {
+    tmpdir: Option<String>,
     #[serde(default = "default_value::preserve_vars_on_panic")]
-    pub preserve_vars_on_panic: bool,
+    preserve_vars_on_panic: bool,
     #[serde(default = "default_value::offline_mode")]
-    pub offline_mode: bool,
-    pub sccache: Option<String>,
+    offline_mode: bool,
+    sccache: Option<String>,
     #[serde(default = "default_value::allow_static_linking")]
-    pub allow_static_linking: bool,
-    pub prelude: Option<String>,
+    allow_static_linking: bool,
+    prelude: Option<String>,
     #[serde(default = "default_value::opt_level")]
-    pub opt_level: String,
+    opt_level: String,
 }
 
 pub(crate) enum TmpDirVar {
@@ -115,8 +115,11 @@ impl ConfigToml {
         Ok(())
     }
 
-    pub(crate) fn get_dep_string(&self) -> Result<String> {
+    pub(crate) fn get_dep_string(&self) -> Result<Option<String>> {
         let mut res = vec![];
+        if self.dependencies.is_empty() {
+            return Ok(None);
+        }
         for (crate_name, crate_config) in self.dependencies.iter() {
             let res_config_v = match crate_config {
                 Value::Table(table) => {
@@ -133,7 +136,41 @@ impl ConfigToml {
             let res_part = format!(":dep {crate_name} = {res_config_v}\n");
             res.push(res_part);
         }
-        Ok(res.concat())
+        Ok(Some(res.concat()))
+    }
+
+    pub(crate) fn get_dep_string_versions(&self) -> Result<Option<String>> {
+        match self.get_dep_string()? {
+            Some(x) => Ok(Some(x)),
+            None => get_evcxr_config_content("init.evcxr"),
+        }
+    }
+
+    pub(crate) fn get_prelude_string(&self) -> Result<Option<String>> {
+        Ok(self.evcxr.prelude.clone())
+    }
+
+    pub(crate) fn get_prelude_string_versions(&self) -> Result<Option<String>> {
+        match self.get_prelude_string()? {
+            Some(x) => Ok(Some(x)),
+            None => get_evcxr_config_content("prelude.rs"),
+        }
+    }
+}
+
+fn get_evcxr_config_content(file_name: &str) -> Result<Option<String>> {
+    match crate::config_dir() {
+        None => Ok(None),
+        Some(evcxr_config_dir) => {
+            let config_dir_prelude_path = evcxr_config_dir.join(file_name);
+            match config_dir_prelude_path.exists() {
+                false => Ok(None),
+                true => {
+                    let res = std::fs::read_to_string(&config_dir_prelude_path)?;
+                    Ok(Some(res))
+                }
+            }
+        }
     }
 }
 

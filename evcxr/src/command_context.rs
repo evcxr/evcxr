@@ -239,10 +239,11 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 }
             }
         }
-        let dep_str = config_toml.get_dep_string()?;
-        outputs.merge(self.execute(&dep_str)?);
-        if let Some(prelude_str) = &config_toml.evcxr.prelude {
-            outputs.merge(self.execute(prelude_str)?);
+        if let Some(dep_str) = config_toml.get_dep_string_versions()? {
+            outputs.merge(self.execute(&dep_str)?);
+        }
+        if let Some(prelude_str) = config_toml.get_prelude_string_versions()? {
+            outputs.merge(self.execute(&prelude_str)?);
         }
         Ok(outputs)
     }
