@@ -106,8 +106,8 @@ impl ConfigToml {
     }
 
     pub(crate) fn update_config(self, config: &mut Config) -> Result<()> {
-        // config.tmpdir = self.get_tmp_dir()?.get_path()?;
         config.preserve_vars_on_panic = self.evcxr.preserve_vars_on_panic;
+        // config.tmpdir = self.get_tmp_dir()?.get_path()?;
         config.offline_mode = self.evcxr.offline_mode;
         config.sccache = self.evcxr.sccache.map(PathBuf::from);
         config.allow_static_linking = self.evcxr.allow_static_linking;
