@@ -104,7 +104,6 @@ pub(crate) struct Config {
     subprocess_path: PathBuf,
 }
 
-
 fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Config> {
     let mut config = Config::new(tmpdir, subprocess_path)?;
     // default the linker to mold, then lld, first checking if either are installed
