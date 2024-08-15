@@ -25,6 +25,7 @@ mod module;
 mod runtime;
 mod rust_analyzer;
 mod statement_splitter;
+mod toml_parse;
 mod use_trees;
 
 pub use crate::command_context::CommandContext;

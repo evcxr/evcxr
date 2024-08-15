@@ -26,6 +26,7 @@ use crate::rust_analyzer::Completions;
 use crate::rust_analyzer::RustAnalyzer;
 use crate::rust_analyzer::TypeName;
 use crate::rust_analyzer::VariableInfo;
+use crate::toml_parse;
 use crate::use_trees::Import;
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -63,12 +64,12 @@ pub struct EvalContext {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Config {
-    tmpdir: PathBuf,
+    pub(crate) tmpdir: PathBuf,
     pub(crate) debug_mode: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
     // attempt to determine if the type of the variable is copy.
-    preserve_vars_on_panic: bool,
+    pub(crate) preserve_vars_on_panic: bool,
     output_format: String,
     display_types: bool,
     /// Whether to try to display the final expression. Currently this needs to
@@ -79,7 +80,7 @@ pub(crate) struct Config {
     /// turn this off in order for tab-completion of use statements to work, but
     /// otherwise this should always be on.
     expand_use_statements: bool,
-    opt_level: String,
+    pub(crate) opt_level: String,
     error_fmt: &'static ErrorFormat,
     /// Whether to pass -Ztime-passes to the compiler and print the result.
     /// Causes the nightly compiler, which must be installed to be selected.
@@ -99,6 +100,7 @@ pub(crate) struct Config {
     /// The host target that we're compiling for. e.g. x86_64-unknown-linux-gnu
     pub(crate) target: String,
     pub(crate) allow_static_linking: bool,
+    pub(crate) build_envs: HashMap<String, String>,
     subprocess_path: PathBuf,
 }
 
@@ -204,9 +206,9 @@ fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Co
     // neither linkers support macos, so fallback to system (aka default)
     // https://github.com/rui314/mold/issues/132
     if !cfg!(target_os = "macos") && which::which("mold").is_ok() {
-        config.linker = "mold".to_owned();
+        "mold".clone_into(&mut config.linker);
     } else if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
-        config.linker = "lld".to_owned();
+        "lld".clone_into(&mut config.linker);
     }
     Ok(config)
 }
@@ -236,10 +238,12 @@ impl Config {
             rustc_path,
             core_extern,
             target,
-            // Our dynamic linking code appears to cause linking to fail on mac.
-            allow_static_linking: cfg!(target_os = "macos"),
+            // Forcing dynamic linking causes hard-to-diagnose problems in some cases, so it's off
+            // by default.
+            allow_static_linking: true,
             subprocess_path,
             codegen_backend: None,
+            build_envs: Default::default(),
         })
     }
 
@@ -298,6 +302,7 @@ impl Config {
             .env("CARGO_TARGET_DIR", "target")
             .env("RUSTC", &self.rustc_path)
             .env("RUSTFLAGS", rustflags.join(" "))
+            .envs(&self.build_envs)
             .env(crate::module::CORE_EXTERN_ENV, &self.core_extern);
         if self.cache_bytes > 0 {
             command.env(crate::module::CACHE_ENABLED_ENV, "1");
@@ -501,24 +506,15 @@ impl EvalContext {
     pub fn with_subprocess_command(
         mut subprocess_command: std::process::Command,
     ) -> Result<(EvalContext, EvalContextOutputs), Error> {
-        let mut opt_tmpdir = None;
-        let mut tmpdir_path;
-        let init_config = InitConfig::parse_as_one_step()?;
-        if let Some(from_config) = init_config.tmpdir {
-            tmpdir_path = from_config;
-        } else {
-            let tmpdir = tempfile::tempdir()?;
-            tmpdir_path = PathBuf::from(tmpdir.path());
-            opt_tmpdir = Some(tmpdir);
-        }
-        if !tmpdir_path.is_absolute() {
-            tmpdir_path = std::env::current_dir()?.join(tmpdir_path);
-        }
+        let parsed_config = toml_parse::ConfigToml::find_then_parse()?;
+        let tmpdir_var = parsed_config.get_tmp_dir()?;
+        let tmpdir_path = tmpdir_var.get_path()?;
+        let opt_tmpdir = tmpdir_var.get_opt_tmpdir();
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
         let module = Module::new()?;
-
-        let initial_config =
+        let mut initial_config =
             create_initial_config(tmpdir_path, subprocess_command.get_program().into())?;
+        parsed_config.update_config(&mut initial_config)?;
         Self::apply_platform_specific_vars(&initial_config, &mut subprocess_command);
 
         let (stdout_sender, stdout_receiver) = crossbeam_channel::unbounded();
@@ -765,7 +761,7 @@ impl EvalContext {
         self.child_process.process_handle()
     }
 
-    fn restart_child_process(&mut self) -> Result<(), Error> {
+    pub(crate) fn restart_child_process(&mut self) -> Result<(), Error> {
         self.committed_state.variable_states.clear();
         self.committed_state.stored_variable_states.clear();
         self.child_process = self.child_process.restart()?;
@@ -781,7 +777,9 @@ impl EvalContext {
             // This span only makes sense when the variable is first defined.
             variable_state.definition_span = None;
         }
-        state.stored_variable_states = state.variable_states.clone();
+        state
+            .stored_variable_states
+            .clone_from(&state.variable_states);
         state.commit_old_user_code();
         self.committed_state = state;
     }
@@ -797,11 +795,23 @@ impl EvalContext {
         self.write_cargo_toml(state)?;
         let analysis_code = state.analysis_code(user_code.clone());
         if let Err(errors) = self.fix_variable_types(state, analysis_code) {
-            let check_res = self.check(user_code.clone(), state.clone(), code_info)?;
-            if check_res.is_empty() {
-                return Err(errors);
+            let mut check_res = self.check(user_code.clone(), state.clone(), code_info)?;
+            if !check_res.is_empty() {
+                // Do one round of trying to fix errors, otherwise code like the following can end
+                // up reporting `evcxr_display` not found. `fn foo<T: Default>() -> T
+                // {Default::default()} let v1 = foo(); "bar"`
+                let mut fixed = HashSet::new();
+                for error in &check_res {
+                    self.attempt_to_fix_error(error, &mut user_code, state, &mut fixed)?;
+                }
+                if !fixed.is_empty() {
+                    check_res = self.check(user_code.clone(), state.clone(), code_info)?;
+                }
+                if !check_res.is_empty() {
+                    return Err(Error::CompilationErrors(check_res));
+                }
             }
-            return Err(Error::CompilationErrors(check_res));
+            return Err(errors);
         }
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
@@ -1085,7 +1095,10 @@ impl EvalContext {
                     if error.code() == Some("E0728") && !state.async_mode {
                         state.async_mode = true;
                         if !state.external_deps.contains_key("tokio") {
-                            state.add_dep("tokio", "\"1.20.1\"")?;
+                            state.add_dep(
+                                "tokio",
+                                "{version=\"1.34.0\", features=[\"rt\", \"rt-multi-thread\"]}",
+                            )?;
                             // Rewrite Cargo.toml, since the dependency will probably have been
                             // validated in the process of being added, which will have overwritten
                             // Cargo.toml
@@ -1416,7 +1429,7 @@ impl ContextState {
         if level.is_empty() {
             bail!("Optimization level cannot be an empty string");
         }
-        self.config.opt_level = level.to_owned();
+        level.clone_into(&mut self.config.opt_level);
         Ok(())
     }
     pub fn output_format(&self) -> &str {
@@ -1443,8 +1456,14 @@ impl ContextState {
         if let Some(cargo_path) = rustup_tool_path(Some(value), "cargo") {
             self.config.cargo_path = cargo_path;
         }
-        self.config.toolchain = value.to_owned();
+        value.clone_into(&mut self.config.toolchain);
         Ok(())
+    }
+
+    pub fn set_build_env(&mut self, key: &str, value: &str) {
+        self.config
+            .build_envs
+            .insert(key.to_owned(), value.to_owned());
     }
 
     pub fn toolchain(&mut self) -> &str {
@@ -1740,7 +1759,6 @@ impl ContextState {
                 .add_all(user_code);
             if self.allow_question_mark {
                 user_code = CodeBlock::new()
-                    .generated("let _ =")
                     .add_all(user_code)
                     .generated("Ok::<(), EvcxrUserCodeError>(())");
             }
@@ -2258,7 +2276,10 @@ mod tests {
         ));
         let user_code = state.apply(user_code, &code_info.nodes).unwrap();
         let final_code = state.code_to_compile(user_code, CompilationMode::NoCatch);
-        let source_file = SourceFile::parse(&final_code.code_string()).ok().unwrap();
+        let source_file =
+            SourceFile::parse(&final_code.code_string(), crate::rust_analyzer::EDITION)
+                .ok()
+                .unwrap();
         let mut attrs: Vec<String> = source_file
             .attrs()
             .map(|attr| attr.syntax().text().to_string().replace(' ', ""))

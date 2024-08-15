@@ -48,9 +48,6 @@ include = [
     "nix",
 ]
 
-[pkg.salsa-macros]
-allow_proc_macro = true
-
 [pkg.chalk-derive]
 allow_proc_macro = true
 
@@ -99,6 +96,7 @@ allow_unsafe = true
 
 [pkg.proc-macro2.build]
 allow_apis = [
+    "fs",
     "process",
 ]
 
@@ -144,11 +142,6 @@ allow_unsafe = true
 
 [pkg.syn]
 allow_unsafe = true
-
-[pkg.syn.build]
-allow_apis = [
-    "process",
-]
 
 [pkg.either]
 allow_unsafe = true
@@ -216,10 +209,6 @@ allow_unsafe = true
 [pkg.crossbeam-epoch]
 allow_unsafe = true
 
-[pkg.crossbeam-epoch.build]
-allow_apis = [
-]
-
 [pkg.num_cpus]
 allow_unsafe = true
 allow_apis = [
@@ -260,9 +249,6 @@ allow_apis = [
 allow_unsafe = true
 
 [pkg.typed-arena]
-allow_unsafe = true
-
-[pkg.ra_ap_test_utils]
 allow_unsafe = true
 
 [pkg.serde_json]
@@ -311,10 +297,6 @@ allow_unsafe = true
 
 [pkg.futures-core]
 allow_unsafe = true
-
-[pkg.futures-core.build]
-allow_apis = [
-]
 
 [pkg.semver]
 allow_unsafe = true
@@ -407,16 +389,8 @@ allow_unsafe = true
 [pkg.futures-task]
 allow_unsafe = true
 
-[pkg.futures-task.build]
-allow_apis = [
-]
-
 [pkg.futures-channel]
 allow_unsafe = true
-
-[pkg.futures-channel.build]
-allow_apis = [
-]
 
 [pkg.aho-corasick]
 allow_unsafe = true
@@ -454,9 +428,6 @@ allow_unsafe = true
 [pkg.tracing]
 allow_unsafe = true
 
-[pkg.salsa]
-allow_unsafe = true
-
 [pkg.utf8parse]
 allow_unsafe = true
 
@@ -467,10 +438,6 @@ allow_unsafe = true
 allow_unsafe = true
 allow_apis = [
     "net",
-]
-
-[pkg.futures-util.build]
-allow_apis = [
 ]
 
 [pkg.chalk-ir]
@@ -498,9 +465,6 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.anstyle-parse]
-allow_unsafe = true
-
-[pkg.is-terminal]
 allow_unsafe = true
 
 [pkg.anstyle]
@@ -585,6 +549,7 @@ allow_unsafe = true
 [pkg.fd-lock]
 allow_unsafe = true
 allow_apis = [
+    "fs",
 ]
 
 [pkg.rustyline]
@@ -754,4 +719,26 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.ra-ap-rustc_abi]
+allow_unsafe = true
+
+[pkg.ra-ap-rustc_index_macros]
+allow_proc_macro = true
+allow_unsafe = true
+
+[pkg.itertools]
+allow_unsafe = true
+
+[pkg.ra_ap_base_db]
+allow_unsafe = true
+
+[pkg.ra_ap_span]
+allow_unsafe = true
+
+[pkg.ra_ap_salsa-macros]
+allow_proc_macro = true
+
+[pkg.ra_ap_salsa]
+allow_unsafe = true
+
+[pkg.lz4_flex]
 allow_unsafe = true

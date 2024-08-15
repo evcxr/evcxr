@@ -28,12 +28,9 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
 
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
+    - uses: dtolnay/rust-toolchain@stable
 
     - name: Extract release notes
       shell: bash
@@ -41,10 +38,7 @@ jobs:
         awk "/# Version ${GITHUB_REF_NAME#v}/{flag=1; next} /^$/{flag=0} flag" RELEASE_NOTES.md >REL.md
 
     - name: Build release binary
-      uses: actions-rs/cargo@v1
-      with:
-        command: build
-        args: --release --target ${{ matrix.target }}
+      run: cargo build --release --target ${{ matrix.target }}
 
     - name: Create tarballs (Unix)
       if: matrix.build == 'linux' || matrix.build == 'macos'

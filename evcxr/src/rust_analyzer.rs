@@ -30,12 +30,14 @@ use ra_ap_syntax::TextRange;
 use ra_ap_vfs as ra_vfs;
 use ra_ap_vfs_notify as vfs_notify;
 use ra_ide::CallableSnippets;
+use ra_ide::Edition;
 use ra_ide::{HoverConfig, HoverResult, RangeInfo};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 use std::sync::mpsc;
-use triomphe::Arc;
+
+pub(crate) const EDITION: Edition = Edition::Edition2021;
 
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
@@ -47,7 +49,7 @@ pub(crate) struct RustAnalyzer {
     last_cargo_toml: Option<Vec<u8>>,
     source_file: AbsPathBuf,
     source_file_id: FileId,
-    current_source: Arc<str>,
+    current_source: String,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -95,13 +97,13 @@ impl RustAnalyzer {
             last_cargo_toml: None,
             source_file,
             source_file_id,
-            current_source: Arc::from(String::new()),
+            current_source: String::new(),
         })
     }
 
     pub(crate) fn set_source(&mut self, source: String) -> Result<()> {
-        self.current_source = Arc::from(source);
-        let mut change = ra_ide::Change::new();
+        self.current_source = source;
+        let mut change = ra_hir::ChangeWithProcMacros::new();
 
         std::fs::write(self.source_file.as_path(), &*self.current_source)
             .with_context(|| format!("Failed to write {:?}", self.source_file))?;
@@ -185,7 +187,7 @@ impl RustAnalyzer {
         result
     }
 
-    fn load_cargo_toml(&mut self, change: &mut ra_ide::Change) -> Result<()> {
+    fn load_cargo_toml(&mut self, change: &mut ra_hir::ChangeWithProcMacros) -> Result<()> {
         let manifest = ProjectManifest::from_manifest_file(self.cargo_toml_filename())?;
         let sysroot = if self.with_sysroot {
             Some(RustLibSource::Discover)
@@ -219,15 +221,14 @@ impl RustAnalyzer {
         for message in &self.message_receiver {
             match message {
                 ra_vfs::loader::Message::Progress {
-                    n_total,
-                    n_done,
-                    config_version: _,
+                    n_total, n_done, ..
                 } => {
-                    if n_total == n_done {
+                    if Some(n_total) == n_done {
                         break;
                     }
                 }
-                ra_vfs::loader::Message::Loaded { files } => {
+                ra_vfs::loader::Message::Loaded { files }
+                | ra_vfs::loader::Message::Changed { files } => {
                     for (path, contents) in files {
                         let vfs_path: ra_vfs::VfsPath = path.to_path_buf().into();
                         self.vfs
@@ -238,13 +239,12 @@ impl RustAnalyzer {
         }
 
         for changed_file in self.vfs.take_changes() {
-            let new_contents = if changed_file.exists() {
-                String::from_utf8(self.vfs.file_contents(changed_file.file_id).to_owned())
-                    .ok()
-                    .map(Arc::from)
-            } else {
-                None
-            };
+            let mut new_contents = None;
+            if let ra_vfs::Change::Create(v) | ra_vfs::Change::Modify(v) = changed_file.change {
+                if let Ok(text) = std::str::from_utf8(&v) {
+                    new_contents = Some(text.to_owned());
+                }
+            }
             change.change_file(changed_file.file_id, new_contents);
         }
         change.set_roots(
@@ -258,7 +258,24 @@ impl RustAnalyzer {
             &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
             &FxHashMap::default(),
         );
+        let num_crates = crate_graph.len();
         change.set_crate_graph(crate_graph);
+        match workspace {
+            ProjectWorkspace::Cargo {
+                target_layout,
+                toolchain,
+                ..
+            }
+            | ProjectWorkspace::Json {
+                toolchain,
+                target_layout,
+                ..
+            } => {
+                change.set_target_data_layouts(vec![target_layout; num_crates]);
+                change.set_toolchains(vec![toolchain; num_crates]);
+            }
+            _ => unimplemented!(),
+        }
         Ok(())
     }
 
@@ -287,6 +304,8 @@ impl RustAnalyzer {
             },
             callable: Some(CallableSnippets::FillArguments),
             limit: None,
+            prefer_prelude: false,
+            enable_term_search: true,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
@@ -349,6 +368,8 @@ impl RustAnalyzer {
             } else {
                 hdf::PlainText
             },
+            max_trait_assoc_items_count: None,
+            max_struct_field_count: None,
         };
         let file_range = FileRange {
             file_id: self.source_file_id,
@@ -444,7 +465,7 @@ pub struct Completion {
 pub(crate) fn is_type_valid(type_name: &str) -> bool {
     use ra_ap_syntax::SyntaxKind;
     let wrapped_source = format!("const _: {type_name} = foo();");
-    let parsed = ast::SourceFile::parse(&wrapped_source);
+    let parsed = ast::SourceFile::parse(&wrapped_source, EDITION);
     if !parsed.errors().is_empty() {
         return false;
     }
@@ -513,7 +534,7 @@ mod test {
         assert_eq!(var_types["v2"].type_name, TypeName::named("&[bool; 1]"));
         assert!(!var_types["v2"].is_mutable);
         assert_eq!(var_types["v3"].type_name, TypeName::named("Foo<10>"));
-        assert!(var_types.get("v100").is_none());
+        assert!(!var_types.contains_key("v100"));
         assert_eq!(var_types["v4"].type_name, TypeName::named("u64"));
         assert_eq!(var_types["x"].type_name, TypeName::named("u8"));
         assert_eq!(var_types["y2"].type_name, TypeName::named("u8"));
@@ -527,7 +548,7 @@ mod test {
         )?;
         let var_types = ra.top_level_variables("foo");
         assert_eq!(var_types["v1"].type_name, TypeName::named("u16"));
-        assert!(var_types.get("v2").is_none());
+        assert!(!var_types.contains_key("v2"));
 
         Ok(())
     }

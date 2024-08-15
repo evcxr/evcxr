@@ -177,7 +177,7 @@ impl JupyterMessage {
     // automatically by replacing "request" with "reply". ZMQ identities are transferred.
     pub(crate) fn new_reply(&self) -> JupyterMessage {
         let mut reply = self.new_message(&self.message_type().replace("_request", "_reply"));
-        reply.zmq_identities = self.zmq_identities.clone();
+        reply.zmq_identities.clone_from(&self.zmq_identities);
         reply
     }
 
