@@ -18,7 +18,6 @@ use crate::errors::Span;
 use crate::errors::SpannedMessage;
 use crate::eval_context::ContextState;
 use crate::eval_context::EvalCallbacks;
-use crate::eval_context::InitConfig;
 use crate::rust_analyzer::Completion;
 use crate::rust_analyzer::Completions;
 use crate::toml_parse::ConfigToml;
