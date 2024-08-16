@@ -26,6 +26,7 @@ use crate::rust_analyzer::Completions;
 use crate::rust_analyzer::RustAnalyzer;
 use crate::rust_analyzer::TypeName;
 use crate::rust_analyzer::VariableInfo;
+use crate::toml_parse;
 use crate::use_trees::Import;
 use anyhow::Result;
 use once_cell::sync::Lazy;
@@ -63,12 +64,12 @@ pub struct EvalContext {
 
 #[derive(Clone, Debug)]
 pub(crate) struct Config {
-    tmpdir: PathBuf,
+    pub(crate) tmpdir: PathBuf,
     pub(crate) debug_mode: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
     // attempt to determine if the type of the variable is copy.
-    preserve_vars_on_panic: bool,
+    pub(crate) preserve_vars_on_panic: bool,
     output_format: String,
     display_types: bool,
     /// Whether to try to display the final expression. Currently this needs to
@@ -79,7 +80,7 @@ pub(crate) struct Config {
     /// turn this off in order for tab-completion of use statements to work, but
     /// otherwise this should always be on.
     expand_use_statements: bool,
-    opt_level: String,
+    pub(crate) opt_level: String,
     error_fmt: &'static ErrorFormat,
     /// Whether to pass -Ztime-passes to the compiler and print the result.
     /// Causes the nightly compiler, which must be installed to be selected.
@@ -101,102 +102,6 @@ pub(crate) struct Config {
     pub(crate) allow_static_linking: bool,
     pub(crate) build_envs: HashMap<String, String>,
     subprocess_path: PathBuf,
-}
-
-#[derive(Default)]
-pub(crate) struct InitConfig {
-    tmpdir: Option<PathBuf>,
-    pub(crate) init: Option<PathBuf>,
-    pub(crate) prelude: Option<PathBuf>,
-}
-
-impl InitConfig {
-    fn check_if_exists(path: &Path) -> bool {
-        path.join("evcxr.toml").exists()
-    }
-
-    fn parse_from_current_dir(path: &Path) -> Result<Self, Error> {
-        let mut res = InitConfig::default();
-        let lines = std::fs::read_to_string(path.join("evcxr.toml"))?;
-        let mut is_start = false;
-        fn modify_value(value: &str) -> Result<&str, Error> {
-            let res = value
-                .trim()
-                .strip_prefix('"')
-                .ok_or_else(|| Error::Message("Syntax is wrong".into()))?
-                .strip_suffix('"')
-                .ok_or_else(|| Error::Message("Syntax is wrong".into()))?;
-            Ok(res)
-        }
-        for line in lines.lines() {
-            if line.trim() == "[config]" {
-                is_start = true;
-                continue;
-            }
-            if !is_start {
-                continue;
-            }
-            if let Some((key, value)) = line.split_once('=') {
-                let key = key.trim();
-                let value = modify_value(value)?;
-                match key {
-                    "tmpdir" => {
-                        res.tmpdir = PathBuf::from(value).into();
-                    }
-                    "init" => {
-                        res.init = PathBuf::from(value).into();
-                    }
-                    "prelude" => {
-                        res.prelude = PathBuf::from(value).into();
-                    }
-                    _ => {}
-                }
-            }
-        }
-        Ok(res)
-    }
-
-    fn parse_from_config_dir(path: &Path) -> Result<Self, Error> {
-        let mut res = InitConfig::default();
-        let init_path = path.join("init.evcxr");
-        if init_path.exists() {
-            res.init = Some(init_path);
-        }
-        let prelude_path = path.join("prelude.rs");
-        if prelude_path.exists() {
-            res.prelude = Some(prelude_path);
-        }
-        Ok(res)
-    }
-
-    pub(crate) fn update(&mut self, other: Self) {
-        if self.tmpdir.is_none() && other.tmpdir.is_some() {
-            self.tmpdir = other.tmpdir;
-        }
-        if self.init.is_none() && other.init.is_some() {
-            self.init = other.init;
-        }
-        if self.prelude.is_none() && other.prelude.is_some() {
-            self.prelude = other.prelude;
-        }
-    }
-
-    pub(crate) fn parse_as_one_step() -> Result<Self, Error> {
-        let mut init_config = InitConfig::default();
-        let current_dir = std::env::current_dir()?;
-        if Self::check_if_exists(&current_dir) {
-            init_config.update(Self::parse_from_current_dir(&current_dir)?);
-        }
-        let config_path = crate::config_dir();
-        if let Some(config_path) = config_path {
-            init_config.update(Self::parse_from_config_dir(&config_path)?);
-        }
-        if let (None, Ok(from_env)) = (&init_config.tmpdir, std::env::var("EVCXR_TMPDIR")) {
-            let tmpdir_path = PathBuf::from(from_env);
-            init_config.tmpdir = Some(tmpdir_path);
-        }
-        Ok(init_config)
-    }
 }
 
 fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Config> {
@@ -505,24 +410,15 @@ impl EvalContext {
     pub fn with_subprocess_command(
         mut subprocess_command: std::process::Command,
     ) -> Result<(EvalContext, EvalContextOutputs), Error> {
-        let mut opt_tmpdir = None;
-        let mut tmpdir_path;
-        let init_config = InitConfig::parse_as_one_step()?;
-        if let Some(from_config) = init_config.tmpdir {
-            tmpdir_path = from_config;
-        } else {
-            let tmpdir = tempfile::tempdir()?;
-            tmpdir_path = PathBuf::from(tmpdir.path());
-            opt_tmpdir = Some(tmpdir);
-        }
-        if !tmpdir_path.is_absolute() {
-            tmpdir_path = std::env::current_dir()?.join(tmpdir_path);
-        }
+        let parsed_config = toml_parse::ConfigToml::find_then_parse()?;
+        let tmpdir_var = parsed_config.get_tmp_dir()?;
+        let tmpdir_path = tmpdir_var.get_path()?;
+        let opt_tmpdir = tmpdir_var.get_opt_tmpdir();
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
         let module = Module::new()?;
-
-        let initial_config =
+        let mut initial_config =
             create_initial_config(tmpdir_path, subprocess_command.get_program().into())?;
+        parsed_config.update_config(&mut initial_config)?;
         Self::apply_platform_specific_vars(&initial_config, &mut subprocess_command);
 
         let (stdout_sender, stdout_receiver) = crossbeam_channel::unbounded();
