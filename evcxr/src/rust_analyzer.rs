@@ -28,6 +28,7 @@ use ra_ap_syntax::ast::AstNode;
 use ra_ap_syntax::ast::{self};
 use ra_ap_syntax::TextRange;
 use ra_ap_vfs as ra_vfs;
+use ra_ap_vfs::loader::LoadingProgress;
 use ra_ap_vfs::FileId;
 use ra_ap_vfs_notify as vfs_notify;
 use ra_ide::CallableSnippets;
@@ -36,7 +37,6 @@ use ra_ide::{HoverConfig, HoverResult, RangeInfo};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
-use std::sync::mpsc;
 
 pub(crate) const EDITION: Edition = Edition::Edition2021;
 
@@ -46,7 +46,7 @@ pub(crate) struct RustAnalyzer {
     analysis_host: ra_ide::AnalysisHost,
     vfs: ra_vfs::Vfs,
     loader: vfs_notify::NotifyHandle,
-    message_receiver: mpsc::Receiver<ra_vfs::loader::Message>,
+    message_receiver: crossbeam_channel::Receiver<ra_vfs::loader::Message>,
     last_cargo_toml: Option<Vec<u8>>,
     source_file: AbsPathBuf,
     source_file_id: FileId,
@@ -71,7 +71,7 @@ pub(crate) struct VariableInfo {
 impl RustAnalyzer {
     pub(crate) fn new(root_directory: &Path) -> Result<RustAnalyzer> {
         use ra_vfs::loader::Handle;
-        let (message_sender, message_receiver) = std::sync::mpsc::channel();
+        let (message_sender, message_receiver) = crossbeam_channel::unbounded();
         let mut vfs = ra_vfs::Vfs::default();
         let root_directory = AbsPathBuf::try_from(
             root_directory
@@ -95,9 +95,7 @@ impl RustAnalyzer {
             root_directory,
             analysis_host: Default::default(),
             vfs,
-            loader: vfs_notify::NotifyHandle::spawn(Box::new(move |message| {
-                let _ = message_sender.send(message);
-            })),
+            loader: vfs_notify::NotifyHandle::spawn(message_sender),
             message_receiver,
             last_cargo_toml: None,
             source_file,
@@ -226,9 +224,9 @@ impl RustAnalyzer {
         for message in &self.message_receiver {
             match message {
                 ra_vfs::loader::Message::Progress {
-                    n_total, n_done, ..
+                    n_total: _, n_done, ..
                 } => {
-                    if Some(n_total) == n_done {
+                    if n_done == LoadingProgress::Finished {
                         break;
                     }
                 }
