@@ -275,7 +275,7 @@ fn main() -> Result<()> {
 
     println!("Welcome to evcxr. For help, type :help");
     // Print this now, because we silence `:load_config` (writing to stdout
-    // interfers with rustyline somewhat).
+    // interferes with rustyline somewhat).
     if let Some(cfg) = evcxr::config_dir() {
         let init = cfg.join("init.evcxr");
         if init.exists() {

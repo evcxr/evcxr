@@ -238,14 +238,16 @@ impl RustAnalyzer {
             }
         }
 
-        for changed_file in self.vfs.take_changes() {
+        for (file_id, changed_file) in self.vfs.take_changes() {
             let mut new_contents = None;
-            if let ra_vfs::Change::Create(v) | ra_vfs::Change::Modify(v) = changed_file.change {
+            if let ra_vfs::Change::Create(v, _hash) | ra_vfs::Change::Modify(v, _hash) =
+                changed_file.change
+            {
                 if let Ok(text) = std::str::from_utf8(&v) {
                     new_contents = Some(text.to_owned());
                 }
             }
-            change.change_file(changed_file.file_id, new_contents);
+            change.change_file(file_id, new_contents);
         }
         change.set_roots(
             ra_vfs::file_set::FileSetConfig::default()
@@ -260,22 +262,8 @@ impl RustAnalyzer {
         );
         let num_crates = crate_graph.len();
         change.set_crate_graph(crate_graph);
-        match workspace {
-            ProjectWorkspace::Cargo {
-                target_layout,
-                toolchain,
-                ..
-            }
-            | ProjectWorkspace::Json {
-                toolchain,
-                target_layout,
-                ..
-            } => {
-                change.set_target_data_layouts(vec![target_layout; num_crates]);
-                change.set_toolchains(vec![toolchain; num_crates]);
-            }
-            _ => unimplemented!(),
-        }
+        change.set_target_data_layouts(vec![workspace.target_layout; num_crates]);
+        change.set_toolchains(vec![workspace.toolchain; num_crates]);
         Ok(())
     }
 
@@ -306,6 +294,7 @@ impl RustAnalyzer {
             limit: None,
             prefer_prelude: false,
             enable_term_search: true,
+            term_search_fuel: 400,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
@@ -369,7 +358,8 @@ impl RustAnalyzer {
                 hdf::PlainText
             },
             max_trait_assoc_items_count: None,
-            max_struct_field_count: None,
+            max_fields_count: Some(5),
+            max_enum_variants_count: Some(5),
         };
         let file_range = FileRange {
             file_id: self.source_file_id,

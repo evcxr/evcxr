@@ -375,7 +375,7 @@ impl EvalContext {
         // Windows doesn't support rpath, so we need to set PATH so that it
         // knows where to find dlls.
         let mut path_var_value = OsString::new();
-        path_var_value.push(&config.deps_dir());
+        path_var_value.push(config.deps_dir());
         path_var_value.push(";");
 
         let mut sysroot_command = std::process::Command::new("rustc");
