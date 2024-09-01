@@ -65,11 +65,6 @@ allow_proc_macro = true
 allow_proc_macro = true
 allow_unsafe = true
 
-[pkg.async-trait.build]
-allow_apis = [
-    "process",
-]
-
 [pkg.wasm-bindgen-macro]
 allow_proc_macro = true
 
@@ -176,9 +171,6 @@ allow_unsafe = true
 [pkg.perf-event-open-sys]
 allow_unsafe = true
 
-[pkg.memoffset]
-allow_unsafe = true
-
 [pkg.lock_api]
 allow_unsafe = true
 
@@ -208,12 +200,6 @@ allow_unsafe = true
 
 [pkg.crossbeam-epoch]
 allow_unsafe = true
-
-[pkg.num_cpus]
-allow_unsafe = true
-allow_apis = [
-    "fs",
-]
 
 [pkg.fixedbitset]
 allow_unsafe = true
@@ -476,11 +462,6 @@ allow_unsafe = true
 [pkg.crc32fast]
 allow_unsafe = true
 
-[pkg.crc32fast.build]
-allow_apis = [
-    "process",
-]
-
 [pkg.anstream]
 allow_unsafe = true
 
@@ -741,4 +722,14 @@ allow_proc_macro = true
 allow_unsafe = true
 
 [pkg.lz4_flex]
+allow_unsafe = true
+
+[pkg.zerocopy-derive]
+allow_proc_macro = true
+allow_unsafe = true
+
+[pkg.shlex]
+allow_unsafe = true
+
+[pkg.zerocopy]
 allow_unsafe = true
