@@ -733,3 +733,12 @@ allow_unsafe = true
 
 [pkg.zerocopy]
 allow_unsafe = true
+
+[pkg.memoffset]
+allow_unsafe = true
+
+[pkg.sptr]
+allow_unsafe = true
+
+[pkg.ra_ap_intern]
+allow_unsafe = true
