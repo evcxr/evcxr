@@ -295,6 +295,7 @@ impl RustAnalyzer {
             prefer_prelude: false,
             enable_term_search: true,
             term_search_fuel: 400,
+            prefer_absolute: false,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
