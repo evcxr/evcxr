@@ -10,13 +10,13 @@ use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
 use once_cell::sync::Lazy;
-use ra_ap_base_db::FileId;
-use ra_ap_base_db::FileRange;
 use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
+use ra_ap_ide::FileRange;
 use ra_ap_ide_db::imports::insert_use::ImportGranularity;
 use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
+use ra_ap_ide_db::EditionedFileId;
 use ra_ap_ide_db::FxHashMap;
 use ra_ap_ide_db::SnippetCap;
 use ra_ap_paths::AbsPathBuf;
@@ -28,6 +28,7 @@ use ra_ap_syntax::ast::AstNode;
 use ra_ap_syntax::ast::{self};
 use ra_ap_syntax::TextRange;
 use ra_ap_vfs as ra_vfs;
+use ra_ap_vfs::FileId;
 use ra_ap_vfs_notify as vfs_notify;
 use ra_ide::CallableSnippets;
 use ra_ide::Edition;
@@ -72,8 +73,12 @@ impl RustAnalyzer {
         use ra_vfs::loader::Handle;
         let (message_sender, message_receiver) = std::sync::mpsc::channel();
         let mut vfs = ra_vfs::Vfs::default();
-        let root_directory = AbsPathBuf::try_from(root_directory.to_owned())
-            .map_err(|path| anyhow!("Evcxr tmpdir is not absolute: '{:?}'", path))?;
+        let root_directory = AbsPathBuf::try_from(
+            root_directory
+                .to_str()
+                .context("Root directory is not UTF-8")?,
+        )
+        .map_err(|path| anyhow!("Evcxr tmpdir is not absolute: '{:?}'", path))?;
         let source_file = root_directory.join("src/lib.rs");
         // We need to write the file to the filesystem even though we subsequently set the file
         // contents via the vfs and change.change_file. This is because the loader checks for the
@@ -135,7 +140,7 @@ impl RustAnalyzer {
         use ra_ap_syntax::ast::HasName;
         let mut result = HashMap::new();
         let sema = ra_ide::Semantics::new(self.analysis_host.raw_database());
-        let source_file = sema.parse(self.source_file_id);
+        let source_file = sema.parse(EditionedFileId::new(self.source_file_id, EDITION));
         for item in source_file.items() {
             if let ast::Item::Fn(function) = item {
                 if function
@@ -492,6 +497,7 @@ mod test {
             [package]
             name = "foo"
             version = "0.1.0"
+            edition = "2021"
 
             [lib]
             "#,
