@@ -1,10 +1,12 @@
-use anyhow::Result;
-use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-use tempfile::TempDir;
-use toml::{Table, Value};
-
 use crate::eval_context::Config;
+use anyhow::Result;
+use serde::Deserialize;
+use serde::Serialize;
+use std::path::Path;
+use std::path::PathBuf;
+use tempfile::TempDir;
+use toml::Table;
+use toml::Value;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ConfigToml {
