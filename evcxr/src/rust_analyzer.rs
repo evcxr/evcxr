@@ -39,6 +39,7 @@ use ra_ide::RangeInfo;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
+use ra_ap_ide::CompletionFieldsToResolve;
 
 pub(crate) const EDITION: Edition = Edition::Edition2021;
 
@@ -311,6 +312,7 @@ impl RustAnalyzer {
             term_search_fuel: 400,
             prefer_absolute: false,
             add_semicolon_to_unit: true,
+            fields_to_resolve: CompletionFieldsToResolve::empty(),
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
