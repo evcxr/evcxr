@@ -265,10 +265,19 @@ impl RustAnalyzer {
             &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
             &FxHashMap::default(),
         );
-        let num_crates = crate_graph.len();
-        change.set_crate_graph(crate_graph);
-        change.set_target_data_layouts(vec![workspace.target_layout; num_crates]);
-        change.set_toolchains(vec![workspace.toolchain; num_crates]);
+
+        let ws_data = FxHashMap::from_iter(crate_graph.iter().map(|crate_id| {
+            (
+                crate_id,
+                triomphe::Arc::new(ra_ap_base_db::CrateWorkspaceData {
+                    proc_macro_cwd: None,
+                    data_layout: workspace.target_layout.clone(),
+                    toolchain: workspace.toolchain.clone(),
+                }),
+            )
+        }));
+
+        change.set_crate_graph(crate_graph, ws_data);
         Ok(())
     }
 
@@ -301,6 +310,7 @@ impl RustAnalyzer {
             enable_term_search: true,
             term_search_fuel: 400,
             prefer_absolute: false,
+            add_semicolon_to_unit: true,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
