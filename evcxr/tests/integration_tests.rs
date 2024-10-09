@@ -675,6 +675,8 @@ fn variable_assignment_compile_fail_then_use_statement() {
     assert_eq!(eval!(e, 42), text_plain("42"));
 }
 
+// Broken from rust-analyzer 0.0.234 until 0.0.263
+#[ignore]
 #[test]
 fn int_array() {
     let mut e = new_context();
