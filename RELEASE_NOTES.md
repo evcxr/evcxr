@@ -1,3 +1,11 @@
+# Version 0.18.0 (unreleased)
+* Update dependencies. Fixes compilation without `--locked` due to non-semver breaking change in
+  `futures-task`.
+* Update rust-analyzer
+* Improvements to .toml parsing (baiguoname)
+* Fix error display when variable type cannot be inferred and there's a trailing expression.
+* MSRV is now 1.80 (due to dependency changes)
+
 # Version 0.17.0
 * Reverted to static linking by default as we had prior to 0.16.0. You can still get dynamic linking
   by setting `:allow_static_linking 0` which is recommended if it works for you. Forcing dynamic
