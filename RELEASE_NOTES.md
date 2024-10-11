@@ -1,4 +1,4 @@
-# Version 0.18.0 (unreleased)
+# Version 0.18.0
 * Update dependencies. Fixes compilation without `--locked` due to non-semver breaking change in
   `futures-task`.
 * Update rust-analyzer
