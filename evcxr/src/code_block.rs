@@ -52,6 +52,13 @@ pub(crate) struct CommandCall {
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) struct ShellCommand {
+    pub(crate) command: String,
+    start_byte: usize,
+    pub(crate) line_number: usize,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub(crate) enum CodeKind {
     /// The code was supplied by the user. Errors should be reported to the user.
     OriginalUserCode(UserCodeMetadata),
@@ -65,11 +72,13 @@ pub(crate) enum CodeKind {
     /// A line of code that has a fallback to be used in case the supplied line fails to compile.
     WithFallback(CodeBlock),
     /// Code that we generated, but which we don't expect errors from. If we get errors there's not
-    /// much we can do besides give the user as much information as we can, apologise and ask to
+    /// much we can do besides give the user as much information as we can, apologize and ask to
     /// file a bug report.
     OtherGeneratedCode,
     /// We had trouble determining what the error applied to.
     Command(CommandCall),
+    /// Shell command to be executed.
+    ShellCommand(ShellCommand),
     Unknown,
 }
 
@@ -191,8 +200,17 @@ impl CodeBlock {
         let mut current_line = lines.next().unwrap_or(user_code);
 
         for (command_line_offset, line) in user_code.lines().enumerate() {
-            // We only accept commands up until the first non-command.
-            if let Some(captures) = COMMAND_RE.captures(line) {
+            if line.starts_with('!') {
+                // Handle shell command line
+                code_block = code_block.with(
+                    CodeKind::ShellCommand(ShellCommand {
+                        command: line.trim_start_matches('!').trim().to_owned(),
+                        start_byte: line.as_ptr() as usize - user_code.as_ptr() as usize,
+                        line_number: command_line_offset + 1,
+                    }),
+                    line,
+                );
+            } else if let Some(captures) = COMMAND_RE.captures(line) {
                 code_block = code_block.with(
                     CodeKind::Command(CommandCall {
                         command: captures[1].to_owned(),
@@ -239,6 +257,7 @@ impl CodeBlock {
                 break;
             }
         }
+
         for (index, segment) in code_block.segments.iter_mut().enumerate() {
             segment.sequence = Some(index);
         }
@@ -363,6 +382,7 @@ impl CodeBlock {
 mod test {
     use super::CodeBlock;
     use super::CodeKind;
+    use super::ShellCommand;
 
     #[test]
     fn basic_usage() {
@@ -406,6 +426,57 @@ mod test {
             &code.code_string()[code.user_offset_to_output_offset(0).unwrap()
                 ..code.user_offset_to_output_offset(user_code.len()).unwrap()],
             user_code
+        );
+    }
+    #[test]
+    fn test_shell_command() {
+        let user_code = "!echo 'Hello, World!'";
+        let (user_code_block, _nodes) = CodeBlock::from_original_user_code(user_code);
+        let mut code = CodeBlock::new()
+            .generated("l1\nl2")
+            .add_all(user_code_block)
+            .add_all(CodeBlock::new().generated("l4"))
+            .add_all(CodeBlock::from_original_user_code("!echo 'Hello, World!'").0);
+        code.pack_variable("v".to_owned(), "l5".to_owned());
+
+        assert_eq!(
+            code.code_string().replace("\n", ""),
+            "l1l2!echo 'Hello, World!'l4!echo 'Hello, World!'l5"
+        );
+
+        assert_eq!(code.segments.len(), 5);
+
+        assert_eq!(code.origin_for_line(0), (&CodeKind::Unknown, 0));
+        assert_eq!(code.origin_for_line(1), (&CodeKind::OtherGeneratedCode, 0));
+        assert_eq!(code.origin_for_line(2), (&CodeKind::OtherGeneratedCode, 1));
+        if let (CodeKind::ShellCommand(command), 0) = code.origin_for_line(3) {
+            assert_eq!(command.command, "echo 'Hello, World!'");
+            assert_eq!(command.start_byte, 0);
+            assert_eq!(command.line_number, 1);
+        } else {
+            panic!("Unexpected result for line 3");
+        }
+        assert_eq!(code.origin_for_line(4), (&CodeKind::OtherGeneratedCode, 0));
+
+        assert_eq!(
+            code.origin_for_line(5),
+            (
+                &CodeKind::ShellCommand(ShellCommand {
+                    command: "echo 'Hello, World!'".to_owned(),
+                    start_byte: 0,
+                    line_number: 1,
+                }),
+                0,
+            )
+        );
+        assert_eq!(
+            code.origin_for_line(6),
+            (
+                &CodeKind::PackVariable {
+                    variable_name: "v".to_owned()
+                },
+                0
+            )
         );
     }
 }
