@@ -185,13 +185,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
 
                 let mut eval_outputs = EvalOutputs::default();
 
-                let combined_output = if stderr_str.is_empty() {
-                    stdout_str.into_owned()
-                } else if stdout_str.is_empty() {
-                    stderr_str.clone().into_owned()
-                } else {
-                    format!("{}{}", stdout_str, stderr_str)
-                };
+                let combined_output = format!("{}{}", stdout_str, stderr_str);
 
                 eval_outputs
                     .content_by_mime_type
