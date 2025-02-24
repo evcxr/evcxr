@@ -1,6 +1,6 @@
 [package]
 name = "evcxr_jupyter"
-version = "0.16.0"
+version = "0.18.0"
 license = "MIT OR Apache-2.0"
 description = "A Jupyter Kernel for Rust"
 repository = "https://github.com/evcxr/evcxr"
@@ -9,7 +9,7 @@ authors = ["The Evcxr Authors"]
 edition = "2021"
 
 [dependencies]
-evcxr = { version = "=0.16.0", path = "../evcxr" }
+evcxr = { version = "=0.18.0", path = "../evcxr" }
 json = "0.12.4"
 anyhow = "1.0.33"
 bytes = "1.2.1"
@@ -24,8 +24,8 @@ chrono = { version = "0.4.19", default-features = false, features = [ "clock" ] 
 unicode-segmentation = "1.7.1"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 crossbeam-channel = "0.5.5"
-ariadne = "0.3.0"
-zeromq = { version = "0.3.3", default_features = false, features = [ "tokio-runtime", "tcp-transport" ] }
+ariadne = "0.4.0"
+zeromq = { version = "0.4.1", default-features = false, features = [ "tokio-runtime", "tcp-transport" ] }
 tokio-util = "0.7.8"
 
 [features]

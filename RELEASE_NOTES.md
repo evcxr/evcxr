@@ -1,3 +1,25 @@
+# Version 0.18.0
+* Update dependencies. Fixes compilation without `--locked` due to non-semver breaking change in
+  `futures-task`.
+* Update rust-analyzer
+* Improvements to .toml parsing (baiguoname)
+* Fix error display when variable type cannot be inferred and there's a trailing expression.
+* MSRV is now 1.80 (due to dependency changes)
+
+# Version 0.17.0
+* Reverted to static linking by default as we had prior to 0.16.0. You can still get dynamic linking
+  by setting `:allow_static_linking 0` which is recommended if it works for you. Forcing dynamic
+  linking was breaking in hard-to-debug ways for several people on both Mac and Linux.
+* Fixes for async-await support.
+* Added commands to set runtime environment variables (`:env`) and build environment variables
+  (`:build_env`).
+* An `evcxr.toml` in your startup directory can now be used to override your target-dir. Thanks
+  baiguoname.
+* Added support for selecting rustc's codegen backend. You can now use the cranelift backend by
+  doing `:toolchain nightly` then `:codegen_backend cranelift`.
+* Updated rust-analyzer
+* Minimum rust version is now 1.74 due to changes in rust-analyzer
+
 # Version 0.16.0
 * Now compiles dependencies as dylibs. This means that mutable static variables in dependencies are
   now preserved between executions. If you hit problems with this, please file a bug report. You can

@@ -287,7 +287,7 @@ fn main() -> Result<()> {
 
     println!("Welcome to evcxr. For help, type :help");
     // Print this now, because we silence `:load_config` (writing to stdout
-    // interfers with rustyline somewhat).
+    // interferes with rustyline somewhat).
     if let Some(cfg) = evcxr::config_dir() {
         let init = cfg.join("init.evcxr");
         if init.exists() {
@@ -302,7 +302,7 @@ fn main() -> Result<()> {
         EditMode::Vi => {
             rustyline::Config::builder()
                 .edit_mode(rustyline::EditMode::Vi)
-                .keyseq_timeout(0) // https://github.com/kkawakam/rustyline/issues/371
+                .keyseq_timeout(Some(0)) // https://github.com/kkawakam/rustyline/issues/371
         }
         _ => rustyline::Config::builder(), // default edit_mode is emacs
     };

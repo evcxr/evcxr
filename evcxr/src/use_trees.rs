@@ -105,7 +105,7 @@ mod tests {
 
     fn use_tree_names(code: &str) -> Vec<Import> {
         let mut out = Vec::new();
-        let file = ast::SourceFile::parse(code);
+        let file = ast::SourceFile::parse(code, crate::rust_analyzer::EDITION);
         for item in file.tree().items() {
             if let ast::Item::Use(use_stmt) = item {
                 if let Some(use_tree) = use_stmt.use_tree() {

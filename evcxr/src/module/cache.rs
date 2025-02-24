@@ -370,7 +370,7 @@ mod tests {
             base
         );
         // Changing the temporary directory should not affect the hash.
-        cache_env.target_dir = "/tmp/.tmp12345".to_owned();
+        "/tmp/.tmp12345".clone_into(&mut cache_env.target_dir);
         command = replace(&command, &[("tmpAGPAC4", "tmp12345")]);
         assert_eq!(cache_key(&command, &cache_env).unwrap(), base);
 

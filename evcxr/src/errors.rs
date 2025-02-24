@@ -168,7 +168,7 @@ fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a 
 impl CompilationError {
     pub(crate) fn opt_new(mut json: JsonValue, code_block: &CodeBlock) -> Option<CompilationError> {
         // From Cargo 1.36 onwards, errors emitted as JSON get wrapped by Cargo.
-        // Retrive the inner message emitted by the compiler.
+        // Retrieve the inner message emitted by the compiler.
         if json["message"].is_object() {
             json = json["message"].clone();
         }
@@ -515,7 +515,7 @@ impl SpannedMessage {
                 let mut message = SpannedMessage::from_json(expansion_span_json, code_block, None);
                 if message.span.is_some() {
                     if let Some(label) = span_json["label"].as_str() {
-                        message.label = label.to_owned();
+                        label.clone_into(&mut message.label);
                     }
                     message.is_primary |= span_json["is_primary"].as_bool().unwrap_or(false);
                     return message;

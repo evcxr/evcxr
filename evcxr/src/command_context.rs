@@ -9,6 +9,7 @@ use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
 use crate::code_block::Segment;
+use crate::code_block::ShellCommand;
 use crate::code_block::{self};
 use crate::crash_guard::CrashGuard;
 use crate::errors::bail;
@@ -18,9 +19,9 @@ use crate::errors::Span;
 use crate::errors::SpannedMessage;
 use crate::eval_context::ContextState;
 use crate::eval_context::EvalCallbacks;
-use crate::eval_context::InitConfig;
 use crate::rust_analyzer::Completion;
 use crate::rust_analyzer::Completions;
+use crate::toml_parse::ConfigToml;
 use crate::EvalContext;
 use crate::EvalContextOutputs;
 use crate::EvalOutputs;
@@ -129,15 +130,21 @@ Panic detected. Here's some useful information if you're filing a bug report.
         let mut non_command_code = CodeBlock::new();
         let (user_code, code_info) = CodeBlock::from_original_user_code(to_run);
         for segment in user_code.segments {
-            if let CodeKind::Command(command) = &segment.kind {
-                eval_outputs.merge(self.execute_command(
-                    command,
-                    &segment,
-                    &mut state,
-                    &command.args,
-                )?);
-            } else {
-                non_command_code = non_command_code.with_segment(segment);
+            match &segment.kind {
+                CodeKind::Command(command) => {
+                    eval_outputs.merge(self.execute_command(
+                        command,
+                        &segment,
+                        &mut state,
+                        &command.args,
+                    )?);
+                }
+                CodeKind::ShellCommand(shell_command) => {
+                    eval_outputs.merge(self.execute_shell_command(shell_command)?);
+                }
+                _ => {
+                    non_command_code = non_command_code.with_segment(segment);
+                }
             }
         }
         let result =
@@ -153,10 +160,57 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 Ok(eval_outputs)
             }
             Err(Error::CompilationErrors(errors)) => {
-                self.last_errors = errors.clone();
+                self.last_errors.clone_from(&errors);
                 Err(Error::CompilationErrors(errors))
             }
             x => x,
+        }
+    }
+
+    fn execute_shell_command(
+        &mut self,
+        shell_command: &ShellCommand,
+    ) -> Result<EvalOutputs, Error> {
+        use std::process::Command;
+
+        let command_output = Command::new("sh")
+            .arg("-c")
+            .arg(&shell_command.command)
+            .output();
+
+        match command_output {
+            Ok(output) => {
+                let stdout_str = String::from_utf8_lossy(&output.stdout);
+                let stderr_str = String::from_utf8_lossy(&output.stderr);
+
+                let mut eval_outputs = EvalOutputs::default();
+
+                let combined_output = format!("{}{}", stdout_str, stderr_str);
+
+                eval_outputs
+                    .content_by_mime_type
+                    .insert("text/plain".to_string(), combined_output);
+
+                if !output.status.success() {
+                    // Handle non-zero exit status
+                    let error_message = format!(
+                        "Shell command failed with exit code {}: {}",
+                        output.status.code().unwrap_or_default(),
+                        stderr_str
+                    );
+                    // Handle this error
+                    return Err(Error::from(error_message));
+                }
+
+                Ok(eval_outputs)
+            }
+            Err(error) => {
+                // Handle the case when executing the command fails
+                Err(Error::from(format!(
+                    "Failed to execute shell command: {}",
+                    error
+                )))
+            }
         }
     }
 
@@ -228,20 +282,22 @@ Panic detected. Here's some useful information if you're filing a bug report.
 
     fn load_config(&mut self, quiet: bool) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
-        let init_config = InitConfig::parse_as_one_step()?;
-        if let Some(init_path) = init_config.init {
-            if !quiet {
-                println!("Loading startup commands from {init_path:?}");
+        let config_toml = ConfigToml::find_then_parse()?;
+        if !quiet {
+            match &config_toml.source_path {
+                Some(config_path) => {
+                    println!("Loading startup configuration from: {:?}", config_path);
+                }
+                None => {
+                    println!("No configuration file found, use the default configuration");
+                }
             }
-            let init_content = std::fs::read_to_string(init_path)?;
-            outputs.merge(self.execute(&init_content)?);
         }
-        if let Some(prelude_path) = init_config.prelude {
-            if !quiet {
-                println!("Executing prelude from {prelude_path:?}");
-            }
-            let prelude_content = std::fs::read_to_string(prelude_path)?;
-            outputs.merge(self.execute(&prelude_content)?);
+        if let Some(dep_str) = config_toml.get_dep_string_versions()? {
+            outputs.merge(self.execute(&dep_str)?);
+        }
+        if let Some(prelude_str) = config_toml.get_prelude_string_versions()? {
+            outputs.merge(self.execute(&prelude_str)?);
         }
         Ok(outputs)
     }
@@ -400,6 +456,14 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 *state = ctx.eval_context.cleared_state();
                 Ok(EvalOutputs::default())
             }),
+            AvailableCommand::new(
+                ":restart",
+                "Restart child process",
+                |ctx, _state, _args| {
+                    ctx.eval_context.restart_child_process()?;
+                    text_output("Child process restarted")
+                },
+            ),
             AvailableCommand::new(
                 ":dep",
                 "Add dependency. e.g. :dep regex = \"1.0\"",
@@ -593,6 +657,25 @@ Panic detected. Here's some useful information if you're filing a bug report.
                         if let Some((key, value)) = arg.split_once('=') {
                             state.set_build_env(key, value);
                             return text_output(format!("Set {key}={value} for build"));
+                        }
+                    }
+                    bail!("Please supply key=value");
+                },
+            ),
+            AvailableCommand::new(
+                ":env",
+                "Set an environment variable (key=value)",
+                |_ctx, _state, args| {
+                    if let Some(arg) = args {
+                        if let Some((key, value)) = arg.split_once('=') {
+                            std::env::set_var(key, value);
+                            // For simplicity of implementation, we require that the user restarts
+                            // the child process in order to obtain the new environment variables.
+                            // If they wanted to set them straight away, they could just have called
+                            // `std::env::set_var` from their code. So the main use case for this is
+                            // setting variables that need to be set on startup, such as
+                            // LD_LIBRARY_PATH.
+                            return text_output(format!("Set {key}={value} (use :restart command to reload child process)"));
                         }
                     }
                     bail!("Please supply key=value");

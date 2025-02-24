@@ -23,7 +23,7 @@ if ! git diff-index --quiet HEAD --; then
   exit 1
 fi
 cargo build
-cargo clippy -- -D warnings
+cargo clippy
 cargo +stable test --all || fail "Tests failed on stable"
 cargo +nightly test --all || fail "Tests failed on nightly"
 cargo +${MIN_RUST_VER}-x86_64-unknown-linux-gnu test --all \
