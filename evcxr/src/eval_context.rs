@@ -57,9 +57,21 @@ pub struct EvalContext {
     _tmpdir: Option<tempfile::TempDir>,
     module: Module,
     committed_state: ContextState,
-    stdout_sender: crossbeam_channel::Sender<String>,
+    stdout_sender: crossbeam_channel::Sender<StdoutEvent>,
     analyzer: RustAnalyzer,
     initial_config: Config,
+}
+
+/// An event related to the standard output of the user's code.
+#[derive(Eq, PartialEq, Debug)]
+pub enum StdoutEvent {
+    /// A line of text printed to stdout.
+    Line(String),
+
+    /// A marker indicating that the user code finished executing. More lines may be output if the
+    /// user code spawned a background thread, but all output printed during execution should
+    /// already have been sent.
+    ExecutionComplete,
 }
 
 #[derive(Clone, Debug)]
@@ -333,7 +345,7 @@ const PANIC_NOTIFICATION: &str = "EVCXR_PANIC_NOTIFICATION";
 // Outputs from an EvalContext. This is a separate struct since users may want
 // destructure this and pass its components to separate threads.
 pub struct EvalContextOutputs {
-    pub stdout: crossbeam_channel::Receiver<String>,
+    pub stdout: crossbeam_channel::Receiver<StdoutEvent>,
     pub stderr: crossbeam_channel::Receiver<String>,
 }
 
@@ -453,6 +465,10 @@ impl EvalContext {
                 return Err(format!("{stderr}{error}").into());
             }
         }
+
+        // Skip any output send to stdout, in particular the execution complete event.
+        while outputs.stdout.try_recv().is_ok() {}
+
         context.initial_config = context.committed_state.config.clone();
         Ok((context, outputs))
     }
@@ -893,6 +909,7 @@ impl EvalContext {
         loop {
             let line = self.child_process.recv_line()?;
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
+                let _ = self.stdout_sender.send(StdoutEvent::ExecutionComplete);
                 break;
             }
             if line == PANIC_NOTIFICATION {
@@ -938,7 +955,7 @@ impl EvalContext {
             } else {
                 // Note, errors sending are ignored, since it just means the
                 // user of the library has dropped the Receiver.
-                let _ = self.stdout_sender.send(line);
+                let _ = self.stdout_sender.send(StdoutEvent::Line(line));
             }
         }
         if got_panic {
@@ -2016,6 +2033,15 @@ impl ContextState {
                     }),
                 },
             );
+        }
+    }
+}
+
+impl StdoutEvent {
+    pub fn line(self) -> Option<String> {
+        match self {
+            StdoutEvent::Line(line) => Some(line),
+            StdoutEvent::ExecutionComplete => None,
         }
     }
 }
