@@ -122,7 +122,7 @@
 * Use mimalloc. This reduces startup time, at least one Mac. Thanks thomcc.
 * Initialize CommandContext in the background. Reduces startup time. Thanks thomcc.
 * Updated rustyline. Thanks thomcc
-* Use rust-analyzer for infering types for let destructurings.
+* Use rust-analyzer for inferring types for let destructurings.
 * Update rust-analyzer. Fixes evcxr on nightly, beta (and next stable release).
 * Minimum supported rust version now 1.52 (required for latest rust-analyzer).
 
@@ -226,7 +226,7 @@
   * You can get back the old behavior with `:preserve_vars_on_panic 1`
   * Put that in your ~/.config/evcxr/init.evcxr or equivalent to always have it.
 * Optimization is now back on by default. With the above change, there's now not
-  really any noticable difference in eval times for small amounts of code.
+  really any noticeable difference in eval times for small amounts of code.
 
 # Version 0.4.2
 * Fixed runtime error on windows due to something not liking the dll having been
@@ -261,7 +261,7 @@
 * Fix for another upcoming cargo change (due in 1.37).
 
 # Version 0.3.4
-* Fix with upcomming beta release (1.36) where Cargo started intercepting and
+* Fix with upcoming beta release (1.36) where Cargo started intercepting and
   wrapping JSON errors from the compiler.
 * Give proper error message if a closure or an impl trait is stored into a
   variable.
@@ -282,7 +282,7 @@
 * Fix optimization (wasn't actually working before for some reason).
 * Give better error message if rustc suggests a private type for a variable.
 * Allow variables to be given explicit types.
-* A couple of fixes for Windows (probaly not enough for it to actually work
+* A couple of fixes for Windows (probably not enough for it to actually work
   though, but it's a start).
 * Support for running in Binder.
 
