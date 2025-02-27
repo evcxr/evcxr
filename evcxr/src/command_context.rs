@@ -248,7 +248,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 if let Err(error) =
                     self.process_command(command, &segment, &mut state, &command.args, true)
                 {
-                    errors.push(error);
+                    errors.push(*error);
                 }
             } else {
                 non_command_code = non_command_code.with_segment(segment);
@@ -310,7 +310,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
         args: &Option<String>,
     ) -> Result<EvalOutputs, Error> {
         self.process_command(command, segment, state, args, false)
-            .map_err(|err| Error::CompilationErrors(vec![err]))
+            .map_err(|err| Error::CompilationErrors(vec![*err]))
     }
 
     fn process_command(
@@ -320,7 +320,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
         state: &mut ContextState,
         args: &Option<String>,
         analysis_mode: bool,
-    ) -> Result<EvalOutputs, CompilationError> {
+    ) -> Result<EvalOutputs, Box<CompilationError>> {
         if let Some(command) = Self::commands_by_name().get(command_call.command.as_str()) {
             let result = match &command.analysis_callback {
                 Some(analysis_callback) if analysis_mode => (analysis_callback)(self, state, args),
@@ -346,17 +346,17 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     .unwrap_or(0);
                 let start_column = code_block::count_columns(&segment.code[..start_byte]) + 1;
                 let end_column = code_block::count_columns(&segment.code);
-                CompilationError::from_segment_span(
+                Box::new(CompilationError::from_segment_span(
                     segment,
                     SpannedMessage::from_segment_span(
                         segment,
                         Span::from_command(command_call, start_column, end_column),
                     ),
                     error.to_string(),
-                )
+                ))
             })
         } else {
-            Err(CompilationError::from_segment_span(
+            Err(Box::new(CompilationError::from_segment_span(
                 segment,
                 SpannedMessage::from_segment_span(
                     segment,
@@ -367,7 +367,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     ),
                 ),
                 format!("Unrecognised command {}", command_call.command),
-            ))
+            )))
         }
     }
 
