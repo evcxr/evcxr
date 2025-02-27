@@ -276,7 +276,6 @@ impl RustAnalyzer {
             (
                 crate_id,
                 triomphe::Arc::new(ra_ap_base_db::CrateWorkspaceData {
-                    proc_macro_cwd: None,
                     data_layout: workspace.target_layout.clone(),
                     toolchain: workspace.toolchain.clone(),
                 }),
