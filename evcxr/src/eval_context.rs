@@ -364,7 +364,7 @@ fn default_input_reader(_: InputRequest) -> String {
     String::new()
 }
 
-impl<'a> Default for EvalCallbacks<'a> {
+impl Default for EvalCallbacks<'_> {
     fn default() -> Self {
         EvalCallbacks {
             input_reader: &default_input_reader,

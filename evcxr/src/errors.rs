@@ -617,7 +617,7 @@ impl From<String> for Error {
     }
 }
 
-impl<'a> From<&'a str> for Error {
+impl From<&str> for Error {
     fn from(message: &str) -> Self {
         Error::Message(message.to_owned())
     }
