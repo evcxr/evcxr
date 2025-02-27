@@ -7,7 +7,8 @@ import_std = [
 ]
 
 [sandbox]
-kind = "Bubblewrap"
+# Sandbox is disabled since it seems to be not working correctly in the github action.
+#kind = "Bubblewrap"
 
 [api.net]
 include = [
