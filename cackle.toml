@@ -483,11 +483,6 @@ allow_apis = [
     "fs",
 ]
 
-[pkg.backtrace.build]
-allow_apis = [
-    "fs",
-]
-
 [pkg.block-buffer]
 allow_unsafe = true
 
@@ -629,6 +624,7 @@ allow_apis = [
 [pkg.ra_ap_toolchain]
 allow_apis = [
     "fs",
+    "process",
 ]
 
 [pkg.home]
@@ -677,9 +673,6 @@ allow_apis = [
 allow_apis = [
     "fs",
 ]
-
-[pkg.stable_deref_trait]
-allow_unsafe = true
 
 [pkg.triomphe]
 allow_unsafe = true
@@ -737,8 +730,13 @@ allow_unsafe = true
 [pkg.memoffset]
 allow_unsafe = true
 
-[pkg.sptr]
-allow_unsafe = true
-
 [pkg.ra_ap_intern]
 allow_unsafe = true
+
+[pkg.rustc-stable-hash]
+allow_unsafe = true
+
+[pkg.notify-types]
+allow_apis = [
+    "fs",
+]
