@@ -93,7 +93,7 @@ impl RustAnalyzer {
         // Pre-allocate an ID for our main source file.
         let vfs_source_file: ra_vfs::VfsPath = source_file.clone().into();
         vfs.set_file_contents(vfs_source_file.clone(), Some(vec![]));
-        let source_file_id = vfs.file_id(&vfs_source_file).unwrap();
+        let (source_file_id, _) = vfs.file_id(&vfs_source_file).unwrap();
         Ok(RustAnalyzer {
             with_sysroot: true,
             root_directory,
@@ -264,7 +264,11 @@ impl RustAnalyzer {
                 .collect(),
         );
         let (crate_graph, _) = workspace.to_crate_graph(
-            &mut |path| self.vfs.file_id(&path.to_path_buf().into()),
+            &mut |path| {
+                self.vfs
+                    .file_id(&path.to_path_buf().into())
+                    .map(|(id, _)| id)
+            },
             &FxHashMap::default(),
         );
 
