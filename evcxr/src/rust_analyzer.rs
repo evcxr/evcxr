@@ -13,7 +13,9 @@ use once_cell::sync::Lazy;
 use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
+use ra_ap_ide::CompletionFieldsToResolve;
 use ra_ap_ide::FileRange;
+use ra_ap_ide::SubstTyLen;
 use ra_ap_ide_db::imports::insert_use::ImportGranularity;
 use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
 use ra_ap_ide_db::EditionedFileId;
@@ -39,7 +41,6 @@ use ra_ide::RangeInfo;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
-use ra_ap_ide::CompletionFieldsToResolve;
 
 pub(crate) const EDITION: Edition = Edition::Edition2021;
 
@@ -313,6 +314,8 @@ impl RustAnalyzer {
             prefer_absolute: false,
             add_semicolon_to_unit: true,
             fields_to_resolve: CompletionFieldsToResolve::empty(),
+            exclude_flyimport: vec![],
+            exclude_traits: &[],
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
@@ -378,6 +381,7 @@ impl RustAnalyzer {
             max_trait_assoc_items_count: None,
             max_fields_count: Some(5),
             max_enum_variants_count: Some(5),
+            max_subst_ty_len: SubstTyLen::Unlimited,
         };
         let file_range = FileRange {
             file_id: self.source_file_id,
