@@ -316,6 +316,8 @@ impl RustAnalyzer {
             fields_to_resolve: CompletionFieldsToResolve::empty(),
             exclude_flyimport: vec![],
             exclude_traits: &[],
+            enable_auto_iter: true,
+            enable_auto_await: true,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
