@@ -1,4 +1,4 @@
-# Version 0.19.0 (unreleased)
+# Version 0.19.0
 * Update internal rust-analyzer
 * jupyter: Ensure iopub idle isn't sent before stdout output
 * Add support for shell commands (thanks wiseaidev and drendog)
