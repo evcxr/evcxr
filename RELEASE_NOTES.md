@@ -1,3 +1,10 @@
+# Version 0.19.0 (unreleased)
+* Update internal rust-analyzer
+* jupyter: Ensure iopub idle isn't sent before stdout output
+* Add support for shell commands (thanks wiseaidev and drendog)
+* User code is now compiled with rust 2024 edition
+* MSRV is now 1.85
+
 # Version 0.18.0
 * Update dependencies. Fixes compilation without `--locked` due to non-semver breaking change in
   `futures-task`.
