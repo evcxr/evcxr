@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::path::Path;
 
-pub(crate) const EDITION: Edition = Edition::Edition2021;
+pub(crate) const EDITION: Edition = Edition::Edition2024;
 
 pub(crate) struct RustAnalyzer {
     with_sysroot: bool,
@@ -518,7 +518,7 @@ mod test {
             [package]
             name = "foo"
             version = "0.1.0"
-            edition = "2021"
+            edition = "2024"
 
             [lib]
             "#,
