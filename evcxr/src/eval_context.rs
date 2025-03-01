@@ -1580,7 +1580,7 @@ impl ContextState {
         } else {
             // TODO: Add a mechanism to load a crate without any function to call then remove this.
             code = code
-                .generated("#[no_mangle]")
+                .generated("#[unsafe(no_mangle)]")
                 .generated(format!(
                     "pub extern \"C\" fn {}(",
                     self.current_user_fn_name()
@@ -1647,7 +1647,7 @@ impl ContextState {
                 .generated(include_str!("evcxr_internal_runtime.rs"))
                 .generated("}");
         }
-        code = code.generated("#[no_mangle]").generated(format!(
+        code = code.generated("#[unsafe(no_mangle)]").generated(format!(
             "pub extern \"C\" fn {}(",
             self.current_user_fn_name()
         ));
