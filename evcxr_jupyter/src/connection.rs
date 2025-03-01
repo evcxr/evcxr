@@ -6,8 +6,8 @@
 // copied, modified, or distributed except according to those terms.
 
 use anyhow::Result;
-use hmac::digest::KeyInit;
 use hmac::Hmac;
+use hmac::digest::KeyInit;
 use sha2::Sha256;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;

@@ -8,9 +8,9 @@
 use crate::connection::Connection;
 use crate::connection::HmacSha256;
 use crate::connection::RecvError;
+use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
-use anyhow::Result;
 use bytes::Bytes;
 use chrono::Utc;
 use json::JsonValue;

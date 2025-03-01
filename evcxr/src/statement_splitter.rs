@@ -5,10 +5,10 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use ra_ap_syntax::ast;
 use ra_ap_syntax::AstNode;
 use ra_ap_syntax::SourceFile;
 use ra_ap_syntax::SyntaxNode;
+use ra_ap_syntax::ast;
 
 pub(crate) struct OriginalUserCode<'a> {
     pub(crate) code: &'a str,
@@ -58,11 +58,11 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
 
 #[cfg(test)]
 mod test {
-    use super::split_into_statements;
     use super::OriginalUserCode;
-    use ra_ap_syntax::ast;
+    use super::split_into_statements;
     use ra_ap_syntax::AstNode;
     use ra_ap_syntax::SyntaxKind;
+    use ra_ap_syntax::ast;
 
     fn split_and_get_text(code: &str) -> Vec<&str> {
         split_into_statements(code)

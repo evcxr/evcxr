@@ -8,14 +8,14 @@
 use self::artifacts::read_artifacts;
 use self::cache::CacheResult;
 use crate::code_block::CodeBlock;
-use crate::errors::bail;
 use crate::errors::CompilationError;
 use crate::errors::Error;
+use crate::errors::bail;
 use crate::eval_context::Config;
 use crate::eval_context::ContextState;
-use anyhow::anyhow;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::anyhow;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::ffi::OsString;

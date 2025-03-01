@@ -12,11 +12,11 @@ use crate::code_block::CodeKind;
 use crate::code_block::Segment;
 use crate::code_block::UserCodeInfo;
 use crate::crate_config::ExternalCrate;
-use crate::errors::bail;
 use crate::errors::CompilationError;
 use crate::errors::Error;
 use crate::errors::Span;
 use crate::errors::SpannedMessage;
+use crate::errors::bail;
 use crate::evcxr_internal_runtime;
 use crate::item;
 use crate::module::Module;
@@ -31,10 +31,10 @@ use crate::use_trees::Import;
 use anyhow::Result;
 use once_cell::sync::Lazy;
 use ra_ap_ide::TextRange;
-use ra_ap_syntax::ast;
 use ra_ap_syntax::AstNode;
 use ra_ap_syntax::SyntaxKind;
 use ra_ap_syntax::SyntaxNode;
+use ra_ap_syntax::ast;
 use regex::Regex;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -2176,8 +2176,8 @@ fn std_lib_path(rustc: &Path) -> Result<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ra_ap_syntax::ast::HasAttrs;
     use ra_ap_syntax::SourceFile;
+    use ra_ap_syntax::ast::HasAttrs;
 
     #[test]
     fn test_replace_reserved_words_in_type() {

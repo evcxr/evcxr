@@ -13,9 +13,9 @@
 #[macro_use]
 extern crate json;
 
+use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
-use anyhow::Result;
 
 mod connection;
 mod control_file;

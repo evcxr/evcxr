@@ -5,6 +5,9 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::EvalContext;
+use crate::EvalContextOutputs;
+use crate::EvalOutputs;
 use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
@@ -12,21 +15,18 @@ use crate::code_block::Segment;
 use crate::code_block::ShellCommand;
 use crate::code_block::{self};
 use crate::crash_guard::CrashGuard;
-use crate::errors::bail;
 use crate::errors::CompilationError;
 use crate::errors::Error;
 use crate::errors::Span;
 use crate::errors::SpannedMessage;
+use crate::errors::bail;
 use crate::eval_context::ContextState;
 use crate::eval_context::EvalCallbacks;
 use crate::rust_analyzer::Completion;
 use crate::rust_analyzer::Completions;
 use crate::toml_parse::ConfigToml;
-use crate::EvalContext;
-use crate::EvalContextOutputs;
-use crate::EvalOutputs;
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -850,13 +850,13 @@ impl AvailableCommand {
         name: &'static str,
         short_description: &'static str,
         callback: impl Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
-            + 'static
-            + Sync
-            + Send,
+            &mut CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
+        + 'static
+        + Sync
+        + Send,
     ) -> AvailableCommand {
         AvailableCommand {
             name,
@@ -869,13 +869,13 @@ impl AvailableCommand {
     fn with_analysis_callback(
         mut self,
         callback: impl Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
-            + 'static
-            + Sync
-            + Send,
+            &mut CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
+        + 'static
+        + Sync
+        + Send,
     ) -> Self {
         self.analysis_callback = Some(Box::new(callback));
         self
