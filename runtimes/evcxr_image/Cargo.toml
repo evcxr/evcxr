@@ -6,7 +6,7 @@ description = "Displays images from the image crate in Evcxr Jupyter"
 repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 image = {version = "0.24.6", default-features = false, features = [ "png" ]}

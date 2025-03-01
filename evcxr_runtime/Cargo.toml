@@ -5,6 +5,7 @@ license = "MIT OR Apache-2.0"
 description = "Runtime core for the evcxr crate"
 repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
+edition = "2024"
 authors = ["The Evcxr Authors"]
 
 [dependencies]
