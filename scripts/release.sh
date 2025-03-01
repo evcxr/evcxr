@@ -1,14 +1,13 @@
 #!/bin/bash
 set -e
+
 VERSION=$(grep ^version evcxr/Cargo.toml | cut -d'"' -f2)
+
 if [ -z "$VERSION" ]; then
   echo "Couldn't determine version" >&2
   exit 1
 fi
-if ! git diff-index --quiet HEAD --; then
-  echo "Please commit all changes first" >&2
-  exit 1
-fi
+
 if [ $(git rev-parse HEAD) != $(cat .pre-release.hash) ]; then
   echo "Please run ./scripts/pre-release.sh first" >&2
   exit 1
