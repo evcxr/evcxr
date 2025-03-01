@@ -1077,7 +1077,10 @@ fn fix_path() {
                             path.push(":");
                         }
                         path.push(bin_dir);
-                        std::env::set_var("PATH", path);
+                        // Safety: We probably aren't doing stuff on other threads while we do this.
+                        // Is that good enough? Probably not really. TODO: Investigate alternatives.
+                        // Perhaps we can set PATH on our build commands instead.
+                        unsafe { std::env::set_var("PATH", path) };
                     }
                 }
             }

@@ -668,7 +668,13 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 |_ctx, _state, args| {
                     if let Some(arg) = args {
                         if let Some((key, value)) = arg.split_once('=') {
-                            std::env::set_var(key, value);
+                            // TODO: Investigate if we could just sent the environment on the child
+                            // process the next time we launch it.
+
+                            // Safety: Although there may be other threads, they should be idle
+                            // while we're doing this, so shouldn't be accessing the environment.
+                            unsafe { std::env::set_var(key, value) };
+
                             // For simplicity of implementation, we require that the user restarts
                             // the child process in order to obtain the new environment variables.
                             // If they wanted to set them straight away, they could just have called

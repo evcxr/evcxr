@@ -6,7 +6,7 @@ description = "A Jupyter Kernel for Rust"
 repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 evcxr = { version = "=0.18.0", path = "../evcxr" }
