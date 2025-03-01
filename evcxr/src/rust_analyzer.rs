@@ -5,10 +5,10 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use anyhow::anyhow;
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::anyhow;
+use anyhow::bail;
 use once_cell::sync::Lazy;
 use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
@@ -16,22 +16,22 @@ use ra_ap_ide as ra_ide;
 use ra_ap_ide::CompletionFieldsToResolve;
 use ra_ap_ide::FileRange;
 use ra_ap_ide::SubstTyLen;
-use ra_ap_ide_db::imports::insert_use::ImportGranularity;
-use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
 use ra_ap_ide_db::EditionedFileId;
 use ra_ap_ide_db::FxHashMap;
 use ra_ap_ide_db::SnippetCap;
+use ra_ap_ide_db::imports::insert_use::ImportGranularity;
+use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
 use ra_ap_paths::AbsPathBuf;
 use ra_ap_project_model::CargoConfig;
 use ra_ap_project_model::ProjectManifest;
 use ra_ap_project_model::ProjectWorkspace;
 use ra_ap_project_model::RustLibSource;
+use ra_ap_syntax::TextRange;
 use ra_ap_syntax::ast::AstNode;
 use ra_ap_syntax::ast::{self};
-use ra_ap_syntax::TextRange;
 use ra_ap_vfs as ra_vfs;
-use ra_ap_vfs::loader::LoadingProgress;
 use ra_ap_vfs::FileId;
+use ra_ap_vfs::loader::LoadingProgress;
 use ra_ap_vfs_notify as vfs_notify;
 use ra_ide::CallableSnippets;
 use ra_ide::Edition;
@@ -349,7 +349,9 @@ impl RustAnalyzer {
                     });
                     if let Some(previous_range) = range.as_ref() {
                         if *previous_range != indel.delete {
-                            bail!("Different completions wanted to replace different parts of the text");
+                            bail!(
+                                "Different completions wanted to replace different parts of the text"
+                            );
                         }
                     } else {
                         range = Some(indel.delete)
@@ -496,9 +498,9 @@ pub(crate) fn is_type_valid(type_name: &str) -> bool {
 
 #[cfg(test)]
 mod test {
-    use super::is_type_valid;
     use super::RustAnalyzer;
     use super::TypeName;
+    use super::is_type_valid;
     use anyhow::Result;
 
     impl TypeName {

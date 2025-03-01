@@ -6,8 +6,8 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::statement_splitter;
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use once_cell::sync::Lazy;
 use ra_ap_syntax::SyntaxNode;
 use regex::Regex;

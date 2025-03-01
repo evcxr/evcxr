@@ -5,13 +5,15 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use super::scan::validate_source_fragment;
 use super::scan::FragmentValidity;
+use super::scan::validate_source_fragment;
 use crate::bginit::BgInitMutex;
 use colored::*;
 use evcxr::CommandContext;
 use evcxr::Completions;
 use evcxr::Error;
+use rustyline::Context;
+use rustyline::Helper;
 use rustyline::completion::Completer;
 use rustyline::error::ReadlineError;
 use rustyline::highlight::Highlighter;
@@ -19,8 +21,6 @@ use rustyline::hint::Hinter;
 use rustyline::validate::ValidationContext;
 use rustyline::validate::ValidationResult;
 use rustyline::validate::Validator;
-use rustyline::Context;
-use rustyline::Helper;
 use std::borrow::Cow;
 use std::sync::Arc;
 
@@ -57,7 +57,7 @@ impl Completer for EvcxrRustylineHelper {
                 return Err(rustyline::error::ReadlineError::Io(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     e.clone(),
-                )))
+                )));
             }
         };
         let res: Vec<String> = completions

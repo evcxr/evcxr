@@ -98,8 +98,8 @@ pub(crate) fn use_tree_names_do(use_tree: &ast::UseTree, out: &mut impl FnMut(Im
 
 #[cfg(test)]
 mod tests {
-    use super::use_tree_names_do;
     use super::Import;
+    use super::use_tree_names_do;
     use ra_ap_syntax::ast;
     use ra_ap_syntax::ast::HasModuleItem;
 

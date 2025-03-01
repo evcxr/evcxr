@@ -1,4 +1,4 @@
-edition = "2021"
+edition = "2024"
 use_field_init_shorthand = true
 # Uncomment once stable
 #imports_granularity = "Item"

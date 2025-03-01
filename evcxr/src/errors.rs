@@ -5,12 +5,12 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::code_block::count_columns;
 use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
 use crate::code_block::Segment;
 use crate::code_block::UserCodeInfo;
+use crate::code_block::count_columns;
 use ariadne::Color;
 use ariadne::ColorGenerator;
 use ariadne::Label;

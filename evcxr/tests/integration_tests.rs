@@ -920,10 +920,12 @@ fn code_completion() {
         foo().res"#;
     let completions = ctx.completions(code, code.len()).unwrap();
     assert!(!completions.completions.is_empty());
-    assert!(completions
-        .completions
-        .iter()
-        .any(|c| c.code == "reserve(additional)"));
+    assert!(
+        completions
+            .completions
+            .iter()
+            .any(|c| c.code == "reserve(additional)")
+    );
     for c in completions.completions {
         if !c.code.starts_with("res") {
             panic!("Unexpected completion: '{}'", c.code);

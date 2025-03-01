@@ -6,9 +6,9 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::eval_context::Config;
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 use json::JsonValue;
 use json::{self};
 use once_cell::sync::Lazy;
@@ -248,10 +248,12 @@ mod tests {
         // somewhere in the error message.
         let mut config = Config::new(crate2, PathBuf::from("/dummy_evcxr_bin"))?;
         config.allow_static_linking = true;
-        assert!(get_library_names(&config)
-            .unwrap_err()
-            .to_string()
-            .contains("no_such_feature"));
+        assert!(
+            get_library_names(&config)
+                .unwrap_err()
+                .to_string()
+                .contains("no_such_feature")
+        );
         Ok(())
     }
 }

@@ -10,8 +10,8 @@
 // https://github.com/rust-lang/rust/issues/45601 - but that's now long fixed
 // and we've dropped support for old version for rustc prior to the fix.
 
-use anyhow::anyhow;
 use anyhow::Result;
+use anyhow::anyhow;
 use std::fs;
 
 #[derive(Debug, Clone)]
