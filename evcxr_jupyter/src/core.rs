@@ -189,7 +189,7 @@ impl Server {
         self,
         context: &Arc<std::sync::Mutex<CommandContext>>,
         receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
-        execution_reply_sender: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
+        execution_reply_sender: &tokio::sync::mpsc::UnboundedSender<ExecutionReply>,
     ) -> Result<()> {
         let mut execution_count = 1;
         loop {
@@ -290,18 +290,24 @@ impl Server {
                             .send(&mut *self.iopub.lock().await)
                             .await?;
                     }
-                    execution_reply_sender.send(message.new_reply().with_content(object! {
-                        "status" => "ok",
-                        "execution_count" => execution_count,
-                    }))?;
+                    execution_reply_sender.send(ExecutionReply {
+                        message: message.new_reply().with_content(object! {
+                            "status" => "ok",
+                            "execution_count" => execution_count,
+                        }),
+                        got_execution_complete_marker: output.got_execution_complete_marker,
+                    })?;
                 }
                 Err(errors) => {
                     self.emit_errors(&errors, &message, message.code(), execution_count)
                         .await?;
-                    execution_reply_sender.send(message.new_reply().with_content(object! {
-                        "status" => "error",
-                        "execution_count" => execution_count
-                    }))?;
+                    execution_reply_sender.send(ExecutionReply {
+                        message: message.new_reply().with_content(object! {
+                            "status" => "error",
+                            "execution_count" => execution_count
+                        }),
+                        got_execution_complete_marker: false,
+                    })?;
                 }
             };
         }
@@ -336,7 +342,7 @@ impl Server {
         self,
         mut connection: Connection<S>,
         execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
-        execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
+        execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<ExecutionReply>,
         context: Arc<std::sync::Mutex<CommandContext>>,
     ) -> Result<()> {
         loop {
@@ -369,7 +375,7 @@ impl Server {
         message: JupyterMessage,
         connection: &mut Connection<S>,
         execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
-        execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
+        execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<ExecutionReply>,
         context: &Arc<std::sync::Mutex<CommandContext>>,
     ) -> Result<()> {
         // Processing of every message should be enclosed between "busy" and "idle"
@@ -398,14 +404,17 @@ impl Server {
                 .send(connection)
                 .await?;
         } else if message.message_type() == "execute_request" {
-            // We don't want to send our idle message as soon as execution completes, because there
-            // might still be output from the user code that hasn't been sent to the iopub yet.
-            // Instead we send the idle message later, once the stdout receiver has gotten
-            // confirmation that all output has been sent to the iopub.
-            *self.pending_idle_message.lock().await = idle.take();
             execution_channel.send(message)?;
             if let Some(reply) = execution_reply_receiver.recv().await {
-                reply.send(connection).await?;
+                reply.message.send(connection).await?;
+
+                if reply.got_execution_complete_marker {
+                    // We don't want to send our idle message as soon as execution completes,
+                    // because there might still be output from the user code that hasn't been sent
+                    // to the iopub yet. Instead we send the idle message later, once the stdout
+                    // receiver has gotten confirmation that all output has been sent to the iopub.
+                    *self.pending_idle_message.lock().await = idle.take();
+                }
             }
         } else if message.message_type() == "comm_open" {
             comm_open(message, context, Arc::clone(&self.iopub)).await?;
@@ -434,6 +443,7 @@ impl Server {
                 message.message_type()
             );
         }
+
         if let Some(idle) = idle.take() {
             idle.send(&mut *self.iopub.lock().await).await?;
         }
@@ -663,6 +673,11 @@ impl Server {
         }
         Ok(())
     }
+}
+
+struct ExecutionReply {
+    message: JupyterMessage,
+    got_execution_complete_marker: bool,
 }
 
 async fn comm_open(
