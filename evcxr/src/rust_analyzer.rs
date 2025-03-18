@@ -389,6 +389,7 @@ impl RustAnalyzer {
             max_fields_count: Some(5),
             max_enum_variants_count: Some(5),
             max_subst_ty_len: SubstTyLen::Unlimited,
+            show_drop_glue: false,
         };
         let file_range = FileRange {
             file_id: self.source_file_id,
