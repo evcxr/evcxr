@@ -709,12 +709,6 @@ allow_unsafe = true
 [pkg.ra_ap_span]
 allow_unsafe = true
 
-[pkg.ra_ap_salsa-macros]
-allow_proc_macro = true
-
-[pkg.ra_ap_salsa]
-allow_unsafe = true
-
 [pkg.lz4_flex]
 allow_unsafe = true
 
@@ -741,3 +735,46 @@ allow_unsafe = true
 allow_apis = [
     "fs",
 ]
+
+[pkg.salsa-macros]
+allow_proc_macro = true
+allow_apis = [
+    "process",
+]
+allow_unsafe = true
+
+[pkg.windows-implement]
+allow_proc_macro = true
+
+[pkg.windows-interface]
+allow_proc_macro = true
+
+[pkg.ra_ap_query-group-macro]
+allow_proc_macro = true
+
+[pkg.rustversion]
+allow_proc_macro = true
+
+[pkg.foldhash]
+allow_unsafe = true
+
+[pkg.allocator-api2]
+allow_unsafe = true
+
+[pkg.portable-atomic]
+build.allow_apis = [
+    "process",
+]
+allow_unsafe = true
+
+[pkg.boxcar]
+allow_unsafe = true
+
+[pkg.salsa-macro-rules]
+allow_unsafe = true
+
+[pkg.hashlink]
+allow_unsafe = true
+
+[pkg.salsa]
+allow_unsafe = true
