@@ -7,7 +7,6 @@
 
 use evcxr::Error;
 use evcxr::EvalContext;
-use evcxr::StdoutEvent;
 
 fn main() -> Result<(), Error> {
     // You must call ```evcxr::runtime_hook()``` at the top of main, otherwise
@@ -23,13 +22,8 @@ fn main() -> Result<(), Error> {
     // For this trivial example, we just receive a single line of output from
     // the code that was run. In a more complex case, we'd likely want to have
     // separate threads waiting for output on both stdout and stderr.
-    if let Ok(event) = outputs.stdout.recv() {
-        match event {
-            StdoutEvent::Line(line) => {
-                println!("{line}");
-            }
-            StdoutEvent::ExecutionComplete => {}
-        }
+    if let Ok(line) = outputs.stdout.recv() {
+        println!("{line}");
     }
 
     Ok(())
