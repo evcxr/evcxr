@@ -33,6 +33,13 @@ By default, `evcxr_jupyter --install` will install the kernel into a user local 
 If your operating system is an older version, or has a different libc than what the pre-built
 binaries were compiled with, then you'll need to build from source using the command above.
 
+When installing inside a virtualenv, the correct path can be provided using the
+environment variable `JUPYTER_PATH`, i.e.
+
+```sh
+env JUPYTER_PATH=$VIRTUAL_ENV/share/jupyter/ evcxr_jupyter --install
+```
+
 To actually use evcxr_jupyter, you'll need Jupyter notebook to be installed.
 * Debian or Ubuntu Linux: `sudo apt install jupyter-notebook`
 * Mac: You might be able to `brew install jupyter`
