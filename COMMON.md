@@ -84,6 +84,58 @@ If `:efmt` is set to `Debug`, this will also work for `Option`:
 NoneError
 ```
 
+**Support for async-await**
+
+If you use `await` in your code, evcxr will automatically build and start a Tokio runtime. You can
+test this out with a trival example as follows:
+
+```
+>> async fn foo() -> u32 { 42 }
+>> foo().await
+   Compiling libc v0.2.150
+   Compiling num_cpus v1.16.0
+   Compiling tokio v1.34.0
+42
+```
+
+If you'd like to use more non-default features of tokio, then you need to add the dependency on
+tokio before you first try to use the await keywork. For example:
+
+```
+:dep tokio = {version = "1.34.0", features = ["full"]}
+```
+
+You can then write code that uses await and can optionally use the `?` operator as well.
+
+The following code will attempt to connect to localhost on port 1234.
+
+```
+let mut stream = tokio::net::TcpStream::connect("127.0.0.1:1234").await?;
+```
+
+Unless you happen to have a program listening on this port, this should report the error:
+
+```
+Connection refused (os error 111)
+```
+
+If you're on Linux, you can use netcat (you may need to install it) to listen on an arbitrary port.
+For example:
+
+```sh
+nc -t -l 1234
+```
+
+Leave that running in one shell, then back in evcxr, run the following:
+
+```rust
+use tokio::io::AsyncWriteExt;
+stream.write(b"Hello, world!\n").await?;
+```
+
+You should hopefully see the "Hello, world!" message appear in the shell where netcat (nc) is
+running. You can stop nc by pressing control-c.
+
 ## Limitations
 
 * There is currently no way to import macros from external crates.
@@ -97,6 +149,12 @@ You can create an `init.evcxr` file in the `evcxr` config directory. The locatio
 | Linux             | OSX                                      | Windows                                |
 |-------------------|------------------------------------------|----------------------------------------|
 |` ~/.config/evcxr` | `/Users/Alice/Library/Preferences/evcxr` | `C:\Users\Alice\AppData\Roaming\evcxr` |
+
+You can check the location of the config directory by running the following in the REPL:
+```rust 
+:dep dirs
+dirs::config_dir().unwrap().join("evcxr").join("init.evcxr")
+```
 
 Any options set in this file will be automatically loaded at startup. For example:
 
@@ -122,20 +180,15 @@ Executing prelude from "~/.config/evcxr/prelude.rs"
 
 ### Caching
 
-You can optionally cache compilation outputs with [sccache](https://github.com/mozilla/sccache). If
-you frequently use the same crates, this can speed things up quite a bit.
+You can optionally cache compilation outputs. To do so, add `:cache {size in MB}` to your
+`init.evcxr`. e.g. to have a 500 MB cache, add the following:
 
-You can install sccache with cargo:
-```sh
-$ cargo install sccache
+```
+:cache 500
 ```
 
-And set the sccache configuration option:
-```sh
-:sccache 1
-```
-
-To always use sccache, add `:sccache 1` to your init.evcxr (see Startup options above).
+To disable the cache, use `:cache 0`. Running with the cache disabled doesn't clear the cache. To
+clear the cache, run `:clear_cache`.
 
 ### Variable Persistence
 
@@ -172,9 +225,12 @@ If you really need `some_values` to persist, you can make `all_values` into a st
 leaking it:
 
 ```rust
-let all_values = Box::leak(Box::new(vec![10, 20, 30, 40, 50]));
+let all_values: &'static Vec<i32> = Box::leak(Box::new(vec![10, 20, 30, 40, 50]));
 let some_values = &all_values[2..3];
 ```
+
+Note that we need to give `all_values` a type here because otherwise the type ends up being a
+mutable reference, which would result in us still having borrow checker problems.
 
 ### Linker
 
@@ -183,6 +239,27 @@ Installing the [`lld`](https://lld.llvm.org/) linker it is recommended as it is 
 $ sudo apt install lld
 ```
 `lld` will be used automatically if detected on all systems with the exception of Mac OS. You can check which linker is being used by running `:linker`.
+
+### Using cranelift backend
+
+If you'd like to try using cranelift rather than llvm to do codegen, you can do so using recent rust
+nightly releases.
+
+First update your nightly toolchain with `rustup update nightly` or, if you don't already have it
+installed, `rustup install nightly`.
+
+Install the cranelift preview component:
+
+```sh
+rustup component add rustc-codegen-cranelift-preview --toolchain nightly
+```
+
+Then use the following commands from evcxr or in your init.evcxr.
+
+```
+:toolchain nightly
+:codegen_backend cranelift
+```
 
 ### Commands
 

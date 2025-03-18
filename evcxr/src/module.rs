@@ -5,26 +5,61 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use self::artifacts::read_artifacts;
+use self::cache::CacheResult;
 use crate::code_block::CodeBlock;
-use crate::errors::bail;
 use crate::errors::CompilationError;
 use crate::errors::Error;
+use crate::errors::bail;
 use crate::eval_context::Config;
 use crate::eval_context::ContextState;
+use anyhow::Context;
+use anyhow::Result;
+use anyhow::anyhow;
 use once_cell::sync::Lazy;
 use regex::Regex;
+use std::ffi::OsString;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::process::Command;
+
+mod artifacts;
+pub(crate) mod cache;
+
+pub(crate) const CORE_EXTERN_ENV: &str = "EVCXR_CORE_EXTERN";
+pub(crate) const CACHE_ENABLED_ENV: &str = "EVCXR_CACHE_ENABLED";
+
+pub(crate) fn shared_object_prefix() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "lib"
+    } else if cfg!(target_os = "windows") {
+        ""
+    } else {
+        "lib"
+    }
+}
+
+pub(crate) fn rlib_prefix() -> &'static str {
+    // Rlibs are, fortunately consistent in that they always start with "lib" for all platforms.
+    "lib"
+}
+
+pub(crate) fn shared_object_extension() -> &'static str {
+    if cfg!(target_os = "macos") {
+        "dylib"
+    } else if cfg!(target_os = "windows") {
+        "dll"
+    } else {
+        "so"
+    }
+}
 
 fn shared_object_name_from_crate_name(crate_name: &str) -> String {
-    if cfg!(target_os = "macos") {
-        format!("lib{crate_name}.dylib")
-    } else if cfg!(target_os = "windows") {
-        format!("{crate_name}.dll")
-    } else {
-        format!("lib{crate_name}.so")
-    }
+    let prefix = shared_object_prefix();
+    let extension = shared_object_extension();
+    format!("{prefix}{crate_name}.{extension}")
 }
 
 fn create_dir(dir: &Path) -> Result<(), Error> {
@@ -82,16 +117,20 @@ fn rename_or_copy_so_file(src: &Path, dest: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+#[derive(Default)]
 pub(crate) struct Module {
     build_num: i32,
+    last_allow_static: Option<bool>,
 }
 
 const CRATE_NAME: &str = "ctx";
 
 impl Module {
     pub(crate) fn new() -> Result<Module, Error> {
-        let module = Module { build_num: 0 };
-        Ok(module)
+        Ok(Module {
+            build_num: 0,
+            last_allow_static: None,
+        })
     }
 
     pub(crate) fn so_path(&self, config: &Config) -> PathBuf {
@@ -126,10 +165,7 @@ impl Module {
         config: &Config,
     ) -> Result<Vec<CompilationError>, Error> {
         self.write_code(code_block, config)?;
-        let output = config
-            .cargo_command("check")
-            .arg("--message-format=json")
-            .output();
+        let output = config.cargo_command("check").output();
 
         let cargo_output = match output {
             Ok(out) => out,
@@ -144,31 +180,16 @@ impl Module {
         code_block: &CodeBlock,
         config: &Config,
     ) -> Result<SoFile, Error> {
-        let mut command = config.cargo_command("rustc");
+        if self.last_allow_static == Some(!config.allow_static_linking) {
+            // If allow_static_linking has changed, then we need to rebuild everything.
+            config.cargo_command("clean").output()?;
+        }
+        self.last_allow_static = Some(config.allow_static_linking);
+        let command = config.cargo_command("build");
         if config.time_passes && config.toolchain != "nightly" {
             bail!("time_passes option requires nightly compiler");
         }
 
-        command
-            .arg("--target")
-            .arg(&config.target)
-            .arg("--message-format=json")
-            .arg("--")
-            .arg("-C")
-            .arg("prefer-dynamic")
-            .env("CARGO_TARGET_DIR", "target")
-            .env("RUSTC", &config.rustc_path);
-        if config.linker == "lld" {
-            command
-                .arg("-C")
-                .arg(format!("link-arg=-fuse-ld={}", config.linker));
-        }
-        if let Some(sccache) = &config.sccache {
-            command.env("RUSTC_WRAPPER", sccache);
-        }
-        if config.time_passes {
-            command.arg("-Ztime-passes");
-        }
         self.write_code(code_block, config)?;
         let cargo_output = run_cargo(command, code_block)?;
         if config.time_passes {
@@ -182,11 +203,13 @@ impl Module {
                 "code_{}",
                 self.build_num
             )));
-        // Every time we compile, the output file is the same. We need to
-        // renamed it so that we have a unique filename, otherwise we wouldn't
-        // be able to load the result of the next compilation. Also, on Windows,
-        // a loaded dll gets locked, so we couldn't even compile a second time
-        // if we didn't load a different file.
+        if config.cache_bytes() > 0 {
+            crate::module::cache::cleanup(config.cache_bytes())?;
+        }
+        // Every time we compile, the output file is the same. We need to rename it so that we have
+        // a unique filename, otherwise we wouldn't be able to load the result of the next
+        // compilation. Also, on Windows, a loaded dll gets locked, so we couldn't even compile a
+        // second time if we didn't load a different file.
         rename_or_copy_so_file(&self.so_path(config), &copied_so_file)?;
         Ok(SoFile {
             path: copied_so_file,
@@ -224,7 +247,7 @@ impl Module {
 [package]
 name = "{}"
 version = "1.0.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 crate-type = ["cdylib"]
@@ -261,6 +284,150 @@ offline = {}
             state.offline_mode()
         )
     }
+}
+
+pub(crate) fn wrap_rustc() {
+    match wrap_rustc_helper() {
+        Err(error) => {
+            eprintln!("Failed to wrap rustc: {error}");
+            std::process::exit(-1);
+        }
+        Ok(exit_code) => {
+            std::process::exit(exit_code);
+        }
+    }
+}
+
+pub(crate) fn wrap_rustc_helper() -> Result<i32> {
+    let mut command = rustc_command()?;
+
+    let cache_result = cache::access_cache(&command)?;
+    if matches!(cache_result, CacheResult::Hit) {
+        return Ok(0);
+    }
+
+    let output = command.output()?;
+
+    std::io::stdout().write_all(&output.stdout)?;
+    std::io::stderr().write_all(&output.stderr)?;
+
+    if output.status.code() == Some(0) {
+        let stderr = std::str::from_utf8(&output.stderr).context("Rustc emitted invalid UTF-8")?;
+        let artifacts = read_artifacts(stderr);
+        if let CacheResult::Miss(cache_miss) = cache_result {
+            cache_miss.update_cache(&artifacts)?;
+        }
+    }
+
+    Ok(output.status.code().unwrap_or(-1))
+}
+
+fn rustc_command() -> Result<Command> {
+    let mut args = std::env::args().peekable();
+    args.next();
+    let rustc = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
+    let mut command = std::process::Command::new(rustc);
+
+    if !should_force_dylibs() {
+        command.args(args);
+        return Ok(command);
+    }
+
+    let num_crate_types = std::env::args_os()
+        .filter(|arg| arg == "--crate-type")
+        .count();
+    let core_extern = std::env::var(CORE_EXTERN_ENV)
+        .with_context(|| format!("Internal env var {CORE_EXTERN_ENV}` not set"))?;
+
+    let mut got_prefer_dynamic = false;
+    while let Some(arg) = args.next() {
+        if arg == "-C" {
+            let next = args.peek();
+            if next.map(|n| n == "prefer-dynamic").unwrap_or_default() {
+                got_prefer_dynamic = true;
+            }
+        }
+        if arg == "-Cprefer-dynamic" {
+            got_prefer_dynamic = true;
+        }
+
+        // If a static library is being linked into this crate, then we modify the linker arguments
+        // to make sure that the whole archive gets linked in, otherwise any symbol not referenced
+        // by the functions in this crate (most of them) will be garbage collected by the linker.
+        // This would be slightly nicer if we could just pass `-l static:+whole-archive=...` to
+        // rustc, however rustc doesn't permit `+whole-archive` and `+bundle` at the same time which
+        // is what we want.
+        if arg == "-l" {
+            let Some(next) = args.next() else { continue };
+            if let Some(rest) = next.strip_prefix("static=") {
+                command.arg("-Clink-arg=-Wl,--whole-archive");
+                command.arg("-l").arg(rest);
+                command.arg("-Clink-arg=-Wl,--no-whole-archive");
+            } else {
+                command.arg(arg);
+                command.arg(next);
+            }
+            continue;
+        }
+
+        command.arg(&arg);
+
+        // If we're compiling as a crate-type of lib and nothing else, then we tell rustc to also
+        // compile as a dylib. We still need compile as type lib though, since otherwise cargo
+        // recompiles every time - presumably because it detects that the lib file it asked for
+        // isn't present.
+        if arg == "--crate-type" && num_crate_types == 1 {
+            if let Some(crate_type) = args.next() {
+                command.arg(&crate_type);
+                if crate_type == "lib" {
+                    command.arg("--crate-type");
+                    command.arg("dylib");
+                }
+            }
+        }
+        // Make paths to our dependencies to use dylibs rather than rlibs.
+        if arg == "--extern" {
+            let ext = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
+            let so_arg = map_extern_arg(&ext);
+            command.arg(so_arg);
+        }
+    }
+    command.arg("--extern").arg(core_extern);
+    if !got_prefer_dynamic {
+        command.arg("-C").arg("prefer-dynamic");
+    }
+    Ok(command)
+}
+
+fn should_force_dylibs() -> bool {
+    std::env::var(crate::runtime::FORCE_DYLIB_ENV).is_ok()
+}
+
+fn map_extern_arg(ext: &str) -> OsString {
+    if let Some((crate_name, path)) = ext.split_once('=') {
+        let mut path = PathBuf::from(path);
+        let mut so_arg = OsString::from(crate_name);
+        // Remove the rlib prefix and add the shared object prefix (if any). On unix platforms this
+        // is redundant because both are "lib", but it's necessary on Windows. We do it
+        // unconditionally though because it's cheap and it makes sure the code always gets tested.
+        if let Some(without_prefix) = path
+            .file_name()
+            .and_then(|f| f.to_str())
+            .and_then(|f| f.strip_prefix(rlib_prefix()))
+        {
+            let prefix = shared_object_prefix();
+            path = path.with_file_name(format!("{prefix}{without_prefix}"));
+        }
+        so_arg.push("=");
+        let path = path.with_extension(shared_object_extension());
+        // The shared object might not exist yet if we're doing a `cargo check`, so we only attempt
+        // to use it if it actually exists.
+        if path.exists() {
+            so_arg.push(path);
+            return so_arg;
+        }
+    }
+    OsString::from(ext)
 }
 
 /// Run a cargo command prepared for the provided `code_block`, processing the
@@ -332,7 +499,6 @@ fn run_cargo(
 ///
 /// At this point it looks for messages about compiling dependency crates.
 fn tee_error_line(line: &[u8]) {
-    use std::io::Write;
     static CRATE_COMPILING: Lazy<regex::bytes::Regex> =
         Lazy::new(|| regex::bytes::Regex::new("^\\s*Compiling (\\w+)(?:\\s+.*)?$").unwrap());
     if let Some(captures) = CRATE_COMPILING.captures(line) {

@@ -6,9 +6,9 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::eval_context::Config;
-use anyhow::bail;
 use anyhow::Context;
 use anyhow::Result;
+use anyhow::bail;
 use json::JsonValue;
 use json::{self};
 use once_cell::sync::Lazy;
@@ -43,7 +43,7 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
     [package]
     name = "evcxr_dummy_validate_dep"
     version = "0.0.1"
-    edition = "2021"
+    edition = "2024"
 
     [lib]
     path = "lib.rs"
@@ -176,6 +176,7 @@ mod tests {
     use crate::eval_context::Config;
     use anyhow::Result;
     use std::path::Path;
+    use std::path::PathBuf;
 
     #[test]
     fn test_library_names_from_metadata() {
@@ -195,7 +196,7 @@ mod tests {
             [package]
             name = "{name}"
             version = "0.0.1"
-            edition = "2021"
+            edition = "2024"
 
             [dependencies]
             {deps}
@@ -221,10 +222,11 @@ mod tests {
             "crate2",
             &format!(r#"crate1 = {{ path = "{}" }}"#, path_to_string(&crate1)),
         )?;
-        assert_eq!(
-            get_library_names(&Config::new(crate2)?).unwrap(),
-            vec!["crate1".to_owned()]
-        );
+        let mut config = Config::new(crate2, PathBuf::from("/dummy_evcxr_bin"))?;
+        // We allow static linking so that we don't need a valid RUSTC_WRAPPER, since we just passed
+        // /dummy_evcxr_bin.
+        config.allow_static_linking = true;
+        assert_eq!(get_library_names(&config)?, vec!["crate1".to_owned()]);
         Ok(())
     }
 
@@ -244,10 +246,14 @@ mod tests {
         )?;
         // Make sure that the problematic feature "no_such_feature" is mentioned
         // somewhere in the error message.
-        assert!(get_library_names(&Config::new(crate2)?)
-            .unwrap_err()
-            .to_string()
-            .contains("no_such_feature"));
+        let mut config = Config::new(crate2, PathBuf::from("/dummy_evcxr_bin"))?;
+        config.allow_static_linking = true;
+        assert!(
+            get_library_names(&config)
+                .unwrap_err()
+                .to_string()
+                .contains("no_such_feature")
+        );
         Ok(())
     }
 }

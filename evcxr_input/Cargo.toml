@@ -5,6 +5,6 @@ license = "MIT OR Apache-2.0"
 description = "Support for reading input from the user in Evcxr"
 repository = "https://github.com/evcxr/evcxr"
 authors = ["The Evcxr Authors"]
-edition = "2021"
+edition = "2024"
 
 [dependencies]

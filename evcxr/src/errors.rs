@@ -5,19 +5,18 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::code_block::count_columns;
 use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
 use crate::code_block::Segment;
 use crate::code_block::UserCodeInfo;
+use crate::code_block::count_columns;
 use ariadne::Color;
 use ariadne::ColorGenerator;
 use ariadne::Label;
 use ariadne::Report;
 use ariadne::ReportKind;
 use json::JsonValue;
-use json::{self};
 use ra_ap_ide::TextRange;
 use ra_ap_ide::TextSize;
 use std::fmt;
@@ -169,7 +168,7 @@ fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a 
 impl CompilationError {
     pub(crate) fn opt_new(mut json: JsonValue, code_block: &CodeBlock) -> Option<CompilationError> {
         // From Cargo 1.36 onwards, errors emitted as JSON get wrapped by Cargo.
-        // Retrive the inner message emitted by the compiler.
+        // Retrieve the inner message emitted by the compiler.
         if json["message"].is_object() {
             json = json["message"].clone();
         }
@@ -516,7 +515,7 @@ impl SpannedMessage {
                 let mut message = SpannedMessage::from_json(expansion_span_json, code_block, None);
                 if message.span.is_some() {
                     if let Some(label) = span_json["label"].as_str() {
-                        message.label = label.to_owned();
+                        label.clone_into(&mut message.label);
                     }
                     message.is_primary |= span_json["is_primary"].as_bool().unwrap_or(false);
                     return message;
@@ -618,7 +617,7 @@ impl From<String> for Error {
     }
 }
 
-impl<'a> From<&'a str> for Error {
+impl From<&str> for Error {
     fn from(message: &str) -> Self {
         Error::Message(message.to_owned())
     }

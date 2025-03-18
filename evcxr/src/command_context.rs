@@ -5,25 +5,28 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
+use crate::EvalContext;
+use crate::EvalContextOutputs;
+use crate::EvalOutputs;
 use crate::code_block::CodeBlock;
 use crate::code_block::CodeKind;
 use crate::code_block::CommandCall;
 use crate::code_block::Segment;
+use crate::code_block::ShellCommand;
 use crate::code_block::{self};
 use crate::crash_guard::CrashGuard;
-use crate::errors::bail;
 use crate::errors::CompilationError;
 use crate::errors::Error;
 use crate::errors::Span;
 use crate::errors::SpannedMessage;
+use crate::errors::bail;
 use crate::eval_context::ContextState;
 use crate::eval_context::EvalCallbacks;
 use crate::rust_analyzer::Completion;
 use crate::rust_analyzer::Completions;
-use crate::EvalContext;
-use crate::EvalContextOutputs;
-use crate::EvalOutputs;
+use crate::toml_parse::ConfigToml;
 use anyhow::Result;
+use anyhow::anyhow;
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -127,15 +130,21 @@ Panic detected. Here's some useful information if you're filing a bug report.
         let mut non_command_code = CodeBlock::new();
         let (user_code, code_info) = CodeBlock::from_original_user_code(to_run);
         for segment in user_code.segments {
-            if let CodeKind::Command(command) = &segment.kind {
-                eval_outputs.merge(self.execute_command(
-                    command,
-                    &segment,
-                    &mut state,
-                    &command.args,
-                )?);
-            } else {
-                non_command_code = non_command_code.with_segment(segment);
+            match &segment.kind {
+                CodeKind::Command(command) => {
+                    eval_outputs.merge(self.execute_command(
+                        command,
+                        &segment,
+                        &mut state,
+                        &command.args,
+                    )?);
+                }
+                CodeKind::ShellCommand(shell_command) => {
+                    eval_outputs.merge(self.execute_shell_command(shell_command)?);
+                }
+                _ => {
+                    non_command_code = non_command_code.with_segment(segment);
+                }
             }
         }
         let result =
@@ -151,10 +160,57 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 Ok(eval_outputs)
             }
             Err(Error::CompilationErrors(errors)) => {
-                self.last_errors = errors.clone();
+                self.last_errors.clone_from(&errors);
                 Err(Error::CompilationErrors(errors))
             }
             x => x,
+        }
+    }
+
+    fn execute_shell_command(
+        &mut self,
+        shell_command: &ShellCommand,
+    ) -> Result<EvalOutputs, Error> {
+        use std::process::Command;
+
+        let command_output = Command::new("sh")
+            .arg("-c")
+            .arg(&shell_command.command)
+            .output();
+
+        match command_output {
+            Ok(output) => {
+                let stdout_str = String::from_utf8_lossy(&output.stdout);
+                let stderr_str = String::from_utf8_lossy(&output.stderr);
+
+                let mut eval_outputs = EvalOutputs::default();
+
+                let combined_output = format!("{}{}", stdout_str, stderr_str);
+
+                eval_outputs
+                    .content_by_mime_type
+                    .insert("text/plain".to_string(), combined_output);
+
+                if !output.status.success() {
+                    // Handle non-zero exit status
+                    let error_message = format!(
+                        "Shell command failed with exit code {}: {}",
+                        output.status.code().unwrap_or_default(),
+                        stderr_str
+                    );
+                    // Handle this error
+                    return Err(Error::from(error_message));
+                }
+
+                Ok(eval_outputs)
+            }
+            Err(error) => {
+                // Handle the case when executing the command fails
+                Err(Error::from(format!(
+                    "Failed to execute shell command: {}",
+                    error
+                )))
+            }
         }
     }
 
@@ -192,7 +248,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 if let Err(error) =
                     self.process_command(command, &segment, &mut state, &command.args, true)
                 {
-                    errors.push(error);
+                    errors.push(*error);
                 }
             } else {
                 non_command_code = non_command_code.with_segment(segment);
@@ -226,25 +282,22 @@ Panic detected. Here's some useful information if you're filing a bug report.
 
     fn load_config(&mut self, quiet: bool) -> Result<EvalOutputs, Error> {
         let mut outputs = EvalOutputs::new();
-        if let Some(config_dir) = crate::config_dir() {
-            let config_file = config_dir.join("init.evcxr");
-            if config_file.exists() {
-                if !quiet {
-                    println!("Loading startup commands from {config_file:?}");
+        let config_toml = ConfigToml::find_then_parse()?;
+        if !quiet {
+            match &config_toml.source_path {
+                Some(config_path) => {
+                    println!("Loading startup configuration from: {:?}", config_path);
                 }
-                let contents = std::fs::read_to_string(config_file)?;
-                outputs.merge(self.execute(&contents)?);
-            }
-            // Note: Loaded *after* init.evcxr so that it can access `:dep`s (or
-            // any other state changed by :commands) specified in the init file.
-            let prelude_file = config_dir.join("prelude.rs");
-            if prelude_file.exists() {
-                if !quiet {
-                    println!("Executing prelude from {prelude_file:?}");
+                None => {
+                    println!("No configuration file found, use the default configuration");
                 }
-                let prelude = std::fs::read_to_string(prelude_file)?;
-                outputs.merge(self.execute(&prelude)?);
             }
+        }
+        if let Some(dep_str) = config_toml.get_dep_string_versions()? {
+            outputs.merge(self.execute(&dep_str)?);
+        }
+        if let Some(prelude_str) = config_toml.get_prelude_string_versions()? {
+            outputs.merge(self.execute(&prelude_str)?);
         }
         Ok(outputs)
     }
@@ -257,7 +310,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
         args: &Option<String>,
     ) -> Result<EvalOutputs, Error> {
         self.process_command(command, segment, state, args, false)
-            .map_err(|err| Error::CompilationErrors(vec![err]))
+            .map_err(|err| Error::CompilationErrors(vec![*err]))
     }
 
     fn process_command(
@@ -267,7 +320,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
         state: &mut ContextState,
         args: &Option<String>,
         analysis_mode: bool,
-    ) -> Result<EvalOutputs, CompilationError> {
+    ) -> Result<EvalOutputs, Box<CompilationError>> {
         if let Some(command) = Self::commands_by_name().get(command_call.command.as_str()) {
             let result = match &command.analysis_callback {
                 Some(analysis_callback) if analysis_mode => (analysis_callback)(self, state, args),
@@ -293,17 +346,17 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     .unwrap_or(0);
                 let start_column = code_block::count_columns(&segment.code[..start_byte]) + 1;
                 let end_column = code_block::count_columns(&segment.code);
-                CompilationError::from_segment_span(
+                Box::new(CompilationError::from_segment_span(
                     segment,
                     SpannedMessage::from_segment_span(
                         segment,
                         Span::from_command(command_call, start_column, end_column),
                     ),
                     error.to_string(),
-                )
+                ))
             })
         } else {
-            Err(CompilationError::from_segment_span(
+            Err(Box::new(CompilationError::from_segment_span(
                 segment,
                 SpannedMessage::from_segment_span(
                     segment,
@@ -314,7 +367,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     ),
                 ),
                 format!("Unrecognised command {}", command_call.command),
-            ))
+            )))
         }
     }
 
@@ -404,9 +457,22 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 Ok(EvalOutputs::default())
             }),
             AvailableCommand::new(
+                ":restart",
+                "Restart child process",
+                |ctx, _state, _args| {
+                    ctx.eval_context.restart_child_process()?;
+                    text_output("Child process restarted")
+                },
+            ),
+            AvailableCommand::new(
                 ":dep",
                 "Add dependency. e.g. :dep regex = \"1.0\"",
                 |_ctx, state, args| process_dep_command(state, args),
+            ),
+            AvailableCommand::new(
+                ":show_deps",
+                "Show the current dependencies",
+                |_ctx, state, _args| process_show_deps_command(state),
             ),
             AvailableCommand::new(
                 ":last_compile_dir",
@@ -466,7 +532,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "Set which toolchain to use (e.g. nightly)",
                 |_ctx, state, args| {
                     if let Some(arg) = args {
-                        state.set_toolchain(arg);
+                        state.set_toolchain(arg)?;
                     }
                     text_output(format!("Toolchain: {}", state.toolchain()))
                 },
@@ -475,8 +541,17 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 ":offline",
                 "Set offline mode when invoking cargo (0/1)",
                 |_ctx, state, args| {
-                    state.set_offline_mode(args.as_ref().map(String::as_str) == Some("1"));
+                    state.set_offline_mode(args.as_deref() == Some("1"));
                     text_output(format!("Offline mode: {}", state.offline_mode()))
+                },
+            ),
+            AvailableCommand::new(
+                ":allow_static_linking",
+                "Set whether to allow static linking of dependencies (0/1)",
+                |_ctx, state, args| {
+                    let allow_static_linking = args.as_deref() == Some("1");
+                    state.set_allow_static_linking(allow_static_linking);
+                    text_output(format!("Static linking: {}", allow_static_linking))
                 },
             ),
             AvailableCommand::new(
@@ -506,7 +581,33 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "Set whether to use sccache (0/1).",
                 |_ctx, state, args| {
                     state.set_sccache(args.as_ref().map(String::as_str) != Some("0"))?;
-                    text_output(format!("sccache: {}", state.sccache()))
+                    if state.sccache() {
+                        state.set_allow_static_linking(true);
+                        text_output("sccache: true. Warning: dynamic linking disabled, use :cache instead to preserve dynamic linking")
+                    } else {
+                        text_output("sccache: false")
+                    }
+                },
+            ),
+            AvailableCommand::new(
+                ":cache",
+                "Set cache size in MiB, or 0 to disable.",
+                |_ctx, state, args| {
+                    if let Some(arg) = args.as_ref() {
+                        let bytes: u64 = arg.parse().map_err(|_| anyhow!("Invalid value"))?;
+                        state.set_cache_bytes(bytes * 1024 * 1024);
+                    } else if let Ok(stats) = crate::module::cache::CacheStats::get() {
+                        return text_output(format!("{stats}Size limit: {} MiB", state.cache_bytes() / 1024 / 1024));
+                    }
+                    text_output(format!("cache: {} MiB", state.cache_bytes() / 1024 / 1024))
+                },
+            ),
+            AvailableCommand::new(
+                ":clear_cache",
+                "Clear the cache used by the :cache command",
+                |_ctx, _state, _args| {
+                        let freed = crate::module::cache::cleanup(0)?;
+                        text_output(format!("Deleted {} MiB from cache", freed / 1024 / 1024))
                 },
             ),
             AvailableCommand::new(
@@ -517,6 +618,16 @@ Panic detected. Here's some useful information if you're filing a bug report.
                         state.set_linker(linker.to_owned());
                     }
                     text_output(format!("linker: {}", state.linker()))
+                },
+            ),
+            AvailableCommand::new(
+                ":codegen_backend",
+                "Set/print the codegen backend. Requires nightly",
+                |_ctx, state, args| {
+                    if let Some(backend) = args {
+                        state.set_codegen_backend(backend.to_owned());
+                    }
+                    text_output(format!("codegen backend: {}", state.codegen_backend()))
                 },
             ),
             AvailableCommand::new(
@@ -536,6 +647,44 @@ Panic detected. Here's some useful information if you're filing a bug report.
                         }
                         text_output(all_explanations)
                     }
+                },
+            ),
+            AvailableCommand::new(
+                ":build_env",
+                "Set environment variables when building code (key=value)",
+                |_ctx, state, args| {
+                    if let Some(arg) = args {
+                        if let Some((key, value)) = arg.split_once('=') {
+                            state.set_build_env(key, value);
+                            return text_output(format!("Set {key}={value} for build"));
+                        }
+                    }
+                    bail!("Please supply key=value");
+                },
+            ),
+            AvailableCommand::new(
+                ":env",
+                "Set an environment variable (key=value)",
+                |_ctx, _state, args| {
+                    if let Some(arg) = args {
+                        if let Some((key, value)) = arg.split_once('=') {
+                            // TODO: Investigate if we could just sent the environment on the child
+                            // process the next time we launch it.
+
+                            // Safety: Although there may be other threads, they should be idle
+                            // while we're doing this, so shouldn't be accessing the environment.
+                            unsafe { std::env::set_var(key, value) };
+
+                            // For simplicity of implementation, we require that the user restarts
+                            // the child process in order to obtain the new environment variables.
+                            // If they wanted to set them straight away, they could just have called
+                            // `std::env::set_var` from their code. So the main use case for this is
+                            // setting variables that need to be set on startup, such as
+                            // LD_LIBRARY_PATH.
+                            return text_output(format!("Set {key}={value} (use :restart command to reload child process)"));
+                        }
+                    }
+                    bail!("Please supply key=value");
                 },
             ),
             AvailableCommand::new(
@@ -569,6 +718,13 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 writeln!(html, "</table>")?;
                 Ok(EvalOutputs::text_html(text, html))
             }),
+            AvailableCommand::new(
+                ":doc",
+                "show the documentation of a variable, keyword, type or module",
+                |ctx, state, args| {
+                    ctx.hover(state, args)
+                }
+            )
         ]
     }
 
@@ -619,6 +775,23 @@ Panic detected. Here's some useful information if you're filing a bug report.
             bail!("Variable does not exist: {}", args)
         }
     }
+
+    fn hover(
+        &mut self,
+        state: &mut ContextState,
+        args: &Option<String>,
+    ) -> Result<EvalOutputs, Error> {
+        let args = if let Some(x) = args {
+            x.trim()
+        } else {
+            bail!("Input required")
+        };
+        let (hover_text, hover_markdown) = self.eval_context.hover(args, state)?;
+        let mut hover_html = String::new();
+        let parser = pulldown_cmark::Parser::new(&hover_markdown);
+        pulldown_cmark::html::push_html(&mut hover_html, parser);
+        Ok(EvalOutputs::text_html(hover_text, hover_html))
+    }
 }
 
 fn process_dep_command(
@@ -645,6 +818,20 @@ fn process_dep_command(
     }
 }
 
+fn process_show_deps_command(state: &ContextState) -> Result<EvalOutputs, Error> {
+    let external_deps = &state.external_deps;
+    if external_deps.is_empty() {
+        return Ok(EvalOutputs::new());
+    }
+
+    let mut deps: Vec<String> = external_deps
+        .values()
+        .map(|dep| format!("{} = {}", dep.name, dep.config))
+        .collect();
+    deps.sort();
+    text_output(deps.join("\n"))
+}
+
 type CallbackFn = dyn Fn(&mut CommandContext, &mut ContextState, &Option<String>) -> Result<EvalOutputs, Error>
     + 'static
     + Sync
@@ -663,13 +850,13 @@ impl AvailableCommand {
         name: &'static str,
         short_description: &'static str,
         callback: impl Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
-            + 'static
-            + Sync
-            + Send,
+            &mut CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
+        + 'static
+        + Sync
+        + Send,
     ) -> AvailableCommand {
         AvailableCommand {
             name,
@@ -682,13 +869,13 @@ impl AvailableCommand {
     fn with_analysis_callback(
         mut self,
         callback: impl Fn(
-                &mut CommandContext,
-                &mut ContextState,
-                &Option<String>,
-            ) -> Result<EvalOutputs, Error>
-            + 'static
-            + Sync
-            + Send,
+            &mut CommandContext,
+            &mut ContextState,
+            &Option<String>,
+        ) -> Result<EvalOutputs, Error>
+        + 'static
+        + Sync
+        + Send,
     ) -> Self {
         self.analysis_callback = Some(Box::new(callback));
         self

@@ -6,14 +6,19 @@
 // copied, modified, or distributed except according to those terms.
 
 use crate::connection::Connection;
+use crate::connection::ConnectionGroup;
+use crate::connection::ConnectionShutdownRequester;
+use crate::connection::RecvError;
 use crate::control_file;
 use crate::jupyter_message::JupyterMessage;
-use anyhow::bail;
 use anyhow::Result;
+use anyhow::bail;
 use ariadne::sources;
 use colored::*;
+use crossbeam_channel::RecvTimeoutError;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
+use evcxr::StdoutEvent;
 use evcxr::Theme;
 use json::JsonValue;
 use std::collections::HashMap;
@@ -27,15 +32,10 @@ pub(crate) struct Server {
     iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
     stdin: Arc<Mutex<Connection<zeromq::RouterSocket>>>,
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
-    shutdown_sender: Arc<Mutex<Option<crossbeam_channel::Sender<()>>>>,
+    io_thread_shutdown_sender: Arc<Mutex<Option<crossbeam_channel::Sender<()>>>>,
     tokio_handle: tokio::runtime::Handle,
-}
-
-struct ShutdownReceiver {
-    // Note, this needs to be a crossbeam channel because
-    // start_output_pass_through_thread selects on this and other crossbeam
-    // channels.
-    recv: crossbeam_channel::Receiver<()>,
+    /// An idle message that we'll send to iopub once the current execution completes.
+    pending_idle_message: Arc<Mutex<Option<JupyterMessage>>>,
 }
 
 impl Server {
@@ -55,35 +55,51 @@ impl Server {
             .build()
             .unwrap();
         let handle = runtime.handle().clone();
-        runtime.block_on(async {
-            let shutdown_receiver = Self::start(config, handle).await?;
-            shutdown_receiver.wait_for_shutdown().await;
-            let result: Result<()> = Ok(());
-            result
-        })?;
+        runtime.block_on(Self::run_async(config, handle))?;
         Ok(())
     }
 
-    async fn start(
+    async fn run_async(
         config: &control_file::Control,
         tokio_handle: tokio::runtime::Handle,
-    ) -> Result<ShutdownReceiver> {
-        let mut heartbeat = bind_socket::<zeromq::RepSocket>(config, config.hb_port).await?;
-        let shell_socket = bind_socket::<zeromq::RouterSocket>(config, config.shell_port).await?;
-        let control_socket =
-            bind_socket::<zeromq::RouterSocket>(config, config.control_port).await?;
-        let stdin_socket = bind_socket::<zeromq::RouterSocket>(config, config.stdin_port).await?;
-        let iopub_socket = bind_socket::<zeromq::PubSocket>(config, config.iopub_port).await?;
+    ) -> Result<()> {
+        let (connection_group, group_shutdown) = ConnectionGroup::new();
+        let mut heartbeat = bind_socket::<zeromq::RepSocket>(
+            config,
+            config.hb_port,
+            Some(connection_group.clone()),
+        )
+        .await?;
+        let shell_socket = bind_socket::<zeromq::RouterSocket>(
+            config,
+            config.shell_port,
+            Some(connection_group.clone()),
+        )
+        .await?;
+        let control_socket = bind_socket::<zeromq::RouterSocket>(
+            config,
+            config.control_port,
+            Some(connection_group.clone()),
+        )
+        .await?;
+        let stdin_socket =
+            bind_socket::<zeromq::RouterSocket>(config, config.stdin_port, None).await?;
+        let iopub_socket =
+            bind_socket::<zeromq::PubSocket>(config, config.iopub_port, None).await?;
         let iopub = Arc::new(Mutex::new(iopub_socket));
 
+        // Create a channel pair that's used to signal to the IO thread when to shut down. This
+        // needs to be a crossbeam channel because the IO thread uses select together with other
+        // crossbeam channels.
         let (shutdown_sender, shutdown_receiver) = crossbeam_channel::unbounded();
 
         let server = Server {
             iopub,
             latest_execution_request: Arc::new(Mutex::new(None)),
             stdin: Arc::new(Mutex::new(stdin_socket)),
-            shutdown_sender: Arc::new(Mutex::new(Some(shutdown_sender))),
+            io_thread_shutdown_sender: Arc::new(Mutex::new(Some(shutdown_sender))),
             tokio_handle,
+            pending_idle_message: Arc::new(Mutex::new(None)),
         };
 
         let (execution_sender, mut execution_receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -99,14 +115,6 @@ impl Server {
         context.execute(":load_config")?;
         let process_handle = context.process_handle();
         let context = Arc::new(std::sync::Mutex::new(context));
-        {
-            let server = server.clone();
-            tokio::spawn(async move {
-                if let Err(error) = server.handle_control(control_socket, process_handle).await {
-                    eprintln!("control error: {error:?}");
-                }
-            });
-        }
         {
             let context = context.clone();
             let server = server.clone();
@@ -142,26 +150,36 @@ impl Server {
         server
             .clone()
             .start_output_pass_through_thread(
-                vec![("stdout", outputs.stdout), ("stderr", outputs.stderr)],
+                outputs.stdout,
+                outputs.stderr,
                 shutdown_receiver.clone(),
             )
             .await;
-        Ok(ShutdownReceiver {
-            recv: shutdown_receiver,
-        })
+
+        // Don't keep any outstanding instances of our connection group, otherwise things won't shut
+        // down properly.
+        drop(connection_group);
+
+        // Run the control channel on the main task. Once the control channel handler terminates,
+        // we're done.
+        server
+            .handle_control(control_socket, process_handle, group_shutdown)
+            .await?;
+        Ok(())
     }
 
-    async fn signal_shutdown(&mut self) {
-        self.shutdown_sender.lock().await.take();
+    async fn shutdown_io_thread(&mut self) {
+        self.io_thread_shutdown_sender.lock().await.take();
     }
 
     async fn handle_hb(connection: &mut Connection<zeromq::RepSocket>) -> Result<()> {
-        use zeromq::SocketRecv;
-        use zeromq::SocketSend;
         loop {
-            connection.socket.recv().await?;
+            match connection.recv().await {
+                Ok(_) => {}
+                Err(RecvError::ShutdownRequested) => return Ok(()),
+                Err(RecvError::Other(e)) => return Err(e),
+            }
             connection
-                .socket
                 .send(zeromq::ZmqMessage::from(b"ping".to_vec()))
                 .await?;
         }
@@ -178,7 +196,7 @@ impl Server {
             let message = match receiver.recv().await {
                 Some(x) => x,
                 None => {
-                    // Other end has closed. This is expected when we're shuting
+                    // Other end has closed. This is expected when we're shutting
                     // down.
                     return Ok(());
                 }
@@ -314,7 +332,7 @@ impl Server {
             .map(|value| value.to_owned())
     }
 
-    async fn handle_shell<S: zeromq::SocketRecv + zeromq::SocketSend>(
+    async fn handle_shell<S: zeromq::Socket + zeromq::SocketRecv + zeromq::SocketSend>(
         self,
         mut connection: Connection<S>,
         execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
@@ -322,15 +340,27 @@ impl Server {
         context: Arc<std::sync::Mutex<CommandContext>>,
     ) -> Result<()> {
         loop {
-            let message = JupyterMessage::read(&mut connection).await?;
-            self.handle_shell_message(
-                message,
-                &mut connection,
-                execution_channel,
-                execution_reply_receiver,
-                &context,
-            )
-            .await?;
+            let message = match JupyterMessage::read(&mut connection).await {
+                Ok(m) => m,
+                Err(RecvError::ShutdownRequested) => return Ok(()),
+                Err(RecvError::Other(error)) => return Err(error),
+            };
+            let message_type = message.message_type().to_owned();
+            let r = self
+                .handle_shell_message(
+                    message,
+                    &mut connection,
+                    execution_channel,
+                    execution_reply_receiver,
+                    &context,
+                )
+                .await;
+            if let Err(error) = r {
+                // We see this often after issuing a restart-kernel from the Jupyter UI. Not sure
+                // why, but provided we continue to handle subsequent shell requests, things seem to
+                // work. So for now, we just print the error and continue.
+                eprintln!("Error handling shell message `{message_type}`: {error:#}");
+            }
         }
     }
 
@@ -350,9 +380,11 @@ impl Server {
             .with_content(object! {"execution_state" => "busy"})
             .send(&mut *self.iopub.lock().await)
             .await?;
-        let idle = message
-            .new_message("status")
-            .with_content(object! {"execution_state" => "idle"});
+        let mut idle = Some(
+            message
+                .new_message("status")
+                .with_content(object! {"execution_state" => "idle"}),
+        );
         if message.message_type() == "kernel_info_request" {
             message
                 .new_reply()
@@ -366,6 +398,11 @@ impl Server {
                 .send(connection)
                 .await?;
         } else if message.message_type() == "execute_request" {
+            // We don't want to send our idle message as soon as execution completes, because there
+            // might still be output from the user code that hasn't been sent to the iopub yet.
+            // Instead we send the idle message later, once the stdout receiver has gotten
+            // confirmation that all output has been sent to the iopub.
+            *self.pending_idle_message.lock().await = idle.take();
             execution_channel.send(message)?;
             if let Some(reply) = execution_reply_receiver.recv().await {
                 reply.send(connection).await?;
@@ -397,7 +434,9 @@ impl Server {
                 message.message_type()
             );
         }
-        idle.send(&mut *self.iopub.lock().await).await?;
+        if let Some(idle) = idle.take() {
+            idle.send(&mut *self.iopub.lock().await).await?;
+        }
         Ok(())
     }
 
@@ -405,9 +444,14 @@ impl Server {
         mut self,
         mut connection: Connection<zeromq::RouterSocket>,
         process_handle: Arc<std::sync::Mutex<std::process::Child>>,
+        group_shutdown: ConnectionShutdownRequester,
     ) -> Result<()> {
         loop {
-            let message = JupyterMessage::read(&mut connection).await?;
+            let message = match JupyterMessage::read(&mut connection).await {
+                Ok(m) => m,
+                Err(RecvError::ShutdownRequested) => return Ok(()),
+                Err(RecvError::Other(error)) => return Err(error),
+            };
             match message.message_type() {
                 "kernel_info_request" => {
                     message
@@ -416,7 +460,21 @@ impl Server {
                         .send(&mut connection)
                         .await?
                 }
-                "shutdown_request" => self.signal_shutdown().await,
+                "shutdown_request" => {
+                    let is_restart = message.get_content()["restart"].as_bool().unwrap_or(false);
+                    let response = object! {
+                        "status": "ok",
+                        "restart": is_restart,
+                    };
+                    connection.shutdown_all_connections(group_shutdown).await;
+                    self.shutdown_io_thread().await;
+                    message
+                        .new_reply()
+                        .with_content(response)
+                        .send(&mut connection)
+                        .await?;
+                    return Ok(());
+                }
                 "interrupt_request" => {
                     let process_handle = process_handle.clone();
                     tokio::task::spawn_blocking(move || {
@@ -439,24 +497,21 @@ impl Server {
 
     async fn start_output_pass_through_thread(
         self,
-        channels: Vec<(&'static str, crossbeam_channel::Receiver<String>)>,
+        stdout_recv: crossbeam_channel::Receiver<StdoutEvent>,
+        stderr_recv: crossbeam_channel::Receiver<String>,
         shutdown_recv: crossbeam_channel::Receiver<()>,
     ) {
         let handle = tokio::runtime::Handle::current();
         tokio::task::spawn_blocking(move || {
             let mut select = Select::new();
-            for (_, channel) in &channels {
-                select.recv(channel);
-            }
+            let stdout_index = select.recv(&stdout_recv);
+            select.recv(&stderr_recv);
             let shutdown_index = select.recv(&shutdown_recv);
             loop {
                 let index = select.ready();
                 if index == shutdown_index {
                     return;
                 }
-                let (output_name, channel) = &channels[index];
-                // Needed in order to make the borrow checker happy.
-                let output_name: &'static str = output_name;
                 // Read from the channel that has output until it has been idle
                 // for 1ms before we return to checking other channels. This
                 // reduces the extent to which outputs interleave. e.g. a
@@ -464,9 +519,30 @@ impl Server {
                 // stdout - we can't guarantee the order in which they get sent,
                 // but we'd like to try to make sure that we don't interleave
                 // their lines if possible.
-                while let Ok(line) = channel.recv_timeout(Duration::from_millis(1)) {
-                    let server = self.clone();
-                    handle.block_on(server.pass_output_line(output_name, line));
+                loop {
+                    if index == stdout_index {
+                        match stdout_recv.recv_timeout(Duration::from_millis(1)) {
+                            Ok(StdoutEvent::Line(line)) => {
+                                let server = self.clone();
+                                handle.block_on(server.pass_output_line("stdout", line));
+                            }
+                            Ok(StdoutEvent::ExecutionComplete) => {
+                                let server = self.clone();
+                                handle.block_on(server.execution_complete());
+                            }
+                            Err(RecvTimeoutError::Timeout) => break,
+                            Err(RecvTimeoutError::Disconnected) => return,
+                        }
+                    } else {
+                        match stderr_recv.recv_timeout(Duration::from_millis(1)) {
+                            Ok(line) => {
+                                let server = self.clone();
+                                handle.block_on(server.pass_output_line("stderr", line));
+                            }
+                            Err(RecvTimeoutError::Timeout) => break,
+                            Err(RecvTimeoutError::Disconnected) => return,
+                        }
+                    }
                 }
             }
         });
@@ -488,6 +564,13 @@ impl Server {
             {
                 eprintln!("output {output_name} error: {}", error);
             }
+        }
+    }
+
+    async fn execution_complete(&self) {
+        let idle_message = self.pending_idle_message.lock().await.take();
+        if let Some(idle_message) = idle_message {
+            let _ = idle_message.send(&mut *self.iopub.lock().await).await;
         }
     }
 
@@ -582,12 +665,6 @@ impl Server {
     }
 }
 
-impl ShutdownReceiver {
-    async fn wait_for_shutdown(self) {
-        let _ = tokio::task::spawn_blocking(move || self.recv.recv()).await;
-    }
-}
-
 async fn comm_open(
     message: JupyterMessage,
     context: &Arc<std::sync::Mutex<CommandContext>>,
@@ -667,11 +744,12 @@ async fn cargo_check(code: String, context: Arc<std::sync::Mutex<CommandContext>
 async fn bind_socket<S: zeromq::Socket>(
     config: &control_file::Control,
     port: u16,
+    group: Option<ConnectionGroup>,
 ) -> Result<Connection<S>> {
     let endpoint = format!("{}://{}:{}", config.transport, config.ip, port);
     let mut socket = S::new();
     socket.bind(&endpoint).await?;
-    Connection::new(socket, &config.key)
+    Connection::new(socket, &config.key, group)
 }
 
 /// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)

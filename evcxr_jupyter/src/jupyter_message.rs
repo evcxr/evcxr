@@ -7,12 +7,12 @@
 
 use crate::connection::Connection;
 use crate::connection::HmacSha256;
+use crate::connection::RecvError;
+use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
-use anyhow::Result;
 use bytes::Bytes;
 use chrono::Utc;
-use generic_array::GenericArray;
 use json::JsonValue;
 use json::{self};
 use std::fmt;
@@ -25,10 +25,10 @@ struct RawMessage {
 }
 
 impl RawMessage {
-    pub(crate) async fn read<S: zeromq::SocketRecv>(
+    pub(crate) async fn read<S: zeromq::Socket + zeromq::SocketRecv>(
         connection: &mut Connection<S>,
-    ) -> Result<RawMessage> {
-        Self::from_multipart(connection.socket.recv().await?, connection)
+    ) -> Result<RawMessage, RecvError> {
+        Ok(Self::from_multipart(connection.recv().await?, connection)?)
     }
 
     pub(crate) fn from_multipart<S>(
@@ -55,7 +55,7 @@ impl RawMessage {
             let mut mac = mac_template.clone();
             raw_message.digest(&mut mac);
             use hmac::Mac;
-            if let Err(error) = mac.verify(GenericArray::from_slice(&hex::decode(&hmac)?)) {
+            if let Err(error) = mac.verify_slice(&hex::decode(&hmac)?) {
                 bail!("{}", error);
             }
         }
@@ -84,7 +84,7 @@ impl RawMessage {
         // ZmqMessage::try_from only fails if parts is empty, which it never
         // will be here.
         let message = zeromq::ZmqMessage::try_from(parts).unwrap();
-        connection.socket.send(message).await?;
+        connection.send(message).await?;
         Ok(())
     }
 
@@ -108,10 +108,10 @@ pub(crate) struct JupyterMessage {
 const DELIMITER: &[u8] = b"<IDS|MSG>";
 
 impl JupyterMessage {
-    pub(crate) async fn read<S: zeromq::SocketRecv>(
+    pub(crate) async fn read<S: zeromq::Socket + zeromq::SocketRecv>(
         connection: &mut Connection<S>,
-    ) -> Result<JupyterMessage> {
-        Self::from_raw_message(RawMessage::read(connection).await?)
+    ) -> Result<JupyterMessage, RecvError> {
+        Ok(Self::from_raw_message(RawMessage::read(connection).await?)?)
     }
 
     fn from_raw_message(raw_message: RawMessage) -> Result<JupyterMessage> {
@@ -177,7 +177,7 @@ impl JupyterMessage {
     // automatically by replacing "request" with "reply". ZMQ identities are transferred.
     pub(crate) fn new_reply(&self) -> JupyterMessage {
         let mut reply = self.new_message(&self.message_type().replace("_request", "_reply"));
-        reply.zmq_identities = self.zmq_identities.clone();
+        reply.zmq_identities.clone_from(&self.zmq_identities);
         reply
     }
 

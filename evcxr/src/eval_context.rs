@@ -12,11 +12,11 @@ use crate::code_block::CodeKind;
 use crate::code_block::Segment;
 use crate::code_block::UserCodeInfo;
 use crate::crate_config::ExternalCrate;
-use crate::errors::bail;
 use crate::errors::CompilationError;
 use crate::errors::Error;
 use crate::errors::Span;
 use crate::errors::SpannedMessage;
+use crate::errors::bail;
 use crate::evcxr_internal_runtime;
 use crate::item;
 use crate::module::Module;
@@ -26,18 +26,19 @@ use crate::rust_analyzer::Completions;
 use crate::rust_analyzer::RustAnalyzer;
 use crate::rust_analyzer::TypeName;
 use crate::rust_analyzer::VariableInfo;
+use crate::toml_parse;
 use crate::use_trees::Import;
 use anyhow::Result;
-use dirs::home_dir;
 use once_cell::sync::Lazy;
 use ra_ap_ide::TextRange;
-use ra_ap_syntax::ast;
 use ra_ap_syntax::AstNode;
 use ra_ap_syntax::SyntaxKind;
 use ra_ap_syntax::SyntaxNode;
+use ra_ap_syntax::ast;
 use regex::Regex;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
@@ -48,7 +49,7 @@ use std::time::Instant;
 
 pub struct EvalContext {
     // Order is important here. We need to drop child_process before _tmpdir,
-    // since if the subprocess hasn't terminted before we clean up the temporary
+    // since if the subprocess hasn't terminated before we clean up the temporary
     // directory, then on some platforms (e.g. Windows), files in the temporary
     // directory will still be locked, so won't be deleted.
     child_process: ChildProcess,
@@ -56,19 +57,31 @@ pub struct EvalContext {
     _tmpdir: Option<tempfile::TempDir>,
     module: Module,
     committed_state: ContextState,
-    stdout_sender: crossbeam_channel::Sender<String>,
+    stdout_sender: crossbeam_channel::Sender<StdoutEvent>,
     analyzer: RustAnalyzer,
     initial_config: Config,
 }
 
+/// An event related to the standard output of the user's code.
+#[derive(Eq, PartialEq, Debug)]
+pub enum StdoutEvent {
+    /// A line of text printed to stdout.
+    Line(String),
+
+    /// A marker indicating that the user code finished executing. More lines may be output if the
+    /// user code spawned a background thread, but all output printed during execution should
+    /// already have been sent.
+    ExecutionComplete,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct Config {
-    tmpdir: PathBuf,
+    pub(crate) tmpdir: PathBuf,
     pub(crate) debug_mode: bool,
     // Whether we should preserve variables that are Copy when a panic occurs.
     // Sounds good, but unfortunately doing so currently requires an extra build
     // attempt to determine if the type of the variable is copy.
-    preserve_vars_on_panic: bool,
+    pub(crate) preserve_vars_on_panic: bool,
     output_format: String,
     display_types: bool,
     /// Whether to try to display the final expression. Currently this needs to
@@ -79,38 +92,47 @@ pub(crate) struct Config {
     /// turn this off in order for tab-completion of use statements to work, but
     /// otherwise this should always be on.
     expand_use_statements: bool,
-    opt_level: String,
+    pub(crate) opt_level: String,
     error_fmt: &'static ErrorFormat,
     /// Whether to pass -Ztime-passes to the compiler and print the result.
     /// Causes the nightly compiler, which must be installed to be selected.
     pub(crate) time_passes: bool,
     pub(crate) linker: String,
+    pub(crate) codegen_backend: Option<String>,
     pub(crate) sccache: Option<PathBuf>,
     /// Whether to attempt to avoid network access.
     pub(crate) offline_mode: bool,
     pub(crate) toolchain: String,
     cargo_path: PathBuf,
     pub(crate) rustc_path: PathBuf,
+    cache_bytes: u64,
+    /// A string of the form "core:/path/to/libstd-...so". This must be libstd that corresponds to
+    /// the rust compiler in `rustc_path` so must be updated whenever `rustc_path` is updated.
+    pub(crate) core_extern: OsString,
     /// The host target that we're compiling for. e.g. x86_64-unknown-linux-gnu
     pub(crate) target: String,
+    pub(crate) allow_static_linking: bool,
+    pub(crate) build_envs: HashMap<String, String>,
+    subprocess_path: PathBuf,
 }
 
-fn create_initial_config(tmpdir: PathBuf) -> Result<Config> {
-    let mut config = Config::new(tmpdir)?;
+fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Config> {
+    let mut config = Config::new(tmpdir, subprocess_path)?;
     // default the linker to mold, then lld, first checking if either are installed
     // neither linkers support macos, so fallback to system (aka default)
     // https://github.com/rui314/mold/issues/132
     if !cfg!(target_os = "macos") && which::which("mold").is_ok() {
-        config.linker = "mold".to_owned();
+        "mold".clone_into(&mut config.linker);
     } else if !cfg!(target_os = "macos") && which::which("lld").is_ok() {
-        config.linker = "lld".to_owned();
+        "lld".clone_into(&mut config.linker);
     }
     Ok(config)
 }
 
 impl Config {
-    pub fn new(tmpdir: PathBuf) -> Result<Self> {
+    pub fn new(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Self> {
         let rustc_path = default_rustc_path()?;
+        let core_extern = core_extern(&rustc_path)?;
         let target = get_host_target(Path::new(&rustc_path))?;
         Ok(Config {
             tmpdir,
@@ -124,12 +146,20 @@ impl Config {
             error_fmt: &ERROR_FORMATS[0],
             time_passes: false,
             linker: "system".to_owned(),
+            cache_bytes: 0,
             sccache: None,
             offline_mode: false,
             toolchain: String::new(),
             cargo_path: default_cargo_path()?,
             rustc_path,
+            core_extern,
             target,
+            // Forcing dynamic linking causes hard-to-diagnose problems in some cases, so it's off
+            // by default.
+            allow_static_linking: true,
+            subprocess_path,
+            codegen_backend: None,
+            build_envs: Default::default(),
         })
     }
 
@@ -150,6 +180,14 @@ impl Config {
         self.sccache.is_some()
     }
 
+    pub fn set_cache_bytes(&mut self, bytes: u64) {
+        self.cache_bytes = bytes;
+    }
+
+    pub fn cache_bytes(&self) -> u64 {
+        self.cache_bytes
+    }
+
     pub(crate) fn cargo_command(&self, command_name: &str) -> Command {
         let mut command = if self.linker == "mold" {
             Command::new("mold")
@@ -162,8 +200,53 @@ impl Config {
         if self.offline_mode {
             command.arg("--offline");
         }
-        command.arg(command_name);
-        command.current_dir(self.crate_dir());
+
+        let mut rustflags = vec!["-Cprefer-dynamic".to_owned()];
+        if self.linker == "lld" {
+            rustflags.push(format!("-Clink-arg=-fuse-ld={}", self.linker));
+        }
+        if self.time_passes {
+            rustflags.push("-Ztime-passes".to_owned());
+        }
+        if let Some(backend) = self.codegen_backend.as_ref() {
+            rustflags.push(format!("-Zcodegen-backend={backend}"));
+        }
+
+        command
+            .arg(command_name)
+            .current_dir(self.crate_dir())
+            .env("CARGO_TARGET_DIR", "target")
+            .env("RUSTC", &self.rustc_path)
+            .env("RUSTFLAGS", rustflags.join(" "))
+            .envs(&self.build_envs)
+            .env(crate::module::CORE_EXTERN_ENV, &self.core_extern);
+        if self.cache_bytes > 0 {
+            command.env(crate::module::CACHE_ENABLED_ENV, "1");
+            command.env(
+                crate::module::cache::TARGET_DIR_ENV,
+                self.common_target_dir(),
+            );
+        }
+
+        if command_name == "build" || command_name == "check" {
+            command
+                .arg("--target")
+                .arg(&self.target)
+                .arg("--message-format=json");
+        }
+
+        if self.allow_static_linking && self.cache_bytes == 0 {
+            if let Some(sccache) = &self.sccache {
+                command.env("RUSTC_WRAPPER", sccache);
+            }
+        } else {
+            command.env("RUSTC_WRAPPER", &self.subprocess_path);
+            command.env(runtime::WRAP_RUSTC_ENV, "1");
+            if !self.allow_static_linking {
+                command.env(runtime::FORCE_DYLIB_ENV, "1");
+            }
+        }
+
         command
     }
 
@@ -180,7 +263,11 @@ impl Config {
     }
 
     pub(crate) fn target_dir(&self) -> PathBuf {
-        self.tmpdir.join("target").join(&self.target)
+        self.common_target_dir().join(&self.target)
+    }
+
+    pub(crate) fn common_target_dir(&self) -> PathBuf {
+        self.tmpdir.join("target")
     }
 }
 
@@ -258,7 +345,7 @@ const PANIC_NOTIFICATION: &str = "EVCXR_PANIC_NOTIFICATION";
 // Outputs from an EvalContext. This is a separate struct since users may want
 // destructure this and pass its components to separate threads.
 pub struct EvalContextOutputs {
-    pub stdout: crossbeam_channel::Receiver<String>,
+    pub stdout: crossbeam_channel::Receiver<StdoutEvent>,
     pub stderr: crossbeam_channel::Receiver<String>,
 }
 
@@ -277,7 +364,7 @@ fn default_input_reader(_: InputRequest) -> String {
     String::new()
 }
 
-impl<'a> Default for EvalCallbacks<'a> {
+impl Default for EvalCallbacks<'_> {
     fn default() -> Self {
         EvalCallbacks {
             input_reader: &default_input_reader,
@@ -299,9 +386,8 @@ impl EvalContext {
         }
         // Windows doesn't support rpath, so we need to set PATH so that it
         // knows where to find dlls.
-        use std::ffi::OsString;
         let mut path_var_value = OsString::new();
-        path_var_value.push(&config.deps_dir());
+        path_var_value.push(config.deps_dir());
         path_var_value.push(";");
 
         let mut sysroot_command = std::process::Command::new("rustc");
@@ -336,20 +422,15 @@ impl EvalContext {
     pub fn with_subprocess_command(
         mut subprocess_command: std::process::Command,
     ) -> Result<(EvalContext, EvalContextOutputs), Error> {
-        let mut opt_tmpdir = None;
-        let tmpdir_path;
-        if let Ok(from_env) = std::env::var("EVCXR_TMPDIR") {
-            tmpdir_path = PathBuf::from(from_env);
-        } else {
-            let tmpdir = tempfile::tempdir()?;
-            tmpdir_path = PathBuf::from(tmpdir.path());
-            opt_tmpdir = Some(tmpdir);
-        }
-
+        let parsed_config = toml_parse::ConfigToml::find_then_parse()?;
+        let tmpdir_var = parsed_config.get_tmp_dir()?;
+        let tmpdir_path = tmpdir_var.get_path()?;
+        let opt_tmpdir = tmpdir_var.get_opt_tmpdir();
         let analyzer = RustAnalyzer::new(&tmpdir_path)?;
         let module = Module::new()?;
-
-        let initial_config = create_initial_config(tmpdir_path)?;
+        let mut initial_config =
+            create_initial_config(tmpdir_path, subprocess_command.get_program().into())?;
+        parsed_config.update_config(&mut initial_config)?;
         Self::apply_platform_specific_vars(&initial_config, &mut subprocess_command);
 
         let (stdout_sender, stdout_receiver) = crossbeam_channel::unbounded();
@@ -384,6 +465,10 @@ impl EvalContext {
                 return Err(format!("{stderr}{error}").into());
             }
         }
+
+        // Skip any output send to stdout, in particular the execution complete event.
+        while outputs.stdout.try_recv().is_ok() {}
+
         context.initial_config = context.committed_state.config.clone();
         Ok((context, outputs))
     }
@@ -441,23 +526,24 @@ impl EvalContext {
         let mut phases = PhaseDetailsBuilder::new();
         let code_out = state.apply(user_code.clone(), &code_info.nodes)?;
 
-        let mut outputs = match self.run_statements(code_out, &mut state, &mut phases, callbacks) {
-            error @ Err(Error::SubprocessTerminated(_)) => {
-                self.restart_child_process()?;
-                return error;
-            }
-            Err(Error::CompilationErrors(errors)) => {
-                let mut errors = state.apply_custom_errors(errors, &user_code, code_info);
-                // If we have any errors in user code then remove all errors that aren't from user
-                // code.
-                if errors.iter().any(|error| error.is_from_user_code()) {
-                    errors.retain(|error| error.is_from_user_code())
+        let mut outputs =
+            match self.run_statements(code_out, code_info, &mut state, &mut phases, callbacks) {
+                error @ Err(Error::SubprocessTerminated(_)) => {
+                    self.restart_child_process()?;
+                    return error;
                 }
-                return Err(Error::CompilationErrors(errors));
-            }
-            error @ Err(_) => return error,
-            Ok(x) => x,
-        };
+                Err(Error::CompilationErrors(errors)) => {
+                    let mut errors = state.apply_custom_errors(errors, &user_code, code_info);
+                    // If we have any errors in user code then remove all errors that aren't from user
+                    // code.
+                    if errors.iter().any(|error| error.is_from_user_code()) {
+                        errors.retain(|error| error.is_from_user_code())
+                    }
+                    return Err(Error::CompilationErrors(errors));
+                }
+                error @ Err(_) => return error,
+                Ok(x) => x,
+            };
 
         // Once, we reach here, our code has successfully executed, so we
         // conclude that variable changes are now applied.
@@ -506,6 +592,37 @@ impl EvalContext {
                 && c.code != "evcxr_analysis_wrapper"
         });
         Ok(completions)
+    }
+
+    pub fn hover(&mut self, code: &str, state: &mut ContextState) -> Result<(String, String)> {
+        let (modified_code, hover_offset) = if code == "let" {
+            (String::from("let _ = 1;"), 0)
+        } else if code.ends_with('(') {
+            //If code is a function like `Option::ok_or_else`, the hover works fine, but if it is
+            // method like `None.ok_or_else`, the hover show nothing, in order to show that, the code
+            // has to end with "(", like `None.ok_or_else(`
+            (format!("{});", code), code.len() - 1)
+        } else {
+            (format!("{};", code), code.len())
+        };
+        let (user_code, code_info) = CodeBlock::from_original_user_code(&modified_code);
+        let user_code = state.apply(user_code, &code_info.nodes)?;
+        let pad_code = state.analysis_code(user_code);
+        self.analyzer.set_source(pad_code.code_string())?;
+        let wrapped_offset = pad_code.user_offset_to_output_offset(hover_offset)? as u32;
+        let text_range = TextRange::new(wrapped_offset.into(), wrapped_offset.into());
+        let hover_text = self.analyzer.hover(text_range, false)?;
+        let hover_markdown = self.analyzer.hover(text_range, true)?;
+        match (hover_text, hover_markdown) {
+            (Some(data_text), Some(data_markdown)) => Ok((
+                data_text.info.markup.into(),
+                data_markdown.info.markup.into(),
+            )),
+            _ => Ok((
+                "No documentation found".into(),
+                "No documentation found".into(),
+            )),
+        }
     }
 
     pub fn last_source(&self) -> Result<String, std::io::Error> {
@@ -564,7 +681,7 @@ impl EvalContext {
         self.child_process.process_handle()
     }
 
-    fn restart_child_process(&mut self) -> Result<(), Error> {
+    pub(crate) fn restart_child_process(&mut self) -> Result<(), Error> {
         self.committed_state.variable_states.clear();
         self.committed_state.stored_variable_states.clear();
         self.child_process = self.child_process.restart()?;
@@ -580,7 +697,9 @@ impl EvalContext {
             // This span only makes sense when the variable is first defined.
             variable_state.definition_span = None;
         }
-        state.stored_variable_states = state.variable_states.clone();
+        state
+            .stored_variable_states
+            .clone_from(&state.variable_states);
         state.commit_old_user_code();
         self.committed_state = state;
     }
@@ -588,12 +707,32 @@ impl EvalContext {
     fn run_statements(
         &mut self,
         mut user_code: CodeBlock,
+        code_info: &UserCodeInfo,
         state: &mut ContextState,
         phases: &mut PhaseDetailsBuilder,
         callbacks: &mut EvalCallbacks,
     ) -> Result<EvalOutputs, Error> {
         self.write_cargo_toml(state)?;
-        self.fix_variable_types(state, state.analysis_code(user_code.clone()))?;
+        let analysis_code = state.analysis_code(user_code.clone());
+        if let Err(errors) = self.fix_variable_types(state, analysis_code) {
+            let mut check_res = self.check(user_code.clone(), state.clone(), code_info)?;
+            if !check_res.is_empty() {
+                // Do one round of trying to fix errors, otherwise code like the following can end
+                // up reporting `evcxr_display` not found. `fn foo<T: Default>() -> T
+                // {Default::default()} let v1 = foo(); "bar"`
+                let mut fixed = HashSet::new();
+                for error in &check_res {
+                    self.attempt_to_fix_error(error, &mut user_code, state, &mut fixed)?;
+                }
+                if !fixed.is_empty() {
+                    check_res = self.check(user_code.clone(), state.clone(), code_info)?;
+                }
+                if !check_res.is_empty() {
+                    return Err(Error::CompilationErrors(check_res));
+                }
+            }
+            return Err(errors);
+        }
         // In some circumstances we may need a few tries before we get the code right. Note that
         // we'll generally give up sooner than this if there's nothing left that we think we can
         // fix. The limit is really to prevent retrying indefinitely in case our "fixing" of things
@@ -770,6 +909,7 @@ impl EvalContext {
         loop {
             let line = self.child_process.recv_line()?;
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
+                let _ = self.stdout_sender.send(StdoutEvent::ExecutionComplete);
                 break;
             }
             if line == PANIC_NOTIFICATION {
@@ -815,7 +955,7 @@ impl EvalContext {
             } else {
                 // Note, errors sending are ignored, since it just means the
                 // user of the library has dropped the Receiver.
-                let _ = self.stdout_sender.send(line);
+                let _ = self.stdout_sender.send(StdoutEvent::Line(line));
             }
         }
         if got_panic {
@@ -876,7 +1016,10 @@ impl EvalContext {
                     if error.code() == Some("E0728") && !state.async_mode {
                         state.async_mode = true;
                         if !state.external_deps.contains_key("tokio") {
-                            state.add_dep("tokio", "\"1.20.1\"")?;
+                            state.add_dep(
+                                "tokio",
+                                "{version=\"1.34.0\", features=[\"rt\", \"rt-multi-thread\"]}",
+                            )?;
                             // Rewrite Cargo.toml, since the dependency will probably have been
                             // validated in the process of being added, which will have overwritten
                             // Cargo.toml
@@ -934,7 +1077,10 @@ fn fix_path() {
                             path.push(":");
                         }
                         path.push(bin_dir);
-                        std::env::set_var("PATH", path);
+                        // Safety: We probably aren't doing stuff on other threads while we do this.
+                        // Is that good enough? Probably not really. TODO: Investigate alternatives.
+                        // Perhaps we can set PATH on our build commands instead.
+                        unsafe { std::env::set_var("PATH", path) };
                     }
                 }
             }
@@ -1114,8 +1260,20 @@ impl ContextState {
         self.config.offline_mode = value;
     }
 
+    pub fn set_allow_static_linking(&mut self, value: bool) {
+        self.config.allow_static_linking = value;
+    }
+
     pub fn set_sccache(&mut self, enabled: bool) -> Result<(), Error> {
         self.config.set_sccache(enabled)
+    }
+
+    pub fn set_cache_bytes(&mut self, bytes: u64) {
+        self.config.set_cache_bytes(bytes)
+    }
+
+    pub fn cache_bytes(&mut self) -> u64 {
+        self.config.cache_bytes()
     }
 
     pub fn sccache(&self) -> bool {
@@ -1155,6 +1313,18 @@ impl ContextState {
         &self.config.linker
     }
 
+    pub fn set_codegen_backend(&mut self, value: String) {
+        self.config.codegen_backend = if value == "default" {
+            None
+        } else {
+            Some(value)
+        };
+    }
+
+    pub fn codegen_backend(&mut self) -> &str {
+        self.config.codegen_backend.as_deref().unwrap_or("default")
+    }
+
     pub fn preserve_vars_on_panic(&self) -> bool {
         self.config.preserve_vars_on_panic
     }
@@ -1183,7 +1353,7 @@ impl ContextState {
         if level.is_empty() {
             bail!("Optimization level cannot be an empty string");
         }
-        self.config.opt_level = level.to_owned();
+        level.clone_into(&mut self.config.opt_level);
         Ok(())
     }
     pub fn output_format(&self) -> &str {
@@ -1202,14 +1372,22 @@ impl ContextState {
         self.config.display_types = display_types;
     }
 
-    pub fn set_toolchain(&mut self, value: &str) {
+    pub fn set_toolchain(&mut self, value: &str) -> Result<()> {
         if let Some(rustc_path) = rustup_tool_path(Some(value), "rustc") {
+            self.config.core_extern = core_extern(&rustc_path)?;
             self.config.rustc_path = rustc_path;
         }
         if let Some(cargo_path) = rustup_tool_path(Some(value), "cargo") {
             self.config.cargo_path = cargo_path;
         }
-        self.config.toolchain = value.to_owned();
+        value.clone_into(&mut self.config.toolchain);
+        Ok(())
+    }
+
+    pub fn set_build_env(&mut self, key: &str, value: &str) {
+        self.config
+            .build_envs
+            .insert(key.to_owned(), value.to_owned());
     }
 
     pub fn toolchain(&mut self) -> &str {
@@ -1351,7 +1529,7 @@ impl ContextState {
         }
     }
 
-    /// Returns code suitable for analysis purposes. Doesn't attempt to preserve runtime behavior.
+    /// Returns code suitable for analysis purposes. Doesn't attempt to preserve runtime behaviour.
     fn analysis_code(&self, user_code: CodeBlock) -> CodeBlock {
         let mut code = CodeBlock::new()
             .generated("#![allow(unused_imports, unused_mut, dead_code)]")
@@ -1402,7 +1580,7 @@ impl ContextState {
         } else {
             // TODO: Add a mechanism to load a crate without any function to call then remove this.
             code = code
-                .generated("#[no_mangle]")
+                .generated("#[unsafe(no_mangle)]")
                 .generated(format!(
                     "pub extern \"C\" fn {}(",
                     self.current_user_fn_name()
@@ -1469,7 +1647,7 @@ impl ContextState {
                 .generated(include_str!("evcxr_internal_runtime.rs"))
                 .generated("}");
         }
-        code = code.generated("#[no_mangle]").generated(format!(
+        code = code.generated("#[unsafe(no_mangle)]").generated(format!(
             "pub extern \"C\" fn {}(",
             self.current_user_fn_name()
         ));
@@ -1491,17 +1669,20 @@ impl ContextState {
         }
         if self.async_mode {
             user_code = CodeBlock::new()
-                .generated(stringify!(evcxr_variable_store
-                    .lazy_arc("evcxr_tokio_runtime", || std::sync::Mutex::new(
-                        tokio::runtime::Runtime::new().unwrap()
-                    ))
-                    .lock()
-                    .unwrap()))
+                .generated(stringify!(
+                let mut mutex = evcxr_variable_store.lazy_arc("evcxr_tokio_runtime",
+                    || std::sync::Mutex::new(tokio::runtime::Runtime::new().unwrap())
+                );
+                // If a previous cell execution did panic, then the mutex may be poisoned.
+                match mutex.lock() {
+                    Ok(guard) => guard,
+                    Err(poisoned) => poisoned.into_inner(),
+                }
+                ))
                 .generated(".block_on(async {")
                 .add_all(user_code);
             if self.allow_question_mark {
                 user_code = CodeBlock::new()
-                    .generated("let _ =")
                     .add_all(user_code)
                     .generated("Ok::<(), EvcxrUserCodeError>(())");
             }
@@ -1606,6 +1787,9 @@ impl ContextState {
             block.commit_old_user_code();
         }
         for block in self.unnamed_items.iter_mut() {
+            block.commit_old_user_code();
+        }
+        for block in self.attributes.values_mut() {
             block.commit_old_user_code();
         }
     }
@@ -1856,10 +2040,19 @@ impl ContextState {
     }
 }
 
+impl StdoutEvent {
+    pub fn line(self) -> Option<String> {
+        match self {
+            StdoutEvent::Line(line) => Some(line),
+            StdoutEvent::ExecutionComplete => None,
+        }
+    }
+}
+
 // Returns the path to `tool` (rustc or cargo) that rustup will use, or None if anything goes wrong
 // (e.g. rustup isn't available). By invoking this binary directly, we avoid having rustup decide
 // which binary to invoke each time we compile. Doing this for cargo reduces eval time for a trivial
-// bit of code from about 140ms to 109ms. Doing it for rustc as well futher reduces it to about
+// bit of code from about 140ms to 109ms. Doing it for rustc as well further reduces it to about
 // 75ms.
 fn rustup_tool_path(toolchain: Option<&str>, tool: &str) -> Option<PathBuf> {
     let mut cmd = Command::new("rustup");
@@ -1896,7 +2089,7 @@ fn default_tool_path(tool: &str, fallback: &str) -> Result<PathBuf> {
         // downloads a pre-built evcxr binary and runs it and someone else on the system knows
         // they're going to do this, so puts a malicious cargo/rustc binary at the location of the
         // fallback path.
-        if let Some(home) = home_dir() {
+        if let Some(home) = dirs::home_dir() {
             if path.starts_with(home) {
                 // Note, if the user is using rustup, then we're likely returning the path to the
                 // rustup proxy, so they won't in this case get the speedup from bypassing the
@@ -1945,11 +2138,46 @@ fn replace_reserved_words_in_type(ty: &str) -> String {
     RESERVED_WORDS.replace_all(ty, "${1}r#${2}${3}").to_string()
 }
 
+fn core_extern(rustc: &Path) -> Result<OsString> {
+    let std_lib = std_lib_path(rustc)?;
+    let mut result = OsString::from("core=");
+    result.push(std_lib.as_os_str());
+    Ok(result)
+}
+
+/// Returns the path to the shared object for the rust standard library.
+fn std_lib_path(rustc: &Path) -> Result<PathBuf> {
+    let libdir_bytes = std::process::Command::new(rustc)
+        .arg("--print")
+        .arg("target-libdir")
+        .output()?
+        .stdout;
+    let libdir = std::str::from_utf8(&libdir_bytes)?;
+    let dir = std::fs::read_dir(libdir.trim())?;
+    let prefix = format!("{}std-", crate::module::shared_object_prefix());
+    for entry in dir {
+        let Ok(entry) = entry else { continue };
+        if entry
+            .file_name()
+            .to_str()
+            .is_some_and(|file_name| file_name.starts_with(&prefix))
+            && entry
+                .path()
+                .extension()
+                .map(|ext| ext == crate::module::shared_object_extension())
+                .unwrap_or(false)
+        {
+            return Ok(entry.path());
+        }
+    }
+    anyhow::bail!("No libstd found in {libdir}");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ra_ap_syntax::ast::HasAttrs;
     use ra_ap_syntax::SourceFile;
+    use ra_ap_syntax::ast::HasAttrs;
 
     #[test]
     fn test_replace_reserved_words_in_type() {
@@ -1963,7 +2191,11 @@ mod tests {
     }
 
     fn create_state() -> ContextState {
-        let config = Config::new(PathBuf::from("/dummy_path")).unwrap();
+        let config = Config::new(
+            PathBuf::from("/dummy_path"),
+            PathBuf::from("/dummy_evcxr_bin"),
+        )
+        .unwrap();
         ContextState::new(config)
     }
 
@@ -1971,14 +2203,16 @@ mod tests {
     fn test_attributes() {
         let mut state = create_state();
         let (user_code, code_info) = CodeBlock::from_original_user_code(stringify!(
-            #![feature(box_syntax)]
             #![feature(some_other_feature)]
             fn foo() {}
-            let x = box 10;
+            let x = 10;
         ));
         let user_code = state.apply(user_code, &code_info.nodes).unwrap();
         let final_code = state.code_to_compile(user_code, CompilationMode::NoCatch);
-        let source_file = SourceFile::parse(&final_code.code_string()).ok().unwrap();
+        let source_file =
+            SourceFile::parse(&final_code.code_string(), crate::rust_analyzer::EDITION)
+                .ok()
+                .unwrap();
         let mut attrs: Vec<String> = source_file
             .attrs()
             .map(|attr| attr.syntax().text().to_string().replace(' ', ""))
@@ -1988,7 +2222,6 @@ mod tests {
             attrs,
             vec![
                 "#![allow(unused_imports,unused_mut,dead_code)]".to_owned(),
-                "#![feature(box_syntax)]".to_owned(),
                 "#![feature(some_other_feature)]".to_owned(),
             ]
         );

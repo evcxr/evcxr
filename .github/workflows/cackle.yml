@@ -1,0 +1,30 @@
+name: Cackle
+
+# We only run Cackle when our Cargo.lock or cackle.toml are changed. A change to any Rust code could
+# cause some new code in one of our dependencies to become reachable where it previously wasn't,
+# however this is sufficiently rare that it's worthwhile not worrying about. We'd pick this up later
+# when Cackle gets run from our cron workflow anyway.
+on:
+  push:
+    branches: [ '**' ]
+    paths:
+      - Cargo.lock
+      - cackle.toml
+  pull_request:
+    branches: [ '**' ]
+    paths:
+      - Cargo.lock
+      - cackle.toml
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  cackle:
+    name: Cackle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: cackle-rs/cackle-action@latest
+      - run: cargo acl -n

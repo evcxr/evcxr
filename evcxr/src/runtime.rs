@@ -5,8 +5,8 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-use crate::errors::bail;
 use crate::errors::Error;
+use crate::errors::bail;
 use once_cell::sync::Lazy;
 use regex::Regex;
 use std::io;
@@ -16,12 +16,18 @@ use std::{self};
 
 pub(crate) const EVCXR_IS_RUNTIME_VAR: &str = "EVCXR_IS_RUNTIME";
 pub(crate) const EVCXR_EXECUTION_COMPLETE: &str = "EVCXR_EXECUTION_COMPLETE";
+pub(crate) const WRAP_RUSTC_ENV: &str = "EVCXR_RUSTC_WRAPPER";
+pub(crate) const FORCE_DYLIB_ENV: &str = "EVCXR_FORCE_DYLIB";
 
-/// Binaries can call this just after staring. If we detect that we're actually
-/// running as a subprocess, control will not return.
+/// Binaries can call this just after staring. If we detect that we're actually running as a
+/// subprocess, control will not return. There are two kinds of subprocesses that we may be acting
+/// as (1) the process that loads and runs the user code and (2) a wrapper around rustc.
 pub fn runtime_hook() {
     if std::env::var(EVCXR_IS_RUNTIME_VAR).is_ok() {
         Runtime::new().run_loop();
+    }
+    if std::env::var(WRAP_RUSTC_ENV).is_ok() {
+        crate::module::wrap_rustc();
     }
 }
 
@@ -48,7 +54,6 @@ impl Runtime {
         self.install_crash_handlers();
 
         let stdin = std::io::stdin();
-        #[allow(unknown_lints, clippy::significant_drop_in_scrutinee)]
         for line in stdin.lock().lines() {
             if let Err(error) = self.handle_line(&line) {
                 eprintln!("While processing instruction `{line:?}`, got error: {error:?}",);

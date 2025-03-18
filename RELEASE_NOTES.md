@@ -1,3 +1,49 @@
+# Version 0.19.0
+* Update internal rust-analyzer
+* jupyter: Ensure iopub idle isn't sent before stdout output
+* Add support for shell commands (thanks wiseaidev and drendog)
+* User code is now compiled with rust 2024 edition
+* MSRV is now 1.85
+
+# Version 0.18.0
+* Update dependencies. Fixes compilation without `--locked` due to non-semver breaking change in
+  `futures-task`.
+* Update rust-analyzer
+* Improvements to .toml parsing (baiguoname)
+* Fix error display when variable type cannot be inferred and there's a trailing expression.
+* MSRV is now 1.80 (due to dependency changes)
+
+# Version 0.17.0
+* Reverted to static linking by default as we had prior to 0.16.0. You can still get dynamic linking
+  by setting `:allow_static_linking 0` which is recommended if it works for you. Forcing dynamic
+  linking was breaking in hard-to-debug ways for several people on both Mac and Linux.
+* Fixes for async-await support.
+* Added commands to set runtime environment variables (`:env`) and build environment variables
+  (`:build_env`).
+* An `evcxr.toml` in your startup directory can now be used to override your target-dir. Thanks
+  baiguoname.
+* Added support for selecting rustc's codegen backend. You can now use the cranelift backend by
+  doing `:toolchain nightly` then `:codegen_backend cranelift`.
+* Updated rust-analyzer
+* Minimum rust version is now 1.74 due to changes in rust-analyzer
+
+# Version 0.16.0
+* Now compiles dependencies as dylibs. This means that mutable static variables in dependencies are
+  now preserved between executions. If you hit problems with this, please file a bug report. You can
+  restore the old behaviour with `:allow_static_linking 1`.
+* New built-in caching mechanism. Enable a 500MiB cache by adding `:cache 500` to your
+  `~/.config/evcxr/init.evcxr`.
+* Use of sccache is now deprecated, since it doesn't work with dylibs. Switching to the new caching
+  mechanism is recommended.
+* Update to latest rust-analyzer
+* New command to show current dependencies: `:show_deps`. Thanks momori256.
+* Fixed some issues with the jupyter kernel not shutting down cleanly.
+* Fixed Tokio runtime being poisoned after panic. Thanks martinitus.
+* Added a `:doc` command to show documentation for something. Thanks baiguoname.
+* Improvements to an error message. Thanks baiguoname.
+* Improved docs for how to determine config path. Thanks anandijain.
+* Now requires rust version 1.70 or later
+
 # Version 0.15.1
 * Fix miscompilation when there's a trailing comment after an expression.
 * Fix out-of-order printing in evcxr_jupyter
@@ -83,7 +129,7 @@
 * Use mimalloc. This reduces startup time, at least one Mac. Thanks thomcc.
 * Initialize CommandContext in the background. Reduces startup time. Thanks thomcc.
 * Updated rustyline. Thanks thomcc
-* Use rust-analyzer for infering types for let destructurings.
+* Use rust-analyzer for inferring types for let destructurings.
 * Update rust-analyzer. Fixes evcxr on nightly, beta (and next stable release).
 * Minimum supported rust version now 1.52 (required for latest rust-analyzer).
 
@@ -187,7 +233,7 @@
   * You can get back the old behavior with `:preserve_vars_on_panic 1`
   * Put that in your ~/.config/evcxr/init.evcxr or equivalent to always have it.
 * Optimization is now back on by default. With the above change, there's now not
-  really any noticable difference in eval times for small amounts of code.
+  really any noticeable difference in eval times for small amounts of code.
 
 # Version 0.4.2
 * Fixed runtime error on windows due to something not liking the dll having been
@@ -222,7 +268,7 @@
 * Fix for another upcoming cargo change (due in 1.37).
 
 # Version 0.3.4
-* Fix with upcomming beta release (1.36) where Cargo started intercepting and
+* Fix with upcoming beta release (1.36) where Cargo started intercepting and
   wrapping JSON errors from the compiler.
 * Give proper error message if a closure or an impl trait is stored into a
   variable.
@@ -243,7 +289,7 @@
 * Fix optimization (wasn't actually working before for some reason).
 * Give better error message if rustc suggests a private type for a variable.
 * Allow variables to be given explicit types.
-* A couple of fixes for Windows (probaly not enough for it to actually work
+* A couple of fixes for Windows (probably not enough for it to actually work
   though, but it's a start).
 * Support for running in Binder.
 

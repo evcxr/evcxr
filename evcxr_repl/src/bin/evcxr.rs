@@ -16,8 +16,6 @@ use evcxr::Error;
 use evcxr::Theme;
 use evcxr_repl::BgInitMutex;
 use evcxr_repl::EvcxrRustylineHelper;
-use rustyline::error::ReadlineError;
-use rustyline::history::DefaultHistory;
 use rustyline::At;
 use rustyline::Cmd;
 use rustyline::Editor;
@@ -27,6 +25,8 @@ use rustyline::KeyEvent;
 use rustyline::Modifiers;
 use rustyline::Movement;
 use rustyline::Word;
+use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
 use std::fs;
 use std::io;
 use std::sync::Arc;
@@ -38,14 +38,18 @@ struct Repl {
     ide_mode: bool,
 }
 
-fn send_output<T: io::Write + Send + 'static>(
-    channel: crossbeam_channel::Receiver<String>,
+fn send_output<T: io::Write + Send + 'static, E: Send + 'static>(
+    channel: crossbeam_channel::Receiver<E>,
     mut printer: Option<impl ExternalPrinter + Send + 'static>,
     mut fallback_output: T,
     color: Option<Color>,
+    output_extractor: impl Fn(E) -> Option<String> + Send + 'static,
 ) {
     std::thread::spawn(move || {
-        while let Ok(line) = channel.recv() {
+        while let Ok(message) = channel.recv() {
+            let Some(line) = (output_extractor)(message) else {
+                continue;
+            };
             let to_print = if let Some(color) = color {
                 format!("{}\n", line.color(color))
             } else {
@@ -74,8 +78,16 @@ impl Repl {
         let initialize = move || -> Result<CommandContext, Error> {
             let (mut command_context, outputs) = CommandContext::new()?;
 
-            send_output(outputs.stdout, stdout_printer, io::stdout(), None);
-            send_output(outputs.stderr, stderr_printer, io::stderr(), stderr_colour);
+            send_output(outputs.stdout, stdout_printer, io::stdout(), None, |e| {
+                e.line()
+            });
+            send_output(
+                outputs.stderr,
+                stderr_printer,
+                io::stderr(),
+                stderr_colour,
+                Some,
+            );
             command_context.execute(":load_config --quiet")?;
             if !opt.is_empty() {
                 // Ignore failure
@@ -275,7 +287,7 @@ fn main() -> Result<()> {
 
     println!("Welcome to evcxr. For help, type :help");
     // Print this now, because we silence `:load_config` (writing to stdout
-    // interfers with rustyline somewhat).
+    // interferes with rustyline somewhat).
     if let Some(cfg) = evcxr::config_dir() {
         let init = cfg.join("init.evcxr");
         if init.exists() {
@@ -290,7 +302,7 @@ fn main() -> Result<()> {
         EditMode::Vi => {
             rustyline::Config::builder()
                 .edit_mode(rustyline::EditMode::Vi)
-                .keyseq_timeout(0) // https://github.com/kkawakam/rustyline/issues/371
+                .keyseq_timeout(Some(0)) // https://github.com/kkawakam/rustyline/issues/371
         }
         _ => rustyline::Config::builder(), // default edit_mode is emacs
     };
