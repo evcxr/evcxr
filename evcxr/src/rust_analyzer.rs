@@ -16,7 +16,6 @@ use ra_ap_ide as ra_ide;
 use ra_ap_ide::CompletionFieldsToResolve;
 use ra_ap_ide::FileRange;
 use ra_ap_ide::SubstTyLen;
-use ra_ap_ide_db::EditionedFileId;
 use ra_ap_ide_db::FxHashMap;
 use ra_ap_ide_db::SnippetCap;
 use ra_ap_ide_db::imports::insert_use::ImportGranularity;
@@ -142,7 +141,10 @@ impl RustAnalyzer {
         use ra_ap_syntax::ast::HasName;
         let mut result = HashMap::new();
         let sema = ra_ide::Semantics::new(self.analysis_host.raw_database());
-        let source_file = sema.parse(EditionedFileId::new(self.source_file_id, EDITION));
+        let source_file = sema.parse(ra_ap_base_db::EditionedFileId::new(
+            sema.db,
+            ra_ap_span::EditionedFileId::new(self.source_file_id, EDITION),
+        ));
         for item in source_file.items() {
             if let ast::Item::Fn(function) = item {
                 if function
@@ -272,17 +274,7 @@ impl RustAnalyzer {
             &FxHashMap::default(),
         );
 
-        let ws_data = FxHashMap::from_iter(crate_graph.iter().map(|crate_id| {
-            (
-                crate_id,
-                triomphe::Arc::new(ra_ap_base_db::CrateWorkspaceData {
-                    data_layout: workspace.target_layout.clone(),
-                    toolchain: workspace.toolchain.clone(),
-                }),
-            )
-        }));
-
-        change.set_crate_graph(crate_graph, ws_data);
+        change.set_crate_graph(crate_graph);
         Ok(())
     }
 
