@@ -910,7 +910,6 @@ impl EvalContext {
             let line = self.child_process.recv_line()?;
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
                 let _ = self.stdout_sender.send(StdoutEvent::ExecutionComplete);
-                output.got_execution_complete_marker = true;
                 break;
             }
             if line == PANIC_NOTIFICATION {
@@ -1130,7 +1129,6 @@ pub struct EvalOutputs {
     pub content_by_mime_type: HashMap<String, String>,
     pub timing: Option<Duration>,
     pub phases: Vec<PhaseDetails>,
-    pub got_execution_complete_marker: bool,
 }
 
 impl EvalOutputs {
@@ -1139,7 +1137,6 @@ impl EvalOutputs {
             content_by_mime_type: HashMap::new(),
             timing: None,
             phases: Vec::new(),
-            got_execution_complete_marker: false,
         }
     }
 
