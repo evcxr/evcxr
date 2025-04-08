@@ -13,7 +13,7 @@ evcxr = { version = "=0.19.0", path = "../evcxr" }
 json = "0.12.4"
 anyhow = "1.0.33"
 bytes = "1.2.1"
-tokio = "1.24.2"
+tokio = "1.43.1"
 uuid = { version = "1.1.2", features = [ "v4" ] }
 hmac = "0.12.0"
 sha2 = "0.10.0"
