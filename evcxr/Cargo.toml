@@ -21,7 +21,7 @@ dirs = "5.0.1"
 which = "6.0.0"
 evcxr_input = "1.0.0"
 unicode-segmentation = "1.7.1"
-crossbeam-channel = "0.5.5"
+crossbeam-channel = "0.5.15"
 toml = { version = "0.8.0" }
 serde = { version = "1.0.207", features = [ "derive" ] }
 triomphe = { version = "0.1.10", default-features = false, features = ["std"] }
