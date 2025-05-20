@@ -143,7 +143,8 @@ impl RustAnalyzer {
         let sema = ra_ide::Semantics::new(self.analysis_host.raw_database());
         let source_file = sema.parse(ra_ap_base_db::EditionedFileId::new(
             sema.db,
-            ra_ap_span::EditionedFileId::new(self.source_file_id, EDITION),
+            self.source_file_id,
+            EDITION,
         ));
         for item in source_file.items() {
             if let ast::Item::Fn(function) = item {

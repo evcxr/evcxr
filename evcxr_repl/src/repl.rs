@@ -54,8 +54,7 @@ impl Completer for EvcxrRustylineHelper {
                 .completions(line, pos)
                 .unwrap_or_else(|_| Completions::default()),
             Err(e) => {
-                return Err(rustyline::error::ReadlineError::Io(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                return Err(rustyline::error::ReadlineError::Io(std::io::Error::other(
                     e.clone(),
                 )));
             }
