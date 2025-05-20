@@ -1,3 +1,8 @@
+# Version 0.20.0 (unreleased)
+* jupyter: Revert a change to when iopub idle is sent. Fixes #400
+* Update internal rust-analyzer
+* MSRV is now 1.86
+
 # Version 0.19.0
 * Update internal rust-analyzer
 * jupyter: Ensure iopub idle isn't sent before stdout output
