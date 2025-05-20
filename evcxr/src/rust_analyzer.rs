@@ -109,7 +109,7 @@ impl RustAnalyzer {
 
     pub(crate) fn set_source(&mut self, source: String) -> Result<()> {
         self.current_source = source;
-        let mut change = ra_hir::ChangeWithProcMacros::new();
+        let mut change = ra_hir::ChangeWithProcMacros::default();
 
         std::fs::write(self.source_file.as_path(), &*self.current_source)
             .with_context(|| format!("Failed to write {:?}", self.source_file))?;
