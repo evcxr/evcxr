@@ -304,9 +304,6 @@ allow_apis = [
     "process",
 ]
 
-[pkg.unicode-normalization]
-allow_unsafe = true
-
 [pkg.num-traits]
 allow_unsafe = true
 
@@ -341,9 +338,6 @@ allow_apis = [
 [pkg.form_urlencoded]
 allow_unsafe = true
 
-[pkg.unicode-bidi]
-allow_unsafe = true
-
 [pkg.inotify]
 allow_unsafe = true
 allow_apis = [
@@ -354,6 +348,9 @@ allow_unsafe = true
 
 [pkg.getrandom]
 allow_unsafe = true
+build.allow_apis = [
+    "process",
+]
 
 [pkg.which]
 allow_unsafe = true
@@ -432,6 +429,9 @@ allow_unsafe = true
 
 [pkg.object]
 allow_unsafe = true
+build.allow_apis = [
+    "process",
+]
 
 [pkg.generic-array]
 allow_unsafe = true
@@ -709,9 +709,6 @@ allow_unsafe = true
 [pkg.ra_ap_span]
 allow_unsafe = true
 
-[pkg.lz4_flex]
-allow_unsafe = true
-
 [pkg.zerocopy-derive]
 allow_proc_macro = true
 allow_unsafe = true
@@ -721,6 +718,10 @@ allow_unsafe = true
 
 [pkg.zerocopy]
 allow_unsafe = true
+build.allow_apis = [
+    "fs",
+    "process",
+]
 
 [pkg.memoffset]
 allow_unsafe = true
@@ -743,16 +744,7 @@ allow_apis = [
 ]
 allow_unsafe = true
 
-[pkg.windows-implement]
-allow_proc_macro = true
-
-[pkg.windows-interface]
-allow_proc_macro = true
-
 [pkg.ra_ap_query-group-macro]
-allow_proc_macro = true
-
-[pkg.rustversion]
 allow_proc_macro = true
 
 [pkg.foldhash]
@@ -778,3 +770,77 @@ allow_unsafe = true
 
 [pkg.salsa]
 allow_unsafe = true
+
+[pkg.yoke-derive]
+allow_proc_macro = true
+allow_unsafe = true
+
+[pkg.zerovec-derive]
+allow_proc_macro = true
+allow_unsafe = true
+
+[pkg.zerofrom-derive]
+allow_proc_macro = true
+
+[pkg.displaydoc]
+allow_proc_macro = true
+
+[pkg.thin-vec]
+allow_unsafe = true
+
+[pkg.stable_deref_trait]
+allow_unsafe = true
+
+[pkg.writeable]
+allow_unsafe = true
+
+[pkg.icu_normalizer_data]
+allow_unsafe = true
+
+[pkg.icu_properties_data]
+allow_unsafe = true
+
+[pkg.utf8_iter]
+allow_unsafe = true
+
+[pkg.yoke]
+allow_unsafe = true
+
+[pkg.zerotrie]
+allow_unsafe = true
+
+[pkg.zerovec]
+allow_unsafe = true
+
+[pkg.potential_utf]
+allow_unsafe = true
+
+[pkg.tinystr]
+allow_unsafe = true
+
+[pkg.icu_collections]
+allow_unsafe = true
+
+[pkg.icu_locale_core]
+allow_unsafe = true
+
+[pkg.icu_provider]
+allow_unsafe = true
+
+[pkg.icu_normalizer]
+allow_unsafe = true
+
+[pkg.idna]
+allow_unsafe = true
+
+[pkg.ra_ap_ide_assists]
+allow_unsafe = true
+
+[pkg.windows-interface]
+allow_proc_macro = true
+
+[pkg.rustversion]
+allow_proc_macro = true
+
+[pkg.windows-implement]
+allow_proc_macro = true
