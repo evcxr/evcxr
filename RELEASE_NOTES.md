@@ -1,4 +1,4 @@
-# Version 0.20.0 (unreleased)
+# Version 0.20.0
 * jupyter: Revert a change to when iopub idle is sent. Fixes #400
 * Update internal rust-analyzer
 * MSRV is now 1.86
