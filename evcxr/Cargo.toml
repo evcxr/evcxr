@@ -7,7 +7,7 @@ repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
 authors = ["The Evcxr Authors"]
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.86"
 
 [dependencies]
 anyhow = "1.0.33"
