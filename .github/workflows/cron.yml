@@ -44,30 +44,6 @@ jobs:
       - run: cargo clippy
 
 
-  ci-windows:
-    # Avoid running on people's forks, especially the scheduled runs.
-    if: github.repository == 'evcxr/evcxr'
-    runs-on: windows-2019
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ runner.os }}-cargo-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
-
-      - run: cargo build
-      - run: cargo test
-
-
   ci-mac:
     # Avoid running on people's forks, especially the scheduled runs.
     if: github.repository == 'evcxr/evcxr'
