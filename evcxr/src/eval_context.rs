@@ -950,6 +950,14 @@ impl EvalContext {
         } else if !lost_variables.is_empty() {
             return Err(Error::TypeRedefinedVariablesLost(lost_variables));
         }
+
+        // Block until stdout_sender is empty with exponential backoff
+        let mut sleep_duration = Duration::from_millis(1);
+        while !self.stdout_sender.is_empty() {
+            std::thread::sleep(sleep_duration);
+            sleep_duration = std::cmp::min(sleep_duration * 2, Duration::from_millis(100));
+        }
+
         Ok(output)
     }
 
