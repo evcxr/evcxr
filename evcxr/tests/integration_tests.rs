@@ -217,16 +217,21 @@ fn missing_semicolon_on_let_stmt() {
 fn printing() {
     let (mut e, outputs) = new_command_context_and_outputs();
 
-    eval!(e,
-        println!("This is stdout");
-        eprintln!("This is stderr");
-        println!("Another stdout line");
-        eprintln!("Another stderr line");
-    );
+    let handle = std::thread::spawn(move || {
+        eval!(e,
+            println!("This is stdout");
+            eprintln!("This is stderr");
+            println!("Another stdout line");
+            eprintln!("Another stderr line");
+        );
+    });
+
     assert_eq!(outputs.stdout.recv(), Ok("This is stdout".to_owned()));
     assert_eq!(outputs.stderr.recv(), Ok("This is stderr".to_owned()));
     assert_eq!(outputs.stdout.recv(), Ok("Another stdout line".to_owned()));
     assert_eq!(outputs.stderr.recv(), Ok("Another stderr line".to_owned()));
+
+    handle.join().unwrap();
 }
 
 #[test]
