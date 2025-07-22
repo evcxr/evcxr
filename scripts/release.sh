@@ -23,6 +23,6 @@ cd ../evcxr_repl
 cargo publish
 cd ../evcxr_jupyter
 cargo publish
-git tag "v$VERSION"
-git push origin
-git push origin refs/tags/v$VERSION
+#git tag "v$VERSION"
+#git push origin
+#git push origin refs/tags/v$VERSION

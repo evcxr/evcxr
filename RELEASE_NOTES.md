@@ -1,4 +1,4 @@
-# Version 0.21.0 (unreleased)
+# Version 0.21.0
 * Jupyter kernel: Wait for stdout/stderr to empty before indicating idle. #414 - Thanks thomasjm.
 * Update internal rust-analyzer
 * MSRV is now 1.88

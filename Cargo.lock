@@ -666,7 +666,7 @@ checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
 
 [[package]]
 name = "evcxr"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "ariadne",
@@ -716,7 +716,7 @@ checksum = "15ed7e9b5d7d7506798f5154e9e6390a08a0d4fff03835247a4f423041059a78"
 
 [[package]]
 name = "evcxr_jupyter"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "ariadne",
@@ -740,7 +740,7 @@ dependencies = [
 
 [[package]]
 name = "evcxr_repl"
-version = "0.20.0"
+version = "0.21.0"
 dependencies = [
  "anyhow",
  "ariadne",
