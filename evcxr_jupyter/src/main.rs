@@ -31,7 +31,7 @@ fn main() -> Result<()> {
         match arg.as_str() {
             "--control_file" => {
                 if let Err(error) = install::update_if_necessary() {
-                    eprintln!("Warning: tried to update client, but failed: {}", error);
+                    eprintln!("Warning: tried to update client, but failed: {error}");
                 }
                 return run(&args.next().ok_or_else(|| anyhow!("Missing control file"))?);
             }
@@ -41,8 +41,8 @@ fn main() -> Result<()> {
             x => bail!("Unrecognised option {}", x),
         }
     }
-    println!("To install, run:\n  {} --install", bin);
-    println!("To uninstall, run:\n  {} --uninstall", bin);
+    println!("To install, run:\n  {bin} --install");
+    println!("To uninstall, run:\n  {bin} --uninstall");
     Ok(())
 }
 

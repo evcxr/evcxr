@@ -585,9 +585,9 @@ impl EvalContext {
             //If code is a function like `Option::ok_or_else`, the hover works fine, but if it is
             // method like `None.ok_or_else`, the hover show nothing, in order to show that, the code
             // has to end with "(", like `None.ok_or_else(`
-            (format!("{});", code), code.len() - 1)
+            (format!("{code});"), code.len() - 1)
         } else {
-            (format!("{};", code), code.len())
+            (format!("{code};"), code.len())
         };
         let (user_code, code_info) = CodeBlock::from_original_user_code(&modified_code);
         let user_code = state.apply(user_code, &code_info.nodes)?;
@@ -1057,25 +1057,22 @@ fn non_persistable_type_error(variable_name: &str, actual_type: &str) -> Result<
 fn fix_path() {
     // If cargo isn't on our path, see if it exists in the same directory as
     // our executable and if it does, add that directory to our PATH.
-    if which::which("cargo").is_err() {
-        if let Ok(current_exe) = std::env::current_exe() {
-            if let Some(bin_dir) = current_exe.parent() {
-                if bin_dir.join("cargo").exists() {
-                    if let Some(mut path) = std::env::var_os("PATH") {
-                        if cfg!(windows) {
-                            path.push(";");
-                        } else {
-                            path.push(":");
-                        }
-                        path.push(bin_dir);
-                        // Safety: We probably aren't doing stuff on other threads while we do this.
-                        // Is that good enough? Probably not really. TODO: Investigate alternatives.
-                        // Perhaps we can set PATH on our build commands instead.
-                        unsafe { std::env::set_var("PATH", path) };
-                    }
-                }
-            }
+    if which::which("cargo").is_err()
+        && let Ok(current_exe) = std::env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+        && bin_dir.join("cargo").exists()
+        && let Some(mut path) = std::env::var_os("PATH")
+    {
+        if cfg!(windows) {
+            path.push(";");
+        } else {
+            path.push(":");
         }
+        path.push(bin_dir);
+        // Safety: We probably aren't doing stuff on other threads while we do this.
+        // Is that good enough? Probably not really. TODO: Investigate alternatives.
+        // Perhaps we can set PATH on our build commands instead.
+        unsafe { std::env::set_var("PATH", path) };
     }
 }
 
@@ -1388,10 +1385,10 @@ impl ContextState {
     /// Adds a crate dependency with the specified name and configuration.
     pub fn add_dep(&mut self, dep: &str, dep_config: &str) -> Result<(), Error> {
         // Avoid repeating dep validation once we're already added it.
-        if let Some(existing) = self.external_deps.get(dep) {
-            if existing.config == dep_config {
-                return Ok(());
-            }
+        if let Some(existing) = self.external_deps.get(dep)
+            && existing.config == dep_config
+        {
+            return Ok(());
         }
         let external = ExternalCrate::new(dep.to_owned(), dep_config.to_owned())?;
         crate::cargo_metadata::validate_dep(&external.name, &external.config, &self.config)?;
@@ -1402,7 +1399,7 @@ impl ContextState {
     /// Adds a crate dependency at the specified local path
     pub fn add_local_dep(&mut self, dep: &str) -> Result<(), Error> {
         let name = cargo_metadata::parse_crate_name(dep)?;
-        self.add_dep(&name, &format!("{{ path = \"{}\" }}", dep))
+        self.add_dep(&name, &format!("{{ path = \"{dep}\" }}"))
     }
 
     /// Clears fields that aren't useful for inclusion in bug reports and which might give away
@@ -1437,22 +1434,17 @@ impl ContextState {
         user_code: &CodeBlock,
     ) -> Option<CompilationError> {
         for origin in &error.code_origins {
-            if let CodeKind::PackVariable { variable_name } = origin {
-                if let Some(definition_span) = &self.variable_states[variable_name].definition_span
-                {
-                    if let Some(segment) =
-                        user_code.segment_with_index(definition_span.segment_index)
-                    {
-                        if let Some(span) = Span::from_segment(segment, definition_span.range) {
-                            return self.replacement_for_pack_variable_error(
-                                variable_name,
-                                span,
-                                segment,
-                                &error,
-                            );
-                        }
-                    }
-                }
+            if let CodeKind::PackVariable { variable_name } = origin
+                && let Some(definition_span) = &self.variable_states[variable_name].definition_span
+                && let Some(segment) = user_code.segment_with_index(definition_span.segment_index)
+                && let Some(span) = Span::from_segment(segment, definition_span.range)
+            {
+                return self.replacement_for_pack_variable_error(
+                    variable_name,
+                    span,
+                    segment,
+                    &error,
+                );
             }
         }
         Some(error)
@@ -2071,14 +2063,14 @@ fn default_tool_path(tool: &str, fallback: &str) -> Result<PathBuf> {
         // downloads a pre-built evcxr binary and runs it and someone else on the system knows
         // they're going to do this, so puts a malicious cargo/rustc binary at the location of the
         // fallback path.
-        if let Some(home) = dirs::home_dir() {
-            if path.starts_with(home) {
-                // Note, if the user is using rustup, then we're likely returning the path to the
-                // rustup proxy, so they won't in this case get the speedup from bypassing the
-                // proxy... but at least thing will work. The complexity required to bypass in this
-                // case doesn't seem worth it.
-                return Ok(path);
-            }
+        if let Some(home) = dirs::home_dir()
+            && path.starts_with(home)
+        {
+            // Note, if the user is using rustup, then we're likely returning the path to the
+            // rustup proxy, so they won't in this case get the speedup from bypassing the
+            // proxy... but at least thing will work. The complexity required to bypass in this
+            // case doesn't seem worth it.
+            return Ok(path);
         }
     }
     anyhow::bail!("Cannot find `{}` binary", tool);

@@ -30,6 +30,6 @@ fn test_binary_execution() {
     let stderr = std::str::from_utf8(&output.stderr).unwrap();
     assert_eq!(stderr, "");
     if !stdout.contains("Welcome to evcxr") {
-        panic!("Unexpected output:\n{:?}", stdout);
+        panic!("Unexpected output:\n{stdout:?}");
     }
 }

@@ -147,47 +147,45 @@ impl RustAnalyzer {
             EDITION,
         ));
         for item in source_file.items() {
-            if let ast::Item::Fn(function) = item {
-                if function
+            if let ast::Item::Fn(function) = item
+                && function
                     .name()
                     .map(|n| n.text() == function_name)
                     .unwrap_or(false)
-                {
-                    let Some(body) = function.body() else {
-                        continue;
-                    };
-                    let module = sema
-                        .scope(function.syntax())
-                        .map(|scope| scope.module())
-                        .unwrap();
-                    for statement in body.statements() {
-                        if let ast::Stmt::LetStmt(let_stmt) = statement {
-                            if let Some(pat) = let_stmt.pat() {
-                                if !add_variable_for_pattern(
-                                    &pat,
+            {
+                let Some(body) = function.body() else {
+                    continue;
+                };
+                let module = sema
+                    .scope(function.syntax())
+                    .map(|scope| scope.module())
+                    .unwrap();
+                for statement in body.statements() {
+                    if let ast::Stmt::LetStmt(let_stmt) = statement
+                        && let Some(pat) = let_stmt.pat()
+                        && !add_variable_for_pattern(
+                            &pat,
+                            &sema,
+                            let_stmt.ty(),
+                            module,
+                            &mut result,
+                        )
+                    {
+                        // We didn't add a variable for `pat`, possibly because it's a
+                        // more complex pattern that needs destructuring. Try for each
+                        // sub pattern. This time, we ignore the explicit type, because
+                        // it applies to the whole pattern, not to its parts. Note, this
+                        // will attempt `pat` again, but that's OK, since it failed
+                        // above, so will fail again.
+                        for d in pat.syntax().descendants() {
+                            if let Some(sub_pat) = ast::Pat::cast(d) {
+                                add_variable_for_pattern(
+                                    &sub_pat,
                                     &sema,
-                                    let_stmt.ty(),
+                                    None,
                                     module,
                                     &mut result,
-                                ) {
-                                    // We didn't add a variable for `pat`, possibly because it's a
-                                    // more complex pattern that needs destructuring. Try for each
-                                    // sub pattern. This time, we ignore the explicit type, because
-                                    // it applies to the whole pattern, not to its parts. Note, this
-                                    // will attempt `pat` again, but that's OK, since it failed
-                                    // above, so will fail again.
-                                    for d in pat.syntax().descendants() {
-                                        if let Some(sub_pat) = ast::Pat::cast(d) {
-                                            add_variable_for_pattern(
-                                                &sub_pat,
-                                                &sema,
-                                                None,
-                                                module,
-                                                &mut result,
-                                            );
-                                        }
-                                    }
-                                }
+                                );
                             }
                         }
                     }
@@ -252,10 +250,9 @@ impl RustAnalyzer {
             let mut new_contents = None;
             if let ra_vfs::Change::Create(v, _hash) | ra_vfs::Change::Modify(v, _hash) =
                 changed_file.change
+                && let Ok(text) = std::str::from_utf8(&v)
             {
-                if let Ok(text) = std::str::from_utf8(&v) {
-                    new_contents = Some(text.to_owned());
-                }
+                new_contents = Some(text.to_owned());
             }
             change.change_file(file_id, new_contents);
         }
@@ -409,23 +406,23 @@ fn add_variable_for_pattern(
     result: &mut HashMap<String, VariableInfo>,
 ) -> bool {
     use ra_ap_syntax::ast::HasName;
-    if let ast::Pat::IdentPat(ident_pat) = pat {
-        if let Some(name) = ident_pat.name() {
-            let type_name = get_type_name(
-                explicit_type,
-                sema.type_of_pat(pat).map(|info| info.original()),
-                sema,
-                module,
-            );
-            result.insert(
-                name.text().to_string(),
-                VariableInfo {
-                    type_name,
-                    is_mutable: ident_pat.mut_token().is_some(),
-                },
-            );
-            return true;
-        }
+    if let ast::Pat::IdentPat(ident_pat) = pat
+        && let Some(name) = ident_pat.name()
+    {
+        let type_name = get_type_name(
+            explicit_type,
+            sema.type_of_pat(pat).map(|info| info.original()),
+            sema,
+            module,
+        );
+        result.insert(
+            name.text().to_string(),
+            VariableInfo {
+                type_name,
+                is_mutable: ident_pat.mut_token().is_some(),
+            },
+        );
+        return true;
     }
     false
 }
@@ -447,10 +444,10 @@ fn get_type_name(
         if ty.is_closure() {
             return TypeName::Closure;
         }
-        if let Ok(type_name) = ty.display_source_code(sema.db, module.into(), true) {
-            if is_type_valid(&type_name) {
-                return TypeName::Named(type_name);
-            }
+        if let Ok(type_name) = ty.display_source_code(sema.db, module.into(), true)
+            && is_type_valid(&type_name)
+        {
+            return TypeName::Named(type_name);
         }
     }
     TypeName::Unknown

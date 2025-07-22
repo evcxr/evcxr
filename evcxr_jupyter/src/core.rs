@@ -271,8 +271,7 @@ impl Server {
                         data.insert(
                             "text/html".into(),
                             json::from(format!(
-                                "<span style=\"color: rgba(0,0,0,0.4);\">Took {}ms</span>",
-                                ms
+                                "<span style=\"color: rgba(0,0,0,0.4);\">Took {ms}ms</span>"
                             )),
                         );
                         message
@@ -465,7 +464,7 @@ impl Server {
                     let process_handle = process_handle.clone();
                     tokio::task::spawn_blocking(move || {
                         if let Err(error) = process_handle.lock().unwrap().kill() {
-                            eprintln!("Failed to restart subprocess: {}", error);
+                            eprintln!("Failed to restart subprocess: {error}");
                         }
                     })
                     .await?;
@@ -527,17 +526,16 @@ impl Server {
         if let Some(exec_request) = &*self.latest_execution_request.lock().await {
             message = Some(exec_request.new_message("stream"));
         }
-        if let Some(message) = message {
-            if let Err(error) = message
+        if let Some(message) = message
+            && let Err(error) = message
                 .with_content(object! {
                     "name" => output_name,
                     "text" => format!("{}\n", line),
                 })
                 .send(&mut *self.iopub.lock().await)
                 .await
-            {
-                eprintln!("output {output_name} error: {}", error);
-            }
+        {
+            eprintln!("output {output_name} error: {error}");
         }
     }
 
@@ -553,7 +551,7 @@ impl Server {
                 for error in errors {
                     let message = format!("{}", error.message().bright_red());
                     if error.is_from_user_code() {
-                        let file_name = format!("command_{}", execution_count);
+                        let file_name = format!("command_{execution_count}");
                         let mut traceback = Vec::new();
                         if let Some(report) =
                             error.build_report(file_name.clone(), source.to_string(), Theme::Light)
@@ -616,7 +614,7 @@ impl Server {
                 }
             }
             error => {
-                let displayed_error = format!("{}", error);
+                let displayed_error = format!("{error}");
                 parent_message
                     .new_message("error")
                     .with_content(object! {
@@ -679,26 +677,26 @@ async fn cargo_check(code: String, context: Arc<std::sync::Mutex<CommandContext>
     let problems_json: Vec<JsonValue> = problems
         .iter()
         .filter_map(|problem| {
-            if let Some(primary_spanned_message) = problem.primary_spanned_message() {
-                if let Some(span) = primary_spanned_message.span {
-                    use std::fmt::Write;
-                    let mut message = primary_spanned_message.label.clone();
-                    if !message.is_empty() {
-                        message.push('\n');
-                    }
-                    message.push_str(&problem.message());
-                    for help in problem.help() {
-                        write!(message, "\nhelp: {}", help).unwrap();
-                    }
-                    return Some(object! {
-                        "message" => message,
-                        "severity" => problem.level(),
-                        "start_line" => span.start_line,
-                        "start_column" => span.start_column,
-                        "end_column" => span.end_column,
-                        "end_line" => span.end_line,
-                    });
+            if let Some(primary_spanned_message) = problem.primary_spanned_message()
+                && let Some(span) = primary_spanned_message.span
+            {
+                use std::fmt::Write;
+                let mut message = primary_spanned_message.label.clone();
+                if !message.is_empty() {
+                    message.push('\n');
                 }
+                message.push_str(&problem.message());
+                for help in problem.help() {
+                    write!(message, "\nhelp: {help}").unwrap();
+                }
+                return Some(object! {
+                    "message" => message,
+                    "severity" => problem.level(),
+                    "start_line" => span.start_line,
+                    "start_column" => span.start_column,
+                    "end_column" => span.end_column,
+                    "end_line" => span.end_line,
+                });
             }
             None
         })
