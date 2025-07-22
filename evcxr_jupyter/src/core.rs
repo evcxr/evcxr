@@ -14,7 +14,6 @@ use crate::jupyter_message::JupyterMessage;
 use anyhow::Result;
 use anyhow::bail;
 use ariadne::sources;
-use colored::*;
 use crossbeam_channel::RecvTimeoutError;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
@@ -24,6 +23,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
+use yansi::Paint as _;
 
 // Note, to avoid potential deadlocks, each thread should lock at most one mutex at a time.
 #[derive(Clone)]

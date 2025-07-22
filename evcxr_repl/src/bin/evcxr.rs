@@ -131,10 +131,6 @@ impl Repl {
     }
 
     fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
-        use yansi::Paint;
-        if cfg!(windows) && !Paint::enable_windows_ascii() {
-            Paint::disable()
-        }
         let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
             if error.is_from_user_code() {

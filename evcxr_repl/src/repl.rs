@@ -8,7 +8,6 @@
 use super::scan::FragmentValidity;
 use super::scan::validate_source_fragment;
 use crate::bginit::BgInitMutex;
-use colored::*;
 use evcxr::CommandContext;
 use evcxr::Completions;
 use evcxr::Error;
@@ -23,6 +22,7 @@ use rustyline::validate::ValidationResult;
 use rustyline::validate::Validator;
 use std::borrow::Cow;
 use std::sync::Arc;
+use yansi::Paint as _;
 
 pub struct EvcxrRustylineHelper {
     command_context: Arc<BgInitMutex<Result<CommandContext, Error>>>,
