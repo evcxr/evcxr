@@ -129,10 +129,10 @@ impl ConfigToml {
                         .lines()
                         .collect::<Vec<_>>()
                         .join(", ");
-                    format!(r#"{{{}}}"#, res_config_v)
+                    format!(r#"{{{res_config_v}}}"#)
                 }
                 other => {
-                    format!("{}", other)
+                    format!("{other}")
                 }
             };
             let res_part = format!(":dep {crate_name} = {res_config_v}\n");

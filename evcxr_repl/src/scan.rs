@@ -452,7 +452,7 @@ mod test {
         let good = eat_comment_block(&mut i);
         if let Some(want) = remaining.into() {
             let i = i.next().map_or(s.len(), |t| t.0);
-            assert_eq!(&s[i..], want, "{}", s);
+            assert_eq!(&s[i..], want, "{s}");
         } else {
             assert!(!good, "{}", s);
         }
@@ -506,7 +506,7 @@ mod test {
         // Make sure we ended up where we said we would.
         let next_idx = i.next().map_or(test.len(), |t| t.0);
         assert_eq!(&test[next_idx..], after);
-        assert_eq!(actual, res, "bad result for {}", test);
+        assert_eq!(actual, res, "bad result for {test}");
     }
     #[test]
     fn test_char_scan() {
@@ -538,8 +538,7 @@ mod test {
         assert_eq!(
             validate_source_fragment(frag),
             expect,
-            "for source fragment: `{}`",
-            frag
+            "for source fragment: `{frag}`"
         );
         if expect == FragmentValidity::Invalid {
             return;

@@ -275,12 +275,11 @@ impl CodeBlock {
         user_code_offset: usize,
     ) -> Option<(&Segment, usize)> {
         self.segments.iter().find_map(|segment| {
-            if let CodeKind::Command(CommandCall { start_byte, .. }) = &segment.kind {
-                if user_code_offset >= *start_byte
-                    && user_code_offset <= start_byte + segment.code.len()
-                {
-                    return Some((segment, user_code_offset - *start_byte));
-                }
+            if let CodeKind::Command(CommandCall { start_byte, .. }) = &segment.kind
+                && user_code_offset >= *start_byte
+                && user_code_offset <= start_byte + segment.code.len()
+            {
+                return Some((segment, user_code_offset - *start_byte));
             }
             None
         })
@@ -294,12 +293,11 @@ impl CodeBlock {
         self.segments
             .iter()
             .find_map(|segment| {
-                if let CodeKind::OriginalUserCode(meta) = &segment.kind {
-                    if user_code_offset >= meta.start_byte
-                        && user_code_offset <= meta.start_byte + segment.code.len()
-                    {
-                        return Some(bytes_seen + user_code_offset - meta.start_byte);
-                    }
+                if let CodeKind::OriginalUserCode(meta) = &segment.kind
+                    && user_code_offset >= meta.start_byte
+                    && user_code_offset <= meta.start_byte + segment.code.len()
+                {
+                    return Some(bytes_seen + user_code_offset - meta.start_byte);
                 }
                 bytes_seen += segment.code.len();
                 None
@@ -312,12 +310,11 @@ impl CodeBlock {
         self.segments
             .iter()
             .find_map(|segment| {
-                if let CodeKind::OriginalUserCode(meta) = &segment.kind {
-                    if output_offset >= bytes_seen
-                        && output_offset <= bytes_seen + segment.code.len()
-                    {
-                        return Some(meta.start_byte + output_offset - bytes_seen);
-                    }
+                if let CodeKind::OriginalUserCode(meta) = &segment.kind
+                    && output_offset >= bytes_seen
+                    && output_offset <= bytes_seen + segment.code.len()
+                {
+                    return Some(meta.start_byte + output_offset - bytes_seen);
                 }
                 bytes_seen += segment.code.len();
                 None

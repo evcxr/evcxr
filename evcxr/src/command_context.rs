@@ -185,7 +185,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
 
                 let mut eval_outputs = EvalOutputs::default();
 
-                let combined_output = format!("{}{}", stdout_str, stderr_str);
+                let combined_output = format!("{stdout_str}{stderr_str}");
 
                 eval_outputs
                     .content_by_mime_type
@@ -207,8 +207,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
             Err(error) => {
                 // Handle the case when executing the command fails
                 Err(Error::from(format!(
-                    "Failed to execute shell command: {}",
-                    error
+                    "Failed to execute shell command: {error}"
                 )))
             }
         }
@@ -286,7 +285,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
         if !quiet {
             match &config_toml.source_path {
                 Some(config_path) => {
-                    println!("Loading startup configuration from: {:?}", config_path);
+                    println!("Loading startup configuration from: {config_path:?}");
                 }
                 None => {
                     println!("No configuration file found, use the default configuration");
@@ -551,7 +550,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 |_ctx, state, args| {
                     let allow_static_linking = args.as_deref() == Some("1");
                     state.set_allow_static_linking(allow_static_linking);
-                    text_output(format!("Static linking: {}", allow_static_linking))
+                    text_output(format!("Static linking: {allow_static_linking}"))
                 },
             ),
             AvailableCommand::new(
@@ -653,12 +652,11 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 ":build_env",
                 "Set environment variables when building code (key=value)",
                 |_ctx, state, args| {
-                    if let Some(arg) = args {
-                        if let Some((key, value)) = arg.split_once('=') {
+                    if let Some(arg) = args
+                        && let Some((key, value)) = arg.split_once('=') {
                             state.set_build_env(key, value);
                             return text_output(format!("Set {key}={value} for build"));
                         }
-                    }
                     bail!("Please supply key=value");
                 },
             ),
@@ -666,8 +664,8 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 ":env",
                 "Set an environment variable (key=value)",
                 |_ctx, _state, args| {
-                    if let Some(arg) = args {
-                        if let Some((key, value)) = arg.split_once('=') {
+                    if let Some(arg) = args
+                        && let Some((key, value)) = arg.split_once('=') {
                             // TODO: Investigate if we could just sent the environment on the child
                             // process the next time we launch it.
 
@@ -683,7 +681,6 @@ Panic detected. Here's some useful information if you're filing a bug report.
                             // LD_LIBRARY_PATH.
                             return text_output(format!("Set {key}={value} (use :restart command to reload child process)"));
                         }
-                    }
                     bail!("Please supply key=value");
                 },
             ),

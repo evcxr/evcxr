@@ -122,10 +122,10 @@ fn evcxr_specific_notes(error: &CompilationError) -> Option<&'static str> {
 }
 
 fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
-    if let Some(file_name) = span["file_name"].as_str() {
-        if file_name.ends_with("lib.rs") {
-            return Some(span);
-        }
+    if let Some(file_name) = span["file_name"].as_str()
+        && file_name.ends_with("lib.rs")
+    {
+        return Some(span);
     }
     let expansion = &span["expansion"];
     if expansion.is_object() {
@@ -139,13 +139,12 @@ fn get_code_origins_for_span<'a>(
     code_block: &'a CodeBlock,
 ) -> Vec<(&'a CodeKind, usize)> {
     let mut code_origins = Vec::new();
-    if let Some(span) = spans_in_local_source(span) {
-        if let (Some(line_start), Some(line_end)) =
+    if let Some(span) = spans_in_local_source(span)
+        && let (Some(line_start), Some(line_end)) =
             (span["line_start"].as_usize(), span["line_end"].as_usize())
-        {
-            for line in line_start..=line_end {
-                code_origins.push(code_block.origin_for_line(line));
-            }
+    {
+        for line in line_start..=line_end {
+            code_origins.push(code_block.origin_for_line(line));
         }
     }
     code_origins
@@ -363,15 +362,15 @@ fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<Spann
         let message = json["message"].as_str()?;
         Some(format!("{level}: {message}"))
     })();
-    if let JsonValue::Array(spans) = &json["spans"] {
-        if !only_one_span || spans.len() == 1 {
-            for span_json in spans {
-                output_spans.push(SpannedMessage::from_json(
-                    span_json,
-                    code_block,
-                    level_label.clone(),
-                ));
-            }
+    if let JsonValue::Array(spans) = &json["spans"]
+        && (!only_one_span || spans.len() == 1)
+    {
+        for span_json in spans {
+            output_spans.push(SpannedMessage::from_json(
+                span_json,
+                code_block,
+                level_label.clone(),
+            ));
         }
     }
     if output_spans.iter().any(|s| s.span.is_some()) {

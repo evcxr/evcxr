@@ -102,24 +102,22 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
             if let (Some(package_name), Some(id)) =
                 (package["name"].as_str(), package["id"].as_str())
             {
-                if id == main_crate_id {
-                    if let JsonValue::Array(dependencies) = &package["dependencies"] {
-                        for dependency in dependencies {
-                            if let Some(dependency_name) = dependency["name"].as_str() {
-                                direct_dependencies.push(dependency_name);
-                            }
+                if id == main_crate_id
+                    && let JsonValue::Array(dependencies) = &package["dependencies"]
+                {
+                    for dependency in dependencies {
+                        if let Some(dependency_name) = dependency["name"].as_str() {
+                            direct_dependencies.push(dependency_name);
                         }
                     }
                 }
                 if let JsonValue::Array(targets) = &package["targets"] {
                     for target in targets {
-                        if let JsonValue::Array(kinds) = &target["kind"] {
-                            if kinds.iter().any(|kind| kind == "lib") {
-                                if let Some(target_name) = target["name"].as_str() {
-                                    crate_to_library_names
-                                        .insert(package_name, target_name.to_owned());
-                                }
-                            }
+                        if let JsonValue::Array(kinds) = &target["kind"]
+                            && kinds.iter().any(|kind| kind == "lib")
+                            && let Some(target_name) = target["name"].as_str()
+                        {
+                            crate_to_library_names.insert(package_name, target_name.to_owned());
                         }
                     }
                 }

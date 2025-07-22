@@ -376,13 +376,14 @@ fn rustc_command() -> Result<Command> {
         // compile as a dylib. We still need compile as type lib though, since otherwise cargo
         // recompiles every time - presumably because it detects that the lib file it asked for
         // isn't present.
-        if arg == "--crate-type" && num_crate_types == 1 {
-            if let Some(crate_type) = args.next() {
-                command.arg(&crate_type);
-                if crate_type == "lib" {
-                    command.arg("--crate-type");
-                    command.arg("dylib");
-                }
+        if arg == "--crate-type"
+            && num_crate_types == 1
+            && let Some(crate_type) = args.next()
+        {
+            command.arg(&crate_type);
+            if crate_type == "lib" {
+                command.arg("--crate-type");
+                command.arg("dylib");
             }
         }
         // Make paths to our dependencies to use dylibs rather than rlibs.

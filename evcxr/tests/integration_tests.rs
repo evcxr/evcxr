@@ -32,7 +32,7 @@ fn eval_and_unwrap(ctxt: &mut CommandContext, code: &str) -> HashMap<String, Str
                         println!("{}", error.rendered());
                     }
                 }
-                other => println!("{}", other),
+                other => println!("{other}"),
             }
 
             panic!("Unexpected compilation error. See above for details");
@@ -56,7 +56,7 @@ fn send_output<T: io::Write + Send + 'static>(
 ) {
     std::thread::spawn(move || {
         while let Ok(line) = channel.recv() {
-            if writeln!(output, "{}", line).is_err() {
+            if writeln!(output, "{line}").is_err() {
                 break;
             }
         }
@@ -163,7 +163,7 @@ fn save_and_restore_variables() {
     match e.execute("b = 2;") {
         Err(Error::CompilationErrors(errors)) => {
             if errors.len() != 1 {
-                println!("{:#?}", errors);
+                println!("{errors:#?}");
             }
             assert_eq!(errors.len(), 1);
             if errors[0].code() != Some("E0594") && errors[0].code() != Some("E0384") {
@@ -208,7 +208,7 @@ fn missing_semicolon_on_let_stmt() {
             assert!(e.first().unwrap().message().contains(';'));
         }
         x => {
-            panic!("Unexpected result: {:?}", x);
+            panic!("Unexpected result: {x:?}");
         }
     }
 }
@@ -315,7 +315,7 @@ fn function_panics_without_variable_preserving() {
     if let Err(Error::SubprocessTerminated(message)) = result {
         assert!(message.contains("Subprocess terminated"));
     } else {
-        panic!("Unexpected result: {:?}", result);
+        panic!("Unexpected result: {result:?}");
     }
     assert_eq!(variable_names_and_types(&e), vec![]);
     // Make sure that a compilation error doesn't bring the variables back from
@@ -376,11 +376,10 @@ impl TmpCrate {
             format!(
                 "\
                  [package]\n\
-                 name = \"{}\"\n\
+                 name = \"{name}\"\n\
                  version = \"0.0.1\"\n\
                  edition = \"2018\"\n\
-                 ",
-                name
+                 "
             ),
         )?;
         std::fs::write(src_dir.join("lib.rs"), src)?;
@@ -395,7 +394,7 @@ impl TmpCrate {
         let path = self.tempdir.path().to_string_lossy().replace('\\', "\\\\");
         self.path = Some(path.clone());
         if extra_options.is_empty() {
-            format!(":dep {}", path)
+            format!(":dep {path}")
         } else {
             format!(
                 ":dep {} = {{ path = \"{}\", {} }}",
@@ -562,7 +561,7 @@ fn continue_execution_after_bad_use_statement() {
             assert_eq!(errors.len(), 1);
             assert_eq!(errors[0].code(), Some("E0432"));
         }
-        x => panic!("Unexpected result: {:?}", x),
+        x => panic!("Unexpected result: {x:?}"),
     }
     // Now make sure we can still execute code.
     assert_eq!(eval!(e, "f".to_string() + "oo"), text_plain("\"foo\""));
@@ -590,7 +589,7 @@ fn error_from_macro_expansion() {
                 vec!["let mut s = String::new(); s.push_str(format!(\"\"));"]
             );
         }
-        x => panic!("Unexpected result: {:?}", x),
+        x => panic!("Unexpected result: {x:?}"),
     }
 }
 
@@ -655,7 +654,7 @@ fn abort_and_restart() {
             );
         }
     } else {
-        panic!("Unexpected result: {:?}", result);
+        panic!("Unexpected result: {result:?}");
     }
     eval!(e, assert_eq!(foo(), 42));
     assert!(e.defined_item_names().next().is_some());
@@ -708,10 +707,10 @@ fn unnamable_type_closure() {
     let result = e.execute(stringify!(let v = || {42};));
     if let Err(Error::Message(message)) = result {
         if !(message.starts_with("The variable") && message.contains("cannot be persisted")) {
-            panic!("Unexpected error: {:?}", message);
+            panic!("Unexpected error: {message:?}");
         }
     } else {
-        panic!("Unexpected result: {:?}", result);
+        panic!("Unexpected result: {result:?}");
     }
 }
 
@@ -728,10 +727,10 @@ fn unnamable_type_impl_trait() {
         if !(message.starts_with("The variable `v` has type")
             && message.contains("cannot be persisted"))
         {
-            panic!("Unexpected error: {:?}", message);
+            panic!("Unexpected error: {message:?}");
         }
     } else {
-        panic!("Unexpected result: {:?}", result);
+        panic!("Unexpected result: {result:?}");
     }
 }
 
