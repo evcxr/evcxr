@@ -1,3 +1,8 @@
+# Version 0.21.0 (unreleased)
+* Jupyter kernel: Wait for stdout/stderr to empty before indicating idle. #414 - Thanks thomasjm.
+* Update internal rust-analyzer
+* MSRV is now 1.88
+
 # Version 0.20.0
 * jupyter: Revert a change to when iopub idle is sent. Fixes #400
 * Update internal rust-analyzer
