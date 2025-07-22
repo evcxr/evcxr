@@ -55,14 +55,8 @@ jobs:
 
   ci-mac:
     runs-on: macos-latest
-    strategy:
-      matrix:
-        rust:
-          - stable
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/cache@v4
         with:
@@ -76,4 +70,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo build
-      - run: cargo test
+      # Intermittent test failures have been observed on mac. Running with only one thread seems to
+      # help. The test failures appear to be failing to infer a variable's type, so possibly
+      # something related to our use of rust-analyzer.
+      - run: cargo test -- --test-threads 1
