@@ -1,4 +1,4 @@
-# Version 0.21.1 (unreleased)
+# Version 0.21.1
 * Fix compilation on Windows.
 * Reinstate CI for Windows and Mac.
 
