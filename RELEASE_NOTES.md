@@ -1,3 +1,7 @@
+# Version 0.21.1 (unreleased)
+* Fix compilation on Windows.
+* Reinstate CI for Windows and Mac.
+
 # Version 0.21.0
 * Jupyter kernel: Wait for stdout/stderr to empty before indicating idle. #414 - Thanks thomasjm.
 * Update internal rust-analyzer
