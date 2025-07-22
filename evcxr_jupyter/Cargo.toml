@@ -18,7 +18,6 @@ uuid = { version = "1.1.2", features = [ "v4" ] }
 hmac = "0.12.0"
 sha2 = "0.10.0"
 hex = "0.4.2"
-colored = "3.0.0"
 dirs = "6.0.0"
 chrono = { version = "0.4.19", default-features = false, features = [ "clock" ] }
 unicode-segmentation = "1.7.1"
@@ -27,6 +26,7 @@ crossbeam-channel = "0.5.15"
 ariadne = "0.5.1"
 zeromq = { version = "0.4.1", default-features = false, features = [ "tokio-runtime", "tcp-transport" ] }
 tokio-util = "0.7.8"
+yansi = "1.0.1"
 
 [features]
 default = ["mimalloc"]
