@@ -23,7 +23,7 @@ unicode-segmentation = "1.7.1"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 parking_lot = "0.12.1"
 crossbeam-channel = "0.5.15"
-yansi = "0.5.1"
+yansi = "1.0.1"
 ariadne = "0.5.1"
 anyhow = "1.0.33"
 ctrlc = "3.2.3"

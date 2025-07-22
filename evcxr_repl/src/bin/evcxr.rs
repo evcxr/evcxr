@@ -9,7 +9,6 @@ use anyhow::Result;
 use ariadne::sources;
 use clap::Parser;
 use clap::ValueEnum;
-use colored::*;
 use evcxr::CommandContext;
 use evcxr::CompilationError;
 use evcxr::Error;
@@ -30,6 +29,8 @@ use rustyline::history::DefaultHistory;
 use std::fs;
 use std::io;
 use std::sync::Arc;
+use yansi::Color;
+use yansi::Paint as _;
 
 const PROMPT: &str = ">> ";
 
@@ -47,7 +48,7 @@ fn send_output<T: io::Write + Send + 'static>(
     std::thread::spawn(move || {
         while let Ok(line) = channel.recv() {
             let to_print = if let Some(color) = color {
-                format!("{}\n", line.color(color))
+                format!("{}\n", line.paint(color))
             } else {
                 format!("{line}\n")
             };
