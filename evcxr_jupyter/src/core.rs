@@ -560,7 +560,7 @@ impl Server {
                         {
                             let mut s = Vec::new();
                             report
-                                .write(sources([(file_name, source.to_string())]), &mut s)
+                                .write(sources([(file_name, source)]), &mut s)
                                 .unwrap();
                             let s = String::from_utf8_lossy(&s);
                             traceback = s.lines().map(|x| x.to_string()).collect::<Vec<_>>();

@@ -24,7 +24,7 @@ chrono = { version = "0.4.19", default-features = false, features = [ "clock" ] 
 unicode-segmentation = "1.7.1"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 crossbeam-channel = "0.5.15"
-ariadne = "0.4.0"
+ariadne = "0.5.1"
 zeromq = { version = "0.4.1", default-features = false, features = [ "tokio-runtime", "tcp-transport" ] }
 tokio-util = "0.7.8"
 
