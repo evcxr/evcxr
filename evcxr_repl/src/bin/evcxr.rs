@@ -267,9 +267,6 @@ fn main() -> Result<()> {
 
     let options = Options::parse();
 
-    #[cfg(windows)]
-    colored::control::set_virtual_terminal(true).ok();
-
     println!("Welcome to evcxr. For help, type :help");
     // Print this now, because we silence `:load_config` (writing to stdout
     // interferes with rustyline somewhat).
