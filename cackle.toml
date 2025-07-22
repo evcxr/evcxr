@@ -149,9 +149,6 @@ allow_unsafe = true
 allow_apis = [
 ]
 
-[pkg.lazy_static]
-allow_unsafe = true
-
 [pkg.memchr]
 allow_unsafe = true
 
@@ -517,9 +514,6 @@ allow_unsafe = true
 [pkg.rand_chacha]
 allow_unsafe = true
 
-[pkg.colored]
-allow_unsafe = true
-
 [pkg.crossbeam-queue]
 allow_unsafe = true
 
@@ -844,3 +838,27 @@ allow_proc_macro = true
 
 [pkg.windows-implement]
 allow_proc_macro = true
+
+[pkg.seize]
+allow_unsafe = true
+
+[pkg.intrusive-collections]
+allow_unsafe = true
+
+[pkg.typeid]
+allow_unsafe = true
+
+[pkg.ordered-float]
+allow_unsafe = true
+
+[pkg.papaya]
+allow_unsafe = true
+
+[pkg.toml_parser]
+allow_unsafe = true
+
+[pkg.erased-serde]
+allow_unsafe = true
+
+[pkg.serde-untagged]
+allow_unsafe = true
