@@ -65,8 +65,8 @@ impl CompilationError {
         if !source.is_ascii() {
             return None;
         }
-        let mut builder =
-            Report::build(ReportKind::Error, file_name.clone(), 0).with_message(error.message());
+        let mut builder = Report::build(ReportKind::Error, (file_name.clone(), 0..source.len()))
+            .with_message(error.message());
         let mut next_color = {
             let mut colors = ColorGenerator::new();
             move || {

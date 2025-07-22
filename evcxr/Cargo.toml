@@ -47,7 +47,7 @@ ra_ap_span = "0.0.295"
 # ra_ap_base_db = { package = "base-db", path = "../../rust-analyzer/crates/base-db"}
 # ra_ap_syntax = { package = "syntax", path = "../../rust-analyzer/crates/syntax"}
 
-ariadne = "0.4.0"
+ariadne = "0.5.1"
 
 pulldown-cmark = { version = "0.9.3", default-features = false, features = ["simd"] }
 
