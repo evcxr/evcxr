@@ -408,6 +408,7 @@ impl TmpCrate {
     }
 }
 
+#[cfg(not(windows))]
 #[test]
 fn crate_deps() {
     let (mut e, _) = new_command_context_and_outputs();
@@ -463,6 +464,7 @@ fn crate_deps() {
     assert_eq!(outputs.content_by_mime_type, text_plain("765"));
 }
 
+#[cfg(not(windows))]
 #[test]
 fn crate_name_with_hyphens() {
     let (mut e, _) = new_command_context_and_outputs();
@@ -473,6 +475,7 @@ fn crate_name_with_hyphens() {
     assert_eq!(outputs.content_by_mime_type, text_plain("42"));
 }
 
+#[cfg(not(windows))]
 #[test]
 fn crate_show_deps() {
     let (mut e, _) = new_command_context_and_outputs();
