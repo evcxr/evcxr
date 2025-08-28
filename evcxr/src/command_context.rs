@@ -477,7 +477,7 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 ":last_compile_dir",
                 "Print the directory in which we last compiled",
                 |ctx, _state, _args| {
-                    text_output(format!("{:?}", ctx.eval_context.last_compile_dir()))
+                    text_output(format!("{}", ctx.eval_context.last_compile_dir().display()))
                 },
             ),
             AvailableCommand::new(
