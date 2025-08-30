@@ -190,7 +190,7 @@ impl CodeBlock {
         self.with(CodeKind::OtherUserCode, user_code)
     }
 
-    pub(crate) fn from_original_user_code(user_code: &str) -> (CodeBlock, UserCodeInfo) {
+    pub(crate) fn from_original_user_code(user_code: &'_ str) -> (CodeBlock, UserCodeInfo<'_>) {
         static COMMAND_RE: Lazy<Regex> = Lazy::new(|| Regex::new("^ *(:[^ ]*)( +(.*))?$").unwrap());
         let mut code_block = CodeBlock::new();
         let mut nodes = Vec::new();

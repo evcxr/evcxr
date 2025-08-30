@@ -19,7 +19,7 @@ pub(crate) struct OriginalUserCode<'a> {
 /// Attempt to split some code into separate statements. All of the input will be returned besides
 /// possibly some trailing whitespace. i.e. if we can't parse it as statements, everything from the
 /// point where we can't parse onwards will be returned as a single statement.
-pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode> {
+pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode<'_>> {
     let mut output = Vec::new();
     let prelude = "fn f(){";
     let parsed_file = SourceFile::parse(

@@ -1030,17 +1030,17 @@ fn repeated_use_statements() {
 fn check(ctx: &mut CommandContext, code: &str) -> Vec<String> {
     let mut out = Vec::new();
     for err in ctx.check(code).unwrap() {
-        if let Some(spanned_message) = err.primary_spanned_message() {
-            if let Some(span) = spanned_message.span {
-                out.push(format!(
-                    "{} {}:{}-{}:{}",
-                    err.level(),
-                    span.start_line,
-                    span.start_column,
-                    span.end_line,
-                    span.end_column,
-                ));
-            }
+        if let Some(spanned_message) = err.primary_spanned_message()
+            && let Some(span) = spanned_message.span
+        {
+            out.push(format!(
+                "{} {}:{}-{}:{}",
+                err.level(),
+                span.start_line,
+                span.start_column,
+                span.end_line,
+                span.end_column,
+            ));
         }
     }
     out

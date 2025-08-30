@@ -56,11 +56,11 @@ fn span_to_byte_range(source: &str, span: &Span) -> Range<usize> {
 
 impl CompilationError {
     pub fn build_report(
-        &self,
+        &'_ self,
         file_name: String,
         source: String,
         theme: Theme,
-    ) -> Option<Report<(String, Range<usize>)>> {
+    ) -> Option<Report<'_, (String, Range<usize>)>> {
         let error = self;
         if !source.is_ascii() {
             return None;
