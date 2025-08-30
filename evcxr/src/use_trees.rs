@@ -107,12 +107,12 @@ mod tests {
         let mut out = Vec::new();
         let file = ast::SourceFile::parse(code, crate::rust_analyzer::EDITION);
         for item in file.tree().items() {
-            if let ast::Item::Use(use_stmt) = item {
-                if let Some(use_tree) = use_stmt.use_tree() {
-                    use_tree_names_do(&use_tree, &mut |import| {
-                        out.push(import);
-                    });
-                }
+            if let ast::Item::Use(use_stmt) = item
+                && let Some(use_tree) = use_stmt.use_tree()
+            {
+                use_tree_names_do(&use_tree, &mut |import| {
+                    out.push(import);
+                });
             }
         }
         out
