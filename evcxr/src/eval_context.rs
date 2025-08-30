@@ -1435,7 +1435,8 @@ impl ContextState {
     ) -> Option<CompilationError> {
         for origin in &error.code_origins {
             if let CodeKind::PackVariable { variable_name } = origin
-                && let Some(definition_span) = &self.variable_states[variable_name].definition_span
+                && let Some(variable_state) = self.variable_states.get(variable_name)
+                && let Some(definition_span) = &variable_state.definition_span
                 && let Some(segment) = user_code.segment_with_index(definition_span.segment_index)
                 && let Some(span) = Span::from_segment(segment, definition_span.range)
             {
