@@ -44,7 +44,11 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode<'_>> {
             // start of the next node, or failing that the end of the code.
             let end = next
                 .map(|next| usize::from(next.text_range().start()) - prelude.len())
-                .unwrap_or(code.len());
+                .unwrap_or(code.len())
+                .min(code.len());
+            if start_byte == end {
+                break;
+            }
             output.push(OriginalUserCode {
                 code: &code[start_byte..end],
                 node: child,
@@ -168,6 +172,14 @@ mod test {
         assert!(ast::Expr::can_cast(out[0].node.kind()));
         assert_eq!(out[0].code, code);
         assert_eq!(out.len(), 1);
+    }
+
+    #[test]
+    fn derive_without_item() {
+        let code = "#[derive(Debug)]";
+        let out = split_into_statements(code);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].code, "#[derive(Debug)]");
     }
 
     fn node_kinds(statements: &[OriginalUserCode]) -> Vec<SyntaxKind> {
