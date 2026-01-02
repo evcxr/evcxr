@@ -131,6 +131,10 @@ cargo install --force --git https://github.com/evcxr/evcxr.git evcxr_jupyter
 
 There are several Rust crates that provide Evcxr integration:
 
+* [Charton](https://github.com/wangjiawen2013/charton).
+  * Display charts
+* [Plotpy](https://github.com/cpmech/plotpy).
+  * Show figures
 * [Petgraph](https://crates.io/crates/petgraph-evcxr)
   * Graphs (the kind with nodes and edges)
 * [Plotly](https://igiagkiozis.github.io/plotly/content/fundamentals/jupyter_support.html)
