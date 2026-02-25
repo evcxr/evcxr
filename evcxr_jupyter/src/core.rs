@@ -468,7 +468,12 @@ impl Server {
                         }
                     })
                     .await?;
-                    message.new_reply().send(&mut connection).await?;
+
+                    message
+                        .new_reply()
+                        .with_content(object! {"status": "ok"})
+                        .send(&mut connection)
+                        .await?;
                 }
                 _ => {
                     eprintln!(
