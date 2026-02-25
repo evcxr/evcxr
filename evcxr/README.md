@@ -4,6 +4,11 @@
 
 An implementation of eval() for Rust.
 
+Most likely you want the Jupyer Kernel -
+[evcxr\_jupyter](https://github.com/evcxr/evcxr/blob/main/evcxr_jupyter/README.md) or the REPL -
+[evcxr\_repl](https://github.com/evcxr/evcxr/blob/main/evcxr_repl/README.md).
+
+
 The main struct in this crate is ```EvalContext```. You create one, then ask it
 to eval bits of code. Any defined functions, variables etc are local to that
 context.
