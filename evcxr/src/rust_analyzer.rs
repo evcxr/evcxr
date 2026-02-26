@@ -10,6 +10,7 @@ use anyhow::Result;
 use anyhow::anyhow;
 use anyhow::bail;
 use once_cell::sync::Lazy;
+use ra_ap_base_db::RootQueryDb;
 use ra_ap_base_db::SourceRoot;
 use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
@@ -141,14 +142,23 @@ impl RustAnalyzer {
         use ra_ap_syntax::ast::HasModuleItem;
         use ra_ap_syntax::ast::HasName;
         let mut result = HashMap::new();
-        let sema = ra_ide::Semantics::new(self.analysis_host.raw_database());
+        let db = self.analysis_host.raw_database();
+        let sema = ra_ide::Semantics::new(db);
+
+        let relevant_crates = db.relevant_crates(self.source_file_id);
+        let krate = relevant_crates
+            .iter()
+            .next()
+            .expect("File must belong to at exactly one crate");
+
         let source_file = sema.parse(ra_ap_base_db::EditionedFileId::new(
-            sema.db,
+            db,
             self.source_file_id,
             EDITION,
+            *krate,
         ));
 
-        ra_ap_hir::attach_db(sema.db, || {
+        ra_ap_hir::attach_db(db, || {
             for item in source_file.items() {
                 if let ast::Item::Fn(function) = item
                     && function
