@@ -26,16 +26,16 @@ toml = { version = "0.9.2" }
 serde = { version = "1.0.207", features = [ "derive" ] }
 triomphe = { version = "0.1.10", default-features = false, features = ["std"] }
 
-ra_ap_ide = "0.0.301"
-ra_ap_ide_db = "0.0.301"
-ra_ap_project_model = "0.0.301"
-ra_ap_paths = "0.0.301"
-ra_ap_vfs = "0.0.301"
-ra_ap_vfs-notify = "0.0.301"
-ra_ap_hir = "0.0.301"
-ra_ap_base_db = "0.0.301"
-ra_ap_syntax = "0.0.301"
-ra_ap_span = "0.0.301"
+ra_ap_ide = "0.0.302"
+ra_ap_ide_db = "0.0.302"
+ra_ap_project_model = "0.0.302"
+ra_ap_paths = "0.0.302"
+ra_ap_vfs = "0.0.302"
+ra_ap_vfs-notify = "0.0.302"
+ra_ap_hir = "0.0.302"
+ra_ap_base_db = "0.0.302"
+ra_ap_syntax = "0.0.302"
+ra_ap_span = "0.0.302"
 
 # ra_ap_ide = { package = "ide", path = "../../rust-analyzer/crates/ide"}
 # ra_ap_ide_db = { package = "ide-db", path = "../../rust-analyzer/crates/ide-db"}

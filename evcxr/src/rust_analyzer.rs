@@ -17,6 +17,7 @@ use ra_ap_ide::CompletionFieldsToResolve;
 use ra_ap_ide::FileRange;
 use ra_ap_ide::SubstTyLen;
 use ra_ap_ide_db::FxHashMap;
+use ra_ap_ide_db::MiniCore;
 use ra_ap_ide_db::SnippetCap;
 use ra_ap_ide_db::imports::insert_use::ImportGranularity;
 use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
@@ -146,52 +147,56 @@ impl RustAnalyzer {
             self.source_file_id,
             EDITION,
         ));
-        for item in source_file.items() {
-            if let ast::Item::Fn(function) = item
-                && function
-                    .name()
-                    .map(|n| n.text() == function_name)
-                    .unwrap_or(false)
-            {
-                let Some(body) = function.body() else {
-                    continue;
-                };
-                let module = sema
-                    .scope(function.syntax())
-                    .map(|scope| scope.module())
-                    .unwrap();
-                for statement in body.statements() {
-                    if let ast::Stmt::LetStmt(let_stmt) = statement
-                        && let Some(pat) = let_stmt.pat()
-                        && !add_variable_for_pattern(
-                            &pat,
-                            &sema,
-                            let_stmt.ty(),
-                            module,
-                            &mut result,
-                        )
-                    {
-                        // We didn't add a variable for `pat`, possibly because it's a
-                        // more complex pattern that needs destructuring. Try for each
-                        // sub pattern. This time, we ignore the explicit type, because
-                        // it applies to the whole pattern, not to its parts. Note, this
-                        // will attempt `pat` again, but that's OK, since it failed
-                        // above, so will fail again.
-                        for d in pat.syntax().descendants() {
-                            if let Some(sub_pat) = ast::Pat::cast(d) {
-                                add_variable_for_pattern(
-                                    &sub_pat,
-                                    &sema,
-                                    None,
-                                    module,
-                                    &mut result,
-                                );
+
+        ra_ap_hir::attach_db(sema.db, || {
+            for item in source_file.items() {
+                if let ast::Item::Fn(function) = item
+                    && function
+                        .name()
+                        .map(|n| n.text() == function_name)
+                        .unwrap_or(false)
+                {
+                    let Some(body) = function.body() else {
+                        continue;
+                    };
+                    let module = sema
+                        .scope(function.syntax())
+                        .map(|scope| scope.module())
+                        .unwrap();
+                    for statement in body.statements() {
+                        if let ast::Stmt::LetStmt(let_stmt) = statement
+                            && let Some(pat) = let_stmt.pat()
+                            && !add_variable_for_pattern(
+                                &pat,
+                                &sema,
+                                let_stmt.ty(),
+                                module,
+                                &mut result,
+                            )
+                        {
+                            // We didn't add a variable for `pat`, possibly because it's a
+                            // more complex pattern that needs destructuring. Try for each
+                            // sub pattern. This time, we ignore the explicit type, because
+                            // it applies to the whole pattern, not to its parts. Note, this
+                            // will attempt `pat` again, but that's OK, since it failed
+                            // above, so will fail again.
+                            for d in pat.syntax().descendants() {
+                                if let Some(sub_pat) = ast::Pat::cast(d) {
+                                    add_variable_for_pattern(
+                                        &sub_pat,
+                                        &sema,
+                                        None,
+                                        module,
+                                        &mut result,
+                                    );
+                                }
                             }
                         }
                     }
                 }
             }
-        }
+        });
+
         result
     }
 
@@ -311,6 +316,7 @@ impl RustAnalyzer {
             exclude_traits: &[],
             enable_auto_iter: true,
             enable_auto_await: true,
+            minicore: MiniCore::default(),
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
@@ -380,6 +386,7 @@ impl RustAnalyzer {
             max_enum_variants_count: Some(5),
             max_subst_ty_len: SubstTyLen::Unlimited,
             show_drop_glue: false,
+            minicore: MiniCore::default(),
         };
         let file_range = FileRange {
             file_id: self.source_file_id,
