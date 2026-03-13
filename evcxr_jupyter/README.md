@@ -155,7 +155,7 @@ There are several Rust crates that provide Evcxr integration:
   library versions that are a bit out of date now, but the examples still work. He's also put up a
   great [getting started video](https://www.youtube.com/watch?v=0UEMn3yUoLo).
 
-* Pawel Szulc created [rustyjupyter[(https://github.com/EncodePanda/rustyjupyter) - a nix flake
+* Pawel Szulc created [rustyjupyter](https://github.com/EncodePanda/rustyjupyter) - a nix flake
   template for a Jupyter Lab environment with a Rust kernel (evcxr). 
 
 ## Limitations
