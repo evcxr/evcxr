@@ -143,6 +143,8 @@ There are several Rust crates that provide Evcxr integration:
   * Charts
 * [Showata](https://crates.io/crates/showata)
   * Displays images, vectors, matrices (nalgebra and ndarray)
+* [QRCode](https://github.com/EncodePanda/qrcode-generator-evcxr)
+  * Displays QR codes
 
 ## 3rd party resources
 
