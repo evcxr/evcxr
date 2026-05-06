@@ -102,6 +102,8 @@ pub(crate) struct Config {
     pub(crate) allow_static_linking: bool,
     pub(crate) build_envs: HashMap<String, String>,
     subprocess_path: PathBuf,
+    /// Features to declare in the generated crate's [features] section.
+    pub(crate) features: Vec<String>,
 }
 
 fn create_initial_config(tmpdir: PathBuf, subprocess_path: PathBuf) -> Result<Config> {
@@ -148,6 +150,7 @@ impl Config {
             subprocess_path,
             codegen_backend: None,
             build_envs: Default::default(),
+            features: Vec::new(),
         })
     }
 
@@ -1380,6 +1383,14 @@ impl ContextState {
 
     pub fn toolchain(&mut self) -> &str {
         &self.config.toolchain
+    }
+
+    pub fn features(&self) -> &[String] {
+        &self.config.features
+    }
+
+    pub fn set_features(&mut self, features: Vec<String>) {
+        self.config.features = features;
     }
 
     /// Adds a crate dependency with the specified name and configuration.

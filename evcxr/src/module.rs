@@ -242,6 +242,20 @@ impl Module {
 
     fn get_cargo_toml_contents(&self, state: &ContextState) -> String {
         let crate_imports = state.format_cargo_deps();
+        let features = state.features();
+        // Only emit [features] when the user has actually declared some; otherwise the generated
+        // Cargo.toml is identical to what it was before this feature was added.
+        let features_section = if features.is_empty() {
+            String::new()
+        } else {
+            let feature_lines: String = features.iter().map(|f| format!("{f} = []\n")).collect();
+            let default_list = features
+                .iter()
+                .map(|f| format!("\"{f}\""))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("\n[features]\ndefault = [{default_list}]\n{feature_lines}")
+        };
         format!(
             r#"
 [package]
@@ -266,11 +280,12 @@ incremental = true
 overflow-checks = true
 
 [dependencies]
-{}
+{}{}
 "#,
             CRATE_NAME,
             state.opt_level(),
-            crate_imports
+            crate_imports,
+            features_section
         )
     }
 
