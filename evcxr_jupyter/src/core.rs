@@ -290,11 +290,15 @@ impl Server {
                     }))?;
                 }
                 Err(errors) => {
+                    let (ename, evalue) = error_reply_info(&errors);
                     self.emit_errors(&errors, &message, message.code(), execution_count)
                         .await?;
                     execution_reply_sender.send(message.new_reply().with_content(object! {
                         "status" => "error",
-                        "execution_count" => execution_count
+                        "execution_count" => execution_count,
+                        "ename" => ename,
+                        "evalue" => evalue,
+                        "traceback" => array![],
                     }))?;
                 }
             };
@@ -635,6 +639,16 @@ impl Server {
     }
 }
 
+fn error_reply_info(error: &evcxr::Error) -> (String, String) {
+    let evalue = match error {
+        evcxr::Error::CompilationErrors(errors) => {
+            errors.first().map(|e| e.message()).unwrap_or_default()
+        }
+        e => format!("{e}"),
+    };
+    ("Error".into(), evalue)
+}
+
 async fn comm_open(
     message: JupyterMessage,
     context: &Arc<std::sync::Mutex<CommandContext>>,
@@ -724,22 +738,25 @@ async fn bind_socket<S: zeromq::Socket>(
 
 /// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)
 fn kernel_info() -> JsonValue {
+    let rustc_version = std::process::Command::new("rustc")
+        .arg("--version")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_owned())
+        .unwrap_or_default();
     object! {
         "protocol_version" => "5.3",
         "implementation" => env!("CARGO_PKG_NAME"),
         "implementation_version" => env!("CARGO_PKG_VERSION"),
         "language_info" => object!{
             "name" => "Rust",
-            "version" => "",
+            "version" => rustc_version,
             "mimetype" => "text/rust",
             "file_extension" => ".rs",
-            // Pygments lexer, for highlighting Only needed if it differs from the 'name' field.
-            // see http://pygments.org/docs/lexers/#lexers-for-the-rust-language
-            "pygment_lexer" => "rust",
-            // Codemirror mode, for for highlighting in the notebook. Only needed if it differs from the 'name' field.
-            // codemirror use text/x-rustsrc as mimetypes
-            // see https://codemirror.net/mode/rust/
+            "pygments_lexer" => "rust",
             "codemirror_mode" => "rust",
+            "nbconvert_exporter" => "rust",
         },
         "banner" => format!("EvCxR {} - Evaluation Context for Rust", env!("CARGO_PKG_VERSION")),
         "help_links" => array![
