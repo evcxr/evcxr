@@ -474,6 +474,11 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 |_ctx, state, _args| process_show_deps_command(state),
             ),
             AvailableCommand::new(
+                ":patch",
+                "Add a [patch.crates-io] entry. e.g. :patch some-crate = { path = \"/path\" }",
+                |_ctx, state, args| process_patch_command(state, args),
+            ),
+            AvailableCommand::new(
                 ":last_compile_dir",
                 "Print the directory in which we last compiled",
                 |ctx, _state, _args| {
@@ -812,6 +817,32 @@ fn process_dep_command(
         Ok(EvalOutputs::new())
     } else {
         bail!("Invalid :dep command. Expected: name = ... or just name");
+    }
+}
+
+fn process_patch_command(
+    state: &mut ContextState,
+    args: &Option<String>,
+) -> Result<EvalOutputs, Error> {
+    use regex::Regex;
+    let Some(args) = args else {
+        let patches = &state.crates_io_patches;
+        if patches.is_empty() {
+            return text_output("[patch.crates-io]: (none)");
+        }
+        let mut lines: Vec<String> = patches
+            .iter()
+            .map(|(name, cfg)| format!("{name} = {cfg}"))
+            .collect();
+        lines.sort();
+        return text_output(lines.join("\n"));
+    };
+    static PATCH_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"^([^= ]+) *= *(.+)$").unwrap());
+    if let Some(captures) = PATCH_RE.captures(args) {
+        state.add_crates_io_patch(captures[1].to_owned(), captures[2].trim().to_owned());
+        Ok(EvalOutputs::new())
+    } else {
+        bail!("Invalid :patch command. Expected: crate-name = {{ ... }}");
     }
 }
 

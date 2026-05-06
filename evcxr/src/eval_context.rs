@@ -1217,6 +1217,8 @@ pub struct ContextState {
     allow_question_mark: bool,
     build_num: i32,
     pub(crate) config: Config,
+    /// [patch.crates-io] entries: crate name → TOML config string.
+    pub(crate) crates_io_patches: HashMap<String, String>,
 }
 
 impl ContextState {
@@ -1233,6 +1235,7 @@ impl ContextState {
             allow_question_mark: false,
             build_num: 0,
             config,
+            crates_io_patches: HashMap::new(),
         }
     }
 
@@ -1503,6 +1506,23 @@ impl ContextState {
             .map(|krate| format!("{} = {}\n", krate.name, krate.config))
             .collect::<Vec<_>>()
             .join("")
+    }
+
+    pub(crate) fn format_cargo_patches(&self) -> String {
+        if self.crates_io_patches.is_empty() {
+            return String::new();
+        }
+        let mut entries: Vec<String> = self
+            .crates_io_patches
+            .iter()
+            .map(|(name, cfg)| format!("{name} = {cfg}"))
+            .collect();
+        entries.sort();
+        format!("\n[patch.crates-io]\n{}\n", entries.join("\n"))
+    }
+
+    pub fn add_crates_io_patch(&mut self, name: String, config: String) {
+        self.crates_io_patches.insert(name, config);
     }
 
     fn compilation_mode(&self) -> CompilationMode {

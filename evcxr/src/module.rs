@@ -242,6 +242,7 @@ impl Module {
 
     fn get_cargo_toml_contents(&self, state: &ContextState) -> String {
         let crate_imports = state.format_cargo_deps();
+        let patches = state.format_cargo_patches();
         format!(
             r#"
 [package]
@@ -266,11 +267,12 @@ incremental = true
 overflow-checks = true
 
 [dependencies]
-{}
+{}{}
 "#,
             CRATE_NAME,
             state.opt_level(),
-            crate_imports
+            crate_imports,
+            patches
         )
     }
 
