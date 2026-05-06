@@ -97,7 +97,11 @@ impl Repl {
             Err(error) => return Err(error.clone()),
         };
         let success = match execution_result {
-            Ok(output) => {
+            Ok(mut output) => {
+                let warnings = std::mem::take(&mut output.warnings);
+                if !warnings.is_empty() {
+                    self.display_errors(to_run, warnings);
+                }
                 if let Some(text) = output.get("text/plain") {
                     println!("{text}");
                 }
@@ -133,6 +137,15 @@ impl Repl {
     fn display_errors(&mut self, source: &str, errors: Vec<CompilationError>) {
         let mut last_span_lines: &Vec<String> = &vec![];
         for error in &errors {
+            if error.level() == "warning" {
+                let rendered = error.rendered();
+                if !rendered.is_empty() {
+                    println!("{rendered}");
+                } else {
+                    println!("{}", error.message().bright_yellow());
+                }
+                continue;
+            }
             if error.is_from_user_code() {
                 if let Some(report) =
                     error.build_report("command".to_string(), source.to_string(), Theme::Dark)

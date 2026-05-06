@@ -196,6 +196,7 @@ impl Module {
             let output = String::from_utf8_lossy(&cargo_output.stderr);
             eprintln!("{output}");
         }
+        let warnings = warnings_from_cargo_output(&cargo_output, code_block);
         self.build_num += 1;
         let copied_so_file = config
             .deps_dir()
@@ -213,6 +214,7 @@ impl Module {
         rename_or_copy_so_file(&self.so_path(config), &copied_so_file)?;
         Ok(SoFile {
             path: copied_so_file,
+            warnings,
         })
     }
 
@@ -496,6 +498,35 @@ fn run_cargo(
     }
 }
 
+fn warnings_from_cargo_output(
+    cargo_output: &std::process::Output,
+    code_block: &CodeBlock,
+) -> Vec<CompilationError> {
+    let stderr = String::from_utf8_lossy(&cargo_output.stderr);
+    let stdout = String::from_utf8_lossy(&cargo_output.stdout);
+    stderr
+        .lines()
+        .chain(stdout.lines())
+        .filter_map(|line| {
+            let json = json::parse(line).ok()?;
+            let msg = if json["message"].is_object() {
+                &json["message"]
+            } else {
+                &json
+            };
+            if msg["level"].as_str() != Some("warning") {
+                return None;
+            }
+            let warning = CompilationError::opt_new(json, code_block)?;
+            if warning.is_from_user_code() {
+                Some(warning)
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
 /// Process one line from cargo, either copying it to stderr or ignoring.
 ///
 /// At this point it looks for messages about compiling dependency crates.
@@ -547,4 +578,5 @@ fn errors_from_cargo_output(
 
 pub(crate) struct SoFile {
     pub(crate) path: PathBuf,
+    pub(crate) warnings: Vec<CompilationError>,
 }

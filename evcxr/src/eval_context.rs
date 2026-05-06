@@ -806,7 +806,8 @@ impl EvalContext {
         }
         phases.phase_complete("Final compile");
 
-        let output = self.run_and_capture_output(state, &so_file, callbacks)?;
+        let mut output = self.run_and_capture_output(state, &so_file, callbacks)?;
+        output.warnings = so_file.warnings;
         Ok(ExecutionArtifacts { output })
     }
 
@@ -1117,6 +1118,7 @@ pub struct EvalOutputs {
     pub content_by_mime_type: HashMap<String, String>,
     pub timing: Option<Duration>,
     pub phases: Vec<PhaseDetails>,
+    pub warnings: Vec<CompilationError>,
 }
 
 impl EvalOutputs {
@@ -1125,6 +1127,7 @@ impl EvalOutputs {
             content_by_mime_type: HashMap::new(),
             timing: None,
             phases: Vec::new(),
+            warnings: Vec::new(),
         }
     }
 
@@ -1157,6 +1160,7 @@ impl EvalOutputs {
             (t1, t2) => t1.or(t2),
         };
         self.phases.append(&mut other.phases);
+        self.warnings.append(&mut other.warnings);
     }
 }
 
