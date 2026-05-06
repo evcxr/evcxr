@@ -258,8 +258,8 @@ struct Options {
     #[clap(long, default_value = "emacs")]
     edit_mode: EditMode,
 
-    /// Path to an init file to load instead of the default ~/.config/evcxr/init.evcxr.
-    /// Errors if the file does not exist.
+    /// Path to an init file to load instead of the platform default. Errors if the file does
+    /// not exist.
     #[clap(long, value_name = "PATH")]
     config: Option<PathBuf>,
 
