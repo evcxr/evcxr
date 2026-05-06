@@ -28,6 +28,7 @@ use rustyline::error::ReadlineError;
 use rustyline::history::DefaultHistory;
 use std::fs;
 use std::io;
+use std::path::PathBuf;
 use std::sync::Arc;
 use yansi::Color;
 use yansi::Paint as _;
@@ -67,6 +68,7 @@ impl Repl {
     fn new(
         ide_mode: bool,
         opt: String,
+        config: Option<PathBuf>,
         editor: &mut Editor<EvcxrRustylineHelper, DefaultHistory>,
     ) -> Repl {
         let stdout_printer = editor.create_external_printer().ok();
@@ -77,7 +79,13 @@ impl Repl {
 
             send_output(outputs.stdout, stdout_printer, io::stdout(), None);
             send_output(outputs.stderr, stderr_printer, io::stderr(), stderr_colour);
-            command_context.execute(":load_config --quiet")?;
+            if let Some(ref path) = config {
+                let init_code = fs::read_to_string(path)
+                    .map_err(|e| Error::Message(format!("{}: {e}", path.display())))?;
+                command_context.execute(&init_code)?;
+            } else {
+                command_context.execute(":load_config --quiet")?;
+            }
             if !opt.is_empty() {
                 // Ignore failure
                 command_context.set_opt_level(&opt).ok();
@@ -250,6 +258,11 @@ struct Options {
     #[clap(long, default_value = "emacs")]
     edit_mode: EditMode,
 
+    /// Path to an init file to load instead of the default ~/.config/evcxr/init.evcxr.
+    /// Errors if the file does not exist.
+    #[clap(long, value_name = "PATH")]
+    config: Option<PathBuf>,
+
     /// Extra arguments; ignored, but show up in std::env::args() which is passed to the subprocess
     /// (see child_process.rs).
     _extra_args: Vec<String>,
@@ -267,10 +280,18 @@ fn main() -> Result<()> {
 
     let options = Options::parse();
 
+    if let Some(ref path) = options.config {
+        if !path.exists() {
+            anyhow::bail!("--config: file not found: {}", path.display());
+        }
+    }
+
     println!("Welcome to evcxr. For help, type :help");
     // Print this now, because we silence `:load_config` (writing to stdout
     // interferes with rustyline somewhat).
-    if let Some(cfg) = evcxr::config_dir() {
+    if let Some(ref path) = options.config {
+        println!("Startup commands will be loaded from {}", path.display());
+    } else if let Some(cfg) = evcxr::config_dir() {
         let init = cfg.join("init.evcxr");
         if init.exists() {
             println!("Startup commands will be loaded from {}", init.display());
@@ -301,7 +322,12 @@ fn main() -> Result<()> {
         KeyEvent(KeyCode::Right, Modifiers::CTRL),
         Cmd::Move(Movement::ForwardWord(1, At::AfterEnd, Word::Big)),
     );
-    let mut repl = Repl::new(options.ide_mode, options.opt.clone(), &mut editor);
+    let mut repl = Repl::new(
+        options.ide_mode,
+        options.opt.clone(),
+        options.config,
+        &mut editor,
+    );
     editor.set_helper(Some(EvcxrRustylineHelper::new(Arc::clone(
         &repl.command_context,
     ))));
