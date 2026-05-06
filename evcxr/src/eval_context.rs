@@ -889,7 +889,7 @@ impl EvalContext {
         let mut got_panic = false;
         let mut lost_variables = Vec::new();
         static MIME_OUTPUT: Lazy<Regex> =
-            Lazy::new(|| Regex::new("EVCXR_BEGIN_CONTENT ([^ ]+)").unwrap());
+            Lazy::new(|| Regex::new("EVCXR_BEGIN_CONTENT (.+)").unwrap());
         loop {
             let line = self.child_process.recv_line()?;
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
@@ -918,7 +918,7 @@ impl EvalContext {
             {
                 lost_variables.push(variable_name.to_owned());
             } else if let Some(captures) = MIME_OUTPUT.captures(&line) {
-                let mime_type = captures[1].to_owned();
+                let mime_type = captures[1].trim_end().to_owned();
                 let mut content = String::new();
                 loop {
                     let line = self.child_process.recv_line()?;
@@ -2172,6 +2172,20 @@ mod tests {
         )
         .unwrap();
         ContextState::new(config)
+    }
+
+    #[test]
+    fn test_mime_output_regex_preserves_parameters() {
+        use once_cell::sync::Lazy;
+        use regex::Regex;
+        static MIME_OUTPUT: Lazy<Regex> =
+            Lazy::new(|| Regex::new("EVCXR_BEGIN_CONTENT (.+)").unwrap());
+        let line = "EVCXR_BEGIN_CONTENT text/markdown; charset=utf-8";
+        let captures = MIME_OUTPUT.captures(line).unwrap();
+        assert_eq!(captures[1].trim_end(), "text/markdown; charset=utf-8");
+        let line_simple = "EVCXR_BEGIN_CONTENT text/plain";
+        let captures_simple = MIME_OUTPUT.captures(line_simple).unwrap();
+        assert_eq!(captures_simple[1].trim_end(), "text/plain");
     }
 
     #[test]
