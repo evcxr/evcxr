@@ -326,9 +326,7 @@ fn main() -> Result<()> {
         let script = fs::read_to_string(script_path).map_err(|e| {
             anyhow::anyhow!("Failed to read script '{}': {e}", script_path.display())
         })?;
-        for line in script.lines() {
-            repl.execute(line)?;
-        }
+        repl.execute(&script)?;
         if options.exit_after_script {
             if let Some(history_file) = &opt_history_file {
                 editor.save_history(history_file).ok();
