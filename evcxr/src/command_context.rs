@@ -228,6 +228,22 @@ Panic detected. Here's some useful information if you're filing a bug report.
     pub fn completions(&mut self, src: &str, position: usize) -> Result<Completions> {
         let (user_code, code_info) = CodeBlock::from_original_user_code(src);
         if let Some((segment, offset)) = user_code.command_containing_user_offset(position) {
+            // When the cursor is in the argument of :doc, delegate to rust-analyzer so
+            // type and module paths can be completed, not just command names.
+            let existing = segment.code[..offset].to_owned();
+            if let Some(arg_prefix) = existing.strip_prefix(":doc ") {
+                let arg_prefix = arg_prefix.to_owned();
+                let arg_len = arg_prefix.len();
+                let arg_start_in_src = position - arg_len;
+                let (arg_code, arg_info) = CodeBlock::from_original_user_code(&arg_prefix);
+                let (_, state, _) = self.prepare_for_analysis(arg_code.clone())?;
+                let mut completions =
+                    self.eval_context
+                        .completions(arg_code, state, &arg_info.nodes, arg_len)?;
+                completions.start_offset += arg_start_in_src;
+                completions.end_offset += arg_start_in_src;
+                return Ok(completions);
+            }
             return self.command_completions(segment, offset, position);
         }
         let (non_command_code, state, _errors) = self.prepare_for_analysis(user_code)?;
