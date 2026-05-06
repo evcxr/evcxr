@@ -250,6 +250,14 @@ struct Options {
     #[clap(long, default_value = "emacs")]
     edit_mode: EditMode,
 
+    /// Script file to execute before entering the interactive REPL.
+    #[clap(long)]
+    script: Option<std::path::PathBuf>,
+
+    /// Exit after running the script instead of dropping into the interactive REPL.
+    #[clap(long)]
+    exit_after_script: bool,
+
     /// Extra arguments; ignored, but show up in std::env::args() which is passed to the subprocess
     /// (see child_process.rs).
     _extra_args: Vec<String>,
@@ -313,6 +321,22 @@ fn main() -> Result<()> {
         editor.load_history(&history_file).ok();
         opt_history_file = Some(history_file);
     }
+
+    if let Some(script_path) = &options.script {
+        let script = fs::read_to_string(script_path).map_err(|e| {
+            anyhow::anyhow!("Failed to read script '{}': {e}", script_path.display())
+        })?;
+        for line in script.lines() {
+            repl.execute(line)?;
+        }
+        if options.exit_after_script {
+            if let Some(history_file) = &opt_history_file {
+                editor.save_history(history_file).ok();
+            }
+            return Ok(());
+        }
+    }
+
     let mut interrupted = false;
     loop {
         let prompt = format!("{}", PROMPT.yellow());
