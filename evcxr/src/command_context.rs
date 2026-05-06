@@ -541,26 +541,21 @@ Panic detected. Here's some useful information if you're filing a bug report.
                 "Set/clear features for the generated crate. e.g. :features foo,bar",
                 |_ctx, state, args| {
                     match args.as_deref() {
-                        // No argument: print current features.
-                        None => {
-                            let current = state.features().join(", ");
-                            text_output(format!("features: {current}"))
-                        }
-                        // Empty string (":features " with trailing space): clear features.
-                        Some("") => {
-                            state.set_features(vec![]);
-                            text_output("features: (none)")
-                        }
-                        // Comma-separated list: replace feature set.
+                        None => {}
                         Some(list) => {
                             let features: Vec<String> = list
                                 .split(',')
                                 .map(|s| s.trim().to_owned())
                                 .filter(|s| !s.is_empty())
                                 .collect();
-                            state.set_features(features.clone());
-                            text_output(format!("features: {}", features.join(", ")))
+                            state.set_features(features);
                         }
+                    }
+                    let current = state.features().join(", ");
+                    if current.is_empty() {
+                        text_output("features: (none)")
+                    } else {
+                        text_output(format!("features: {current}"))
                     }
                 },
             ),

@@ -243,8 +243,6 @@ impl Module {
     fn get_cargo_toml_contents(&self, state: &ContextState) -> String {
         let crate_imports = state.format_cargo_deps();
         let features = state.features();
-        // Only emit [features] when the user has actually declared some; otherwise the generated
-        // Cargo.toml is identical to what it was before this feature was added.
         let features_section = if features.is_empty() {
             String::new()
         } else {
