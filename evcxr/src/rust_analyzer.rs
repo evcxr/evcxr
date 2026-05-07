@@ -15,9 +15,9 @@ use ra_ap_hir as ra_hir;
 use ra_ap_ide as ra_ide;
 use ra_ap_ide::CompletionFieldsToResolve;
 use ra_ap_ide::FileRange;
+use ra_ap_ide::RaFixtureConfig;
 use ra_ap_ide::SubstTyLen;
 use ra_ap_ide_db::FxHashMap;
-use ra_ap_ide_db::MiniCore;
 use ra_ap_ide_db::SnippetCap;
 use ra_ap_ide_db::imports::insert_use::ImportGranularity;
 use ra_ap_ide_db::imports::insert_use::InsertUseConfig;
@@ -318,7 +318,7 @@ impl RustAnalyzer {
             exclude_traits: &[],
             enable_auto_iter: true,
             enable_auto_await: true,
-            minicore: MiniCore::default(),
+            ra_fixture: RaFixtureConfig::default(),
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
@@ -388,7 +388,7 @@ impl RustAnalyzer {
             max_enum_variants_count: Some(5),
             max_subst_ty_len: SubstTyLen::Unlimited,
             show_drop_glue: false,
-            minicore: MiniCore::default(),
+            ra_fixture: RaFixtureConfig::default(),
         };
         let file_range = FileRange {
             file_id: self.source_file_id,
