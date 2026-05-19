@@ -21,14 +21,14 @@ jobs:
         with:
           components: rust-src
       - name: Cache cargo registry and git trees
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache target dir
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         # https://github.com/actions/cache/blob/main/examples.md#rust---cargo
         with:
           path: |
@@ -56,14 +56,14 @@ jobs:
         with:
           components: clippy
       - name: Cache cargo registry and git trees
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache target dir
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             target/
@@ -76,14 +76,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Cache cargo registry and git trees
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache target dir
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             target/
@@ -100,14 +100,14 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - name: Cache cargo registry and git trees
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
       - name: Cache target dir
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             target/
