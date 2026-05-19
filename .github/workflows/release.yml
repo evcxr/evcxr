@@ -68,7 +68,7 @@ jobs:
         7z a $n.zip $n
 
     - name: Release
-      uses: softprops/action-gh-release@v1
+      uses: softprops/action-gh-release@v3
       with:
         body_path: REL.md
         files: |
