@@ -49,7 +49,7 @@ ra_ap_span = "0.0.333"
 
 ariadne = "0.6.0"
 
-pulldown-cmark = { version = "0.9.3", default-features = false, features = ["simd"] }
+pulldown-cmark = { version = "0.13.3", default-features = false, features = ["simd", "html"] }
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
 backtrace = "0.3.35"
