@@ -319,6 +319,7 @@ impl RustAnalyzer {
             enable_auto_iter: true,
             enable_auto_await: true,
             ra_fixture: RaFixtureConfig::default(),
+            add_colons_to_module: true,
         };
         if let Ok(Some(completion_items)) = self.analysis_host.analysis().completions(
             &config,
