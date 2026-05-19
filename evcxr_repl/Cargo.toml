@@ -13,7 +13,7 @@ default = ["mimalloc"]
 
 [dependencies]
 evcxr = { version = "=0.21.1", path = "../evcxr" }
-rustyline = "16.0.0"
+rustyline = "18.0.0"
 once_cell = "1.5.2"
 regex = { version = "1.4.1", default-features = false, features = [ "std" ] }
 clap = { version = "4.3.0", features = [ "derive" ] }
