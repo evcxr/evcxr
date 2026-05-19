@@ -242,11 +242,6 @@ allow_apis = [
 [pkg.linux-raw-sys]
 allow_unsafe = true
 
-[pkg.version_check]
-allow_apis = [
-    "process",
-]
-
 [pkg.rayon-core]
 allow_unsafe = true
 
@@ -326,6 +321,9 @@ allow_unsafe = true
 
 [pkg.getrandom]
 allow_unsafe = true
+build.allow_apis = [
+    "process",
+]
 
 [pkg.which]
 allow_unsafe = true
@@ -405,9 +403,6 @@ build.allow_apis = [
     "process",
 ]
 
-[pkg.generic-array]
-allow_unsafe = true
-
 [pkg.slab]
 allow_unsafe = true
 
@@ -474,9 +469,6 @@ allow_unsafe = true
 [pkg.clap_lex]
 allow_unsafe = true
 
-[pkg.subtle]
-allow_unsafe = true
-
 [pkg.ppv-lite86]
 allow_unsafe = true
 
@@ -488,12 +480,6 @@ allow_unsafe = true
 
 [pkg.crossbeam-queue]
 allow_unsafe = true
-
-[pkg.fd-lock]
-allow_unsafe = true
-allow_apis = [
-    "fs",
-]
 
 [pkg.rustyline]
 allow_unsafe = true
@@ -911,3 +897,24 @@ allow_apis = [
     "fs",
     "process",
 ]
+
+[pkg.pulldown-cmark-escape]
+allow_unsafe = true
+
+[pkg.cmov]
+allow_unsafe = true
+
+[pkg.const-oid]
+allow_unsafe = true
+
+[pkg.saa]
+allow_unsafe = true
+
+[pkg.hybrid-array]
+allow_unsafe = true
+
+[pkg.sdd]
+allow_unsafe = true
+
+[pkg.scc]
+allow_unsafe = true
