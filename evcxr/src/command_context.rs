@@ -273,6 +273,9 @@ Panic detected. Here's some useful information if you're filing a bug report.
             if cmd.starts_with(existing) {
                 completions.completions.push(Completion {
                     code: (*cmd).to_owned(),
+                    label: (*cmd).to_owned(),
+                    detail: None,
+                    documentation: None,
                 })
             }
         }

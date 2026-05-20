@@ -345,6 +345,9 @@ impl RustAnalyzer {
                         code: ARG_PLACEHOLDER
                             .replace_all(&indel.insert, "$1")
                             .replace("$0", ""),
+                        label: item.label.primary.to_string(),
+                        detail: item.detail.clone(),
+                        documentation: item.documentation.as_ref().map(|d| d.as_str().to_owned()),
                     });
                     if let Some(previous_range) = range.as_ref() {
                         if *previous_range != indel.delete {
@@ -477,6 +480,9 @@ pub struct Completions {
 #[derive(Debug, Eq, PartialEq)]
 pub struct Completion {
     pub code: String,
+    pub label: String,
+    pub detail: Option<String>,
+    pub documentation: Option<String>,
 }
 
 /// Returns whether this appears to be a valid type. Rust analyzer, when asked to emit code for some
