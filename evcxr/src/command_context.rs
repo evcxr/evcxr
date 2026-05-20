@@ -776,6 +776,19 @@ Panic detected. Here's some useful information if you're filing a bug report.
         }
     }
 
+    /// Returns `(plain_text, html)` hover information for the expression at the end of `src`.
+    /// The position should be a byte offset. Uses accumulated REPL state so that previously
+    /// defined variables and imports are visible during hover analysis.
+    pub fn hover_at(&mut self, src: &str, position: usize) -> Result<(String, String)> {
+        let code_up_to_cursor = &src[..position];
+        let (user_code, _code_info) = CodeBlock::from_original_user_code(src);
+        let (_, mut state, _) = self.prepare_for_analysis(user_code)?;
+        let (plain, markdown) = self.eval_context.hover(code_up_to_cursor, &mut state)?;
+        let mut html = String::new();
+        pulldown_cmark::html::push_html(&mut html, pulldown_cmark::Parser::new(&markdown));
+        Ok((plain, html))
+    }
+
     fn hover(
         &mut self,
         state: &mut ContextState,
