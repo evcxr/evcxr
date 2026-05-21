@@ -345,6 +345,7 @@ impl RustAnalyzer {
                         code: ARG_PLACEHOLDER
                             .replace_all(&indel.insert, "$1")
                             .replace("$0", ""),
+                        kind: jupyter_kind(item.kind),
                         label: item.label.primary.to_string(),
                         detail: item.detail.clone(),
                         documentation: item.documentation.as_ref().map(|d| d.as_str().to_owned()),
@@ -480,9 +481,54 @@ pub struct Completions {
 #[derive(Debug, Eq, PartialEq)]
 pub struct Completion {
     pub code: String,
+    pub kind: &'static str,
     pub label: String,
     pub detail: Option<String>,
     pub documentation: Option<String>,
+}
+
+fn jupyter_kind(kind: ra_ide::CompletionItemKind) -> &'static str {
+    use ra_ap_ide_db::SymbolKind;
+    use ra_ide::CompletionItemKind as K;
+    match kind {
+        K::SymbolKind(SymbolKind::Function | SymbolKind::Method) => "function",
+        K::SymbolKind(
+            SymbolKind::Struct
+            | SymbolKind::Enum
+            | SymbolKind::Union
+            | SymbolKind::Trait
+            | SymbolKind::TypeAlias
+            | SymbolKind::TypeParam
+            | SymbolKind::SelfType,
+        ) => "class",
+        K::SymbolKind(SymbolKind::Module | SymbolKind::CrateRoot | SymbolKind::ToolModule) => {
+            "module"
+        }
+        K::SymbolKind(
+            SymbolKind::Const
+            | SymbolKind::Static
+            | SymbolKind::ConstParam
+            | SymbolKind::Variant
+            | SymbolKind::Field
+            | SymbolKind::Local
+            | SymbolKind::SelfParam
+            | SymbolKind::ValueParam
+            | SymbolKind::Label,
+        )
+        | K::Binding
+        | K::InferredType => "instance",
+        K::SymbolKind(
+            SymbolKind::Macro
+            | SymbolKind::ProcMacro
+            | SymbolKind::Derive
+            | SymbolKind::DeriveHelper
+            | SymbolKind::Attribute
+            | SymbolKind::BuiltinAttr,
+        ) => "function",
+        K::Keyword => "keyword",
+        K::Snippet | K::BuiltinType | K::UnresolvedReference | K::Expression => "instance",
+        _ => "instance",
+    }
 }
 
 /// Returns whether this appears to be a valid type. Rust analyzer, when asked to emit code for some

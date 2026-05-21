@@ -1173,7 +1173,11 @@ fn completion_fields_populated() {
 
     // Every completion should have a non-empty label.
     for c in &completions.completions {
-        assert!(!c.label.is_empty(), "label should not be empty for '{}'", c.code);
+        assert!(
+            !c.label.is_empty(),
+            "label should not be empty for '{}'",
+            c.code
+        );
     }
 
     // The `reserve` completion should carry a type signature in detail.
@@ -1205,8 +1209,14 @@ fn command_completion_fields() {
         .expect("expected :dep in command completions");
     // label must mirror code for command completions.
     assert_eq!(dep.label, dep.code);
-    assert!(dep.detail.is_none(), "command completions should have no detail");
-    assert!(dep.documentation.is_none(), "command completions should have no documentation");
+    assert!(
+        dep.detail.is_none(),
+        "command completions should have no detail"
+    );
+    assert!(
+        dep.documentation.is_none(),
+        "command completions should have no documentation"
+    );
 }
 
 #[test]

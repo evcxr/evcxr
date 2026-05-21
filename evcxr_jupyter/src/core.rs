@@ -781,7 +781,7 @@ async fn handle_completion_request(
             matches.push(c.code.clone());
             type_metadata.push(object! {
                 "text"      => c.label.clone(),
-                "type"      => "function",
+                "type"      => c.kind,
                 "start"     => cursor_start,
                 "end"       => cursor_end,
                 "signature" => c.detail.clone().unwrap_or_default(),
