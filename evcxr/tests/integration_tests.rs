@@ -1195,6 +1195,10 @@ fn completion_fields_populated() {
         detail.contains("usize"),
         "reserve detail should mention its argument type, got: {detail}"
     );
+    assert_eq!(
+        reserve.kind, "function",
+        "method should have kind 'function'"
+    );
 }
 
 #[test]
@@ -1209,6 +1213,10 @@ fn command_completion_fields() {
         .expect("expected :dep in command completions");
     // label must mirror code for command completions.
     assert_eq!(dep.label, dep.code);
+    assert_eq!(
+        dep.kind, "magic",
+        "command completions should have kind 'magic'"
+    );
     assert!(
         dep.detail.is_none(),
         "command completions should have no detail"
@@ -1234,11 +1242,12 @@ fn hover_at_returns_content() {
 }
 
 #[test]
-fn hover_at_unknown_symbol_returns_error() {
+fn hover_at_unknown_symbol_returns_fallback() {
     let mut ctx = new_context();
-    // Hover on something rust-analyzer can't resolve — should return Err, not panic.
     let src = "totally_unknown_function_xyz()";
-    let result = ctx.hover_at(src, src.len());
-    // The hover returning an error is acceptable; what's not acceptable is a panic.
-    let _ = result;
+    // rust-analyzer returns a "no documentation" sentinel rather than an error
+    let (plain, _) = ctx
+        .hover_at(src, src.len())
+        .expect("hover_at should not panic on an unresolvable symbol");
+    assert!(!plain.is_empty());
 }

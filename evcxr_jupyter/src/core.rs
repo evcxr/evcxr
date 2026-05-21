@@ -762,6 +762,44 @@ fn kernel_info() -> JsonValue {
     }
 }
 
+/// Strips the leading self parameter (`self`, `&self`, `&mut self`) from the
+/// params section of a rust-analyzer detail string, then uses `→` for the
+/// return arrow. Non-function detail strings are returned unchanged.
+fn format_fn_detail(detail: &str) -> String {
+    let Some(fn_pos) = detail.find("fn(") else {
+        return detail.to_owned();
+    };
+    let (prefix, rest) = detail.split_at(fn_pos + 3); // prefix ends with "fn("
+    let mut depth = 1usize;
+    let Some(close) = rest.char_indices().find_map(|(i, ch)| match ch {
+        '(' => {
+            depth += 1;
+            None
+        }
+        ')' => {
+            depth -= 1;
+            if depth == 0 { Some(i) } else { None }
+        }
+        _ => None,
+    }) else {
+        return detail.to_owned();
+    };
+    let params = strip_self_param(&rest[..close]);
+    let suffix = rest[close..].replace("->", "→");
+    format!("{prefix}{params}{suffix}")
+}
+
+fn strip_self_param(params: &str) -> &str {
+    // Handles &mut self, &self, self, and self: CustomType forms
+    if !(params.starts_with("&mut self")
+        || params.starts_with("&self")
+        || params.starts_with("self"))
+    {
+        return params;
+    }
+    params.find(", ").map_or("", |i| &params[i + 2..])
+}
+
 async fn handle_completion_request(
     context: &Arc<std::sync::Mutex<CommandContext>>,
     message: JupyterMessage,
@@ -779,13 +817,21 @@ async fn handle_completion_request(
         let mut type_metadata: Vec<JsonValue> = Vec::new();
         for c in &completions.completions {
             matches.push(c.code.clone());
+            // signature: self-stripped, arrow notation — shown inline in the completion popup.
+            // docstring: raw detail (self retained) prepended as context before the prose docs.
+            let docstring = match (&c.detail, &c.documentation) {
+                (Some(sig), Some(doc)) => format!("{sig}\n\n{doc}"),
+                (Some(sig), None) => sig.clone(),
+                (None, Some(doc)) => doc.clone(),
+                (None, None) => String::new(),
+            };
             type_metadata.push(object! {
                 "text"      => c.label.clone(),
                 "type"      => c.kind,
                 "start"     => cursor_start,
                 "end"       => cursor_end,
-                "signature" => c.detail.clone().unwrap_or_default(),
-                "docstring" => c.documentation.clone().unwrap_or_default(),
+                "signature" => c.detail.as_deref().map(format_fn_detail).unwrap_or_default(),
+                "docstring" => docstring,
             });
         }
         Ok(object! {
@@ -809,7 +855,15 @@ async fn handle_inspect_request(
     tokio::task::spawn_blocking(move || {
         let code = message.code();
         let position = grapheme_offset_to_byte_offset(code, message.cursor_pos());
+        // hover_at returns Ok("No documentation found", ...) for unresolvable
+        // symbols rather than Err; treat that as found:false per Jupyter spec.
         match context.lock().unwrap().hover_at(code, position) {
+            Ok((plain, _)) if plain == "No documentation found" => Ok(object! {
+                "status"   => "ok",
+                "found"    => false,
+                "data"     => object!{},
+                "metadata" => object!{},
+            }),
             Ok((plain, html)) => Ok(object! {
                 "status"   => "ok",
                 "found"    => true,
