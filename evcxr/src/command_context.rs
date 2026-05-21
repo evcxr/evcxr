@@ -275,8 +275,6 @@ Panic detected. Here's some useful information if you're filing a bug report.
                     code: (*cmd).to_owned(),
                     kind: "magic",
                     label: (*cmd).to_owned(),
-                    detail: None,
-                    documentation: None,
                 })
             }
         }

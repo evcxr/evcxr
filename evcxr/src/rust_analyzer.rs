@@ -347,8 +347,6 @@ impl RustAnalyzer {
                             .replace("$0", ""),
                         kind: jupyter_kind(item.kind),
                         label: item.label.primary.to_string(),
-                        detail: item.detail.clone(),
-                        documentation: item.documentation.as_ref().map(|d| d.as_str().to_owned()),
                     });
                     if let Some(previous_range) = range.as_ref() {
                         if *previous_range != indel.delete {
@@ -483,8 +481,6 @@ pub struct Completion {
     pub code: String,
     pub kind: &'static str,
     pub label: String,
-    pub detail: Option<String>,
-    pub documentation: Option<String>,
 }
 
 fn jupyter_kind(kind: ra_ide::CompletionItemKind) -> &'static str {

@@ -1180,21 +1180,11 @@ fn completion_fields_populated() {
         );
     }
 
-    // The `reserve` completion should carry a type signature in detail.
     let reserve = completions
         .completions
         .iter()
         .find(|c| c.code == "reserve(additional)")
         .expect("expected reserve(additional) in completions");
-    assert!(
-        reserve.detail.is_some(),
-        "reserve should have a detail (type signature)"
-    );
-    let detail = reserve.detail.as_ref().unwrap();
-    assert!(
-        detail.contains("usize"),
-        "reserve detail should mention its argument type, got: {detail}"
-    );
     assert_eq!(
         reserve.kind, "function",
         "method should have kind 'function'"
@@ -1216,14 +1206,6 @@ fn command_completion_fields() {
     assert_eq!(
         dep.kind, "magic",
         "command completions should have kind 'magic'"
-    );
-    assert!(
-        dep.detail.is_none(),
-        "command completions should have no detail"
-    );
-    assert!(
-        dep.documentation.is_none(),
-        "command completions should have no documentation"
     );
 }
 
