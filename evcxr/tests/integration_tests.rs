@@ -150,8 +150,6 @@ fn single_statement() {
     eval!(e, assert_eq!(40i32 + 2, 42));
 }
 
-// Not sure why this is failing on mac
-#[cfg(not(target_os = "macos"))]
 #[test]
 fn save_and_restore_variables() {
     let mut e = new_context();
@@ -891,8 +889,6 @@ fn simple_completions(ctx: &mut CommandContext, code: &str) -> HashSet<String> {
         .collect()
 }
 
-// Not sure why this is failing on mac
-#[cfg(not(target_os = "macos"))]
 #[test]
 fn code_completion() {
     let mut ctx = new_context();
@@ -1158,4 +1154,82 @@ fn check_for_doc() {
             "ctx\n\nstruct MyStruct(usize)\n\n\nthis is my struct"
         )),
     );
+}
+
+#[test]
+fn completion_fields_populated() {
+    let mut ctx = new_context();
+    // Establish context so completions see real types.
+    ctx.execute(
+        r#"
+        fn foo() -> Vec<String> {
+            vec![]
+        }"#,
+    )
+    .unwrap();
+    let code = "foo().res";
+    let completions = ctx.completions(code, code.len()).unwrap();
+    assert!(!completions.completions.is_empty());
+
+    // Every completion should have a non-empty label.
+    for c in &completions.completions {
+        assert!(
+            !c.label.is_empty(),
+            "label should not be empty for '{}'",
+            c.code
+        );
+    }
+
+    let reserve = completions
+        .completions
+        .iter()
+        .find(|c| c.code == "reserve(additional)")
+        .expect("expected reserve(additional) in completions");
+    assert_eq!(
+        reserve.kind, "function",
+        "method should have kind 'function'"
+    );
+}
+
+#[test]
+fn command_completion_fields() {
+    let mut ctx = new_context();
+    // Command completions come from a different code path (no rust-analyzer).
+    let completions = ctx.completions(":de", 3).unwrap();
+    let dep = completions
+        .completions
+        .iter()
+        .find(|c| c.code == ":dep")
+        .expect("expected :dep in command completions");
+    // label must mirror code for command completions.
+    assert_eq!(dep.label, dep.code);
+    assert_eq!(
+        dep.kind, "magic",
+        "command completions should have kind 'magic'"
+    );
+}
+
+#[test]
+fn hover_at_returns_content() {
+    let mut ctx = new_context();
+    // Ask for hover at the end of `Vec::new` — stdlib, always available.
+    let src = "let _v: Vec<i32> = Vec::new()";
+    // Position just after `Vec::new` (before the `()`).
+    let pos = src.find("Vec::new").unwrap() + "Vec::new".len();
+    let (plain, html) = ctx
+        .hover_at(src, pos)
+        .expect("hover_at should succeed for a known stdlib item");
+    assert!(!plain.is_empty(), "plain text hover should be non-empty");
+    assert!(html.contains('<'), "html hover should contain HTML tags");
+}
+
+#[test]
+fn hover_at_unknown_symbol_returns_fallback() {
+    let mut ctx = new_context();
+    let src = "totally_unknown_function_xyz()";
+    // rust-analyzer returns a "no documentation" sentinel rather than an error
+    let (plain, _) = ctx
+        .hover_at(src, src.len())
+        .expect("hover_at should not panic on an unresolvable symbol");
+    assert!(!plain.is_empty());
 }

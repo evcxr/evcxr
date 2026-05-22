@@ -412,6 +412,18 @@ impl Server {
                 },
             );
             reply.send(connection).await?;
+        } else if message.message_type() == "inspect_request" {
+            let reply = message.new_reply().with_content(
+                match handle_inspect_request(context, message).await {
+                    Ok(response_content) => response_content,
+                    Err(error) => object! {
+                        "status" => "error",
+                        "ename" => error.to_string(),
+                        "evalue" => "",
+                    },
+                },
+            );
+            reply.send(connection).await?;
         } else if message.message_type() == "history_request" {
             // We don't yet support history requests, but we don't want to print
             // a message in jupyter console.
@@ -761,18 +773,65 @@ async fn handle_completion_request(
             code,
             grapheme_offset_to_byte_offset(code, message.cursor_pos()),
         )?;
-        let matches: Vec<String> = completions
-            .completions
-            .into_iter()
-            .map(|completion| completion.code)
-            .collect();
+        let cursor_start = byte_offset_to_grapheme_offset(code, completions.start_offset)?;
+        let cursor_end = byte_offset_to_grapheme_offset(code, completions.end_offset)?;
+        let mut matches: Vec<String> = Vec::new();
+        let mut type_metadata: Vec<JsonValue> = Vec::new();
+        for c in &completions.completions {
+            matches.push(c.code.clone());
+            type_metadata.push(object! {
+                "text"  => c.label.clone(),
+                "type"  => c.kind,
+                "start" => cursor_start,
+                "end"   => cursor_end,
+            });
+        }
         Ok(object! {
             "status" => "ok",
             "matches" => matches,
-            "cursor_start" => byte_offset_to_grapheme_offset(code, completions.start_offset)?,
-            "cursor_end" => byte_offset_to_grapheme_offset(code, completions.end_offset)?,
-            "metadata" => object!{},
+            "cursor_start" => cursor_start,
+            "cursor_end" => cursor_end,
+            "metadata" => object! {
+                "_jupyter_types_experimental" => type_metadata,
+            },
         })
+    })
+    .await?
+}
+
+async fn handle_inspect_request(
+    context: &Arc<std::sync::Mutex<CommandContext>>,
+    message: JupyterMessage,
+) -> Result<JsonValue> {
+    let context = Arc::clone(context);
+    tokio::task::spawn_blocking(move || {
+        let code = message.code();
+        let position = grapheme_offset_to_byte_offset(code, message.cursor_pos());
+        // hover_at returns Ok("No documentation found", ...) for unresolvable
+        // symbols rather than Err; treat that as found:false per Jupyter spec.
+        match context.lock().unwrap().hover_at(code, position) {
+            Ok((plain, _)) if plain == "No documentation found" => Ok(object! {
+                "status"   => "ok",
+                "found"    => false,
+                "data"     => object!{},
+                "metadata" => object!{},
+            }),
+            Ok((plain, html)) => Ok(object! {
+                "status"   => "ok",
+                "found"    => true,
+                "data"     => object! {
+                    "text/plain" => plain,
+                    "text/html"  => html,
+                },
+                "metadata" => object!{},
+            }),
+            Err(_) => Ok(object! {
+                "status"   => "ok",
+                "found"    => false,
+                "data"     => object!{},
+                "metadata" => object!{},
+            }),
+        }
     })
     .await?
 }
