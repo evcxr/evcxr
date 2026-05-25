@@ -26,16 +26,16 @@ toml = { version = "1.1.2" }
 serde = { version = "1.0.207", features = [ "derive" ] }
 triomphe = { version = "0.1.10", default-features = false, features = ["std"] }
 
-ra_ap_ide = "0.0.333"
-ra_ap_ide_db = "0.0.333"
-ra_ap_project_model = "0.0.333"
-ra_ap_paths = "0.0.333"
-ra_ap_vfs = "0.0.333"
-ra_ap_vfs-notify = "0.0.333"
-ra_ap_hir = "0.0.333"
-ra_ap_base_db = "0.0.333"
-ra_ap_syntax = "0.0.333"
-ra_ap_span = "0.0.333"
+ra_ap_ide = "0.0.334"
+ra_ap_ide_db = "0.0.334"
+ra_ap_project_model = "0.0.334"
+ra_ap_paths = "0.0.334"
+ra_ap_vfs = "0.0.334"
+ra_ap_vfs-notify = "0.0.334"
+ra_ap_hir = "0.0.334"
+ra_ap_base_db = "0.0.334"
+ra_ap_syntax = "0.0.334"
+ra_ap_span = "0.0.334"
 
 # ra_ap_ide = { package = "ide", path = "../../rust-analyzer/crates/ide"}
 # ra_ap_ide_db = { package = "ide-db", path = "../../rust-analyzer/crates/ide-db"}
@@ -49,7 +49,7 @@ ra_ap_span = "0.0.333"
 
 ariadne = "0.6.0"
 
-pulldown-cmark = { version = "0.13.3", default-features = false, features = ["simd", "html"] }
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["simd", "html"] }
 
 [target.'cfg(all(unix, not(target_os = "freebsd")))'.dependencies]
 backtrace = "0.3.35"
