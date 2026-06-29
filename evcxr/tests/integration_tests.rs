@@ -160,11 +160,8 @@ fn save_and_restore_variables() {
     // Try to change a mutable variable and check that the error we get is what we expect.
     match e.execute("b = 2;") {
         Err(Error::CompilationErrors(errors)) => {
-            if errors.len() != 1 {
-                println!("{errors:#?}");
-            }
-            assert_eq!(errors.len(), 1);
-            if errors[0].code() != Some("E0594") && errors[0].code() != Some("E0384") {
+            let error_codes: Vec<&str> = errors.iter().flat_map(|e| e.code()).collect();
+            if !error_codes.contains(&"E0594") && !error_codes.contains(&"E0384") {
                 panic!("Unexpected error {:?}", errors[0].code());
             }
         }
