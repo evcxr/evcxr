@@ -472,9 +472,6 @@ allow_unsafe = true
 [pkg.ppv-lite86]
 allow_unsafe = true
 
-[pkg.byteorder]
-allow_unsafe = true
-
 [pkg.rand_chacha]
 allow_unsafe = true
 
@@ -917,4 +914,10 @@ allow_unsafe = true
 allow_unsafe = true
 
 [pkg.scc]
+allow_unsafe = true
+
+[pkg.pxfm]
+allow_unsafe = true
+
+[pkg.moxcms]
 allow_unsafe = true
