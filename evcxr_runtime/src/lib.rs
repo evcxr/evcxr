@@ -54,7 +54,9 @@ impl ContentMimeType {
     /// ```
     #[cfg(feature = "bytes")]
     pub fn bytes(self, buffer: &[u8]) {
-        self.text(base64::encode(buffer))
+        use base64::Engine as _;
+
+        self.text(base64::engine::general_purpose::STANDARD.encode(buffer))
     }
 }
 
