@@ -400,6 +400,13 @@ impl EvalContext {
             .parent()
             .unwrap()
             .join("testing_runtime");
+        Self::new_for_testing_with_runtime(testing_runtime_path)
+    }
+
+    #[doc(hidden)]
+    pub fn new_for_testing_with_runtime(
+        testing_runtime_path: impl AsRef<std::ffi::OsStr>,
+    ) -> (EvalContext, EvalContextOutputs) {
         let (mut context, outputs) =
             EvalContext::with_subprocess_command(std::process::Command::new(testing_runtime_path))
                 .unwrap();

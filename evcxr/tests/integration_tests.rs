@@ -45,7 +45,8 @@ macro_rules! eval {
 }
 
 fn new_command_context_and_outputs() -> (CommandContext, EvalContextOutputs) {
-    let (eval_context, outputs) = EvalContext::new_for_testing();
+    let (eval_context, outputs) =
+        EvalContext::new_for_testing_with_runtime(env!("CARGO_BIN_EXE_testing_runtime"));
     let command_context = CommandContext::with_eval_context(eval_context);
     (command_context, outputs)
 }
