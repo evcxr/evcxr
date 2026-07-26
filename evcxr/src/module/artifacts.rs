@@ -10,7 +10,7 @@ pub(super) struct Artifact {
 pub(super) fn read_artifacts(input: &str) -> Vec<Artifact> {
     let mut artifacts = Vec::new();
     for line in input.lines() {
-        let Ok(entry) = json::parse(line) else {
+        let Ok(entry) = serde_json::from_str::<serde_json::Value>(line) else {
             continue;
         };
         let Some(path) = entry["artifact"].as_str().map(PathBuf::from) else {
@@ -29,10 +29,10 @@ pub(super) fn read_artifacts(input: &str) -> Vec<Artifact> {
 
 impl Display for Artifact {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let obj = json::object! {
-            artifact: self.path.display().to_string(),
-            emit: self.emit.clone(),
-        };
+        let obj = serde_json::json!({
+            "artifact": self.path.display().to_string(),
+            "emit": self.emit,
+        });
         obj.fmt(f)
     }
 }

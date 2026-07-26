@@ -531,7 +531,7 @@ fn errors_from_cargo_output(
         .lines()
         .chain(stdout.lines())
         .filter_map(|line| {
-            json::parse(line)
+            serde_json::from_str(line)
                 .ok()
                 .and_then(|json| CompilationError::opt_new(json, code_block))
                 .or_else(|| {

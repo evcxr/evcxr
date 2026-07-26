@@ -9,10 +9,9 @@ use crate::eval_context::Config;
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
-use json::JsonValue;
-use json::{self};
 use once_cell::sync::Lazy;
 use regex::Regex;
+use serde_json::Value;
 use std::collections::HashMap;
 
 /// Returns the library names for the direct dependencies of the crate rooted at
@@ -91,10 +90,10 @@ pub(crate) fn validate_dep(dep: &str, dep_config: &str, config: &Config) -> Resu
 }
 
 fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
-    let metadata = json::parse(metadata)?;
+    let metadata: Value = serde_json::from_str(metadata)?;
     let mut direct_dependencies = Vec::new();
     let mut crate_to_library_names = HashMap::new();
-    if let (JsonValue::Array(packages), Some(main_crate_id)) = (
+    if let (Value::Array(packages), Some(main_crate_id)) = (
         &metadata["packages"],
         metadata["workspace_members"][0].as_str(),
     ) {
@@ -103,7 +102,7 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
                 (package["name"].as_str(), package["id"].as_str())
             {
                 if id == main_crate_id
-                    && let JsonValue::Array(dependencies) = &package["dependencies"]
+                    && let Value::Array(dependencies) = &package["dependencies"]
                 {
                     for dependency in dependencies {
                         if let Some(dependency_name) = dependency["name"].as_str() {
@@ -111,9 +110,9 @@ fn library_names_from_metadata(metadata: &str) -> Result<Vec<String>> {
                         }
                     }
                 }
-                if let JsonValue::Array(targets) = &package["targets"] {
+                if let Value::Array(targets) = &package["targets"] {
                     for target in targets {
-                        if let JsonValue::Array(kinds) = &target["kind"]
+                        if let Value::Array(kinds) = &target["kind"]
                             && kinds.iter().any(|kind| kind == "lib")
                             && let Some(target_name) = target["name"].as_str()
                         {
