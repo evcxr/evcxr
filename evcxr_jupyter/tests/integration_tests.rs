@@ -14,19 +14,11 @@ use std::process;
 // perhaps still has some value.
 #[test]
 fn test_binary_execution() {
-    let output = process::Command::new(
-        std::env::current_exe()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .parent()
-            .unwrap()
-            .join("evcxr_jupyter"),
-    )
-    .arg("--help")
-    .env_remove("LD_LIBRARY_PATH")
-    .output()
-    .unwrap();
+    let output = process::Command::new(env!("CARGO_BIN_EXE_evcxr_jupyter"))
+        .arg("--help")
+        .env_remove("LD_LIBRARY_PATH")
+        .output()
+        .unwrap();
     let stdout = std::str::from_utf8(&output.stdout).unwrap();
     let stderr = std::str::from_utf8(&output.stderr).unwrap();
     assert_eq!(stderr, "");
