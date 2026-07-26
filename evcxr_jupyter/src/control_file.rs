@@ -5,11 +5,6 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-// We currently use the json crate. Could probably rewrite to use serde-json. At
-// the time this was originally written we couldn't due to
-// https://github.com/rust-lang/rust/issues/45601 - but that's now long fixed
-// and we've dropped support for old version for rustc prior to the fix.
-
 use anyhow::Result;
 use anyhow::anyhow;
 use std::fs;
@@ -27,6 +22,12 @@ pub(crate) struct Control {
 }
 
 macro_rules! parse_to_var {
+    ($control_json:expr, $name:ident, as_u16) => {
+        let $name = $control_json[stringify!($name)]
+            .as_u64()
+            .and_then(|value| u16::try_from(value).ok())
+            .ok_or_else(|| anyhow!("Missing or invalid JSON field {}", stringify!($name)))?;
+    };
     ($control_json:expr, $name:ident, $convert:ident) => {
         let $name = $control_json[stringify!($name)]
             .$convert()
@@ -37,7 +38,7 @@ macro_rules! parse_to_var {
 impl Control {
     pub(crate) fn parse_file(file_name: &str) -> Result<Control> {
         let control_file_contents = fs::read_to_string(file_name)?;
-        let control_json = json::parse(&control_file_contents)?;
+        let control_json: serde_json::Value = serde_json::from_str(&control_file_contents)?;
         parse_to_var!(control_json, control_port, as_u16);
         parse_to_var!(control_json, shell_port, as_u16);
         parse_to_var!(control_json, stdin_port, as_u16);

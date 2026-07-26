@@ -631,7 +631,6 @@ dependencies = [
  "dirs",
  "evcxr_input",
  "filetime",
- "json",
  "libc",
  "libloading",
  "once_cell",
@@ -648,6 +647,7 @@ dependencies = [
  "ra_ap_vfs-notify",
  "regex",
  "serde",
+ "serde_json",
  "sig",
  "tempfile",
  "toml",
@@ -683,8 +683,8 @@ dependencies = [
  "evcxr",
  "hex",
  "hmac",
- "json",
  "mimalloc",
+ "serde_json",
  "sha2",
  "tokio",
  "tokio-util",
@@ -1242,12 +1242,6 @@ dependencies = [
  "once_cell",
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "json"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "078e285eafdfb6c4b434e0d31e8cfcb5115b651496faca5749b88fafd4f23bfd"
 
 [[package]]
 name = "kqueue"

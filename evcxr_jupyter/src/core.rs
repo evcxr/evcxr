@@ -18,7 +18,7 @@ use crossbeam_channel::RecvTimeoutError;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
 use evcxr::Theme;
-use json::JsonValue;
+use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -242,16 +242,14 @@ impl Server {
                         // waiting for it.
                         tokio::time::sleep(Duration::from_millis(1)).await;
                         let mut data = HashMap::new();
-                        // At the time of writing the json crate appears to have a generic From
-                        // implementation for a Vec<T> where T implements Into<JsonValue>. It also
-                        // has conversion from HashMap<String, JsonValue>, but it doesn't have
-                        // conversion from HashMap<String, T>. Perhaps send a PR? For now, we
-                        // convert the values manually.
                         for (k, v) in output.content_by_mime_type {
                             if k.contains("json") {
-                                data.insert(k, json::parse(&v).unwrap_or_else(|_| json::from(v)));
+                                data.insert(
+                                    k,
+                                    serde_json::from_str(&v).unwrap_or_else(|_| Value::from(v)),
+                                );
                             } else {
-                                data.insert(k, json::from(v));
+                                data.insert(k, Value::from(v));
                             }
                         }
                         message
@@ -267,10 +265,10 @@ impl Server {
                     if let Some(duration) = output.timing {
                         // TODO replace by duration.as_millis() when stable
                         let ms = duration.as_secs() * 1000 + u64::from(duration.subsec_millis());
-                        let mut data: HashMap<String, JsonValue> = HashMap::new();
+                        let mut data: HashMap<String, Value> = HashMap::new();
                         data.insert(
                             "text/html".into(),
-                            json::from(format!(
+                            Value::from(format!(
                                 "<span style=\"color: rgba(0,0,0,0.4);\">Took {ms}ms</span>"
                             )),
                         );
@@ -685,13 +683,13 @@ async fn comm_open(
     }
 }
 
-async fn cargo_check(code: String, context: Arc<std::sync::Mutex<CommandContext>>) -> JsonValue {
+async fn cargo_check(code: String, context: Arc<std::sync::Mutex<CommandContext>>) -> Value {
     let problems = tokio::task::spawn_blocking(move || {
         context.lock().unwrap().check(&code).unwrap_or_default()
     })
     .await
     .unwrap_or_default();
-    let problems_json: Vec<JsonValue> = problems
+    let problems_json: Vec<Value> = problems
         .iter()
         .filter_map(|problem| {
             if let Some(primary_spanned_message) = problem.primary_spanned_message()
@@ -735,7 +733,7 @@ async fn bind_socket<S: zeromq::Socket>(
 }
 
 /// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)
-fn kernel_info() -> JsonValue {
+fn kernel_info() -> Value {
     object! {
         "protocol_version" => "5.3",
         "implementation" => env!("CARGO_PKG_NAME"),
@@ -765,7 +763,7 @@ fn kernel_info() -> JsonValue {
 async fn handle_completion_request(
     context: &Arc<std::sync::Mutex<CommandContext>>,
     message: JupyterMessage,
-) -> Result<JsonValue> {
+) -> Result<Value> {
     let context = Arc::clone(context);
     tokio::task::spawn_blocking(move || {
         let code = message.code();
@@ -776,7 +774,7 @@ async fn handle_completion_request(
         let cursor_start = byte_offset_to_grapheme_offset(code, completions.start_offset)?;
         let cursor_end = byte_offset_to_grapheme_offset(code, completions.end_offset)?;
         let mut matches: Vec<String> = Vec::new();
-        let mut type_metadata: Vec<JsonValue> = Vec::new();
+        let mut type_metadata: Vec<Value> = Vec::new();
         for c in &completions.completions {
             matches.push(c.code.clone());
             type_metadata.push(object! {
@@ -802,7 +800,7 @@ async fn handle_completion_request(
 async fn handle_inspect_request(
     context: &Arc<std::sync::Mutex<CommandContext>>,
     message: JupyterMessage,
-) -> Result<JsonValue> {
+) -> Result<Value> {
     let context = Arc::clone(context);
     tokio::task::spawn_blocking(move || {
         let code = message.code();

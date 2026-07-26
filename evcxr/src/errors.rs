@@ -16,9 +16,9 @@ use ariadne::ColorGenerator;
 use ariadne::Label;
 use ariadne::Report;
 use ariadne::ReportKind;
-use json::JsonValue;
 use ra_ap_ide::TextRange;
 use ra_ap_ide::TextSize;
+use serde_json::Value;
 use std::fmt;
 use std::fmt::Write as _;
 use std::io;
@@ -27,7 +27,7 @@ use std::ops::Range;
 #[derive(Debug, Clone)]
 pub struct CompilationError {
     message: String,
-    pub json: JsonValue,
+    pub json: Value,
     pub(crate) code_origins: Vec<CodeKind>,
     spanned_messages: Vec<SpannedMessage>,
     spanned_helps: Vec<SpannedMessage>,
@@ -121,7 +121,7 @@ fn evcxr_specific_notes(error: &CompilationError) -> Option<&'static str> {
     })
 }
 
-fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
+fn spans_in_local_source(span: &Value) -> Option<&Value> {
     if let Some(file_name) = span["file_name"].as_str()
         && file_name.ends_with("lib.rs")
     {
@@ -135,13 +135,19 @@ fn spans_in_local_source(span: &JsonValue) -> Option<&JsonValue> {
 }
 
 fn get_code_origins_for_span<'a>(
-    span: &JsonValue,
+    span: &Value,
     code_block: &'a CodeBlock,
 ) -> Vec<(&'a CodeKind, usize)> {
     let mut code_origins = Vec::new();
     if let Some(span) = spans_in_local_source(span)
-        && let (Some(line_start), Some(line_end)) =
-            (span["line_start"].as_usize(), span["line_end"].as_usize())
+        && let (Some(line_start), Some(line_end)) = (
+            span["line_start"]
+                .as_u64()
+                .and_then(|value| usize::try_from(value).ok()),
+            span["line_end"]
+                .as_u64()
+                .and_then(|value| usize::try_from(value).ok()),
+        )
     {
         for line in line_start..=line_end {
             code_origins.push(code_block.origin_for_line(line));
@@ -150,9 +156,9 @@ fn get_code_origins_for_span<'a>(
     code_origins
 }
 
-fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a CodeKind> {
+fn get_code_origins<'a>(json: &Value, code_block: &'a CodeBlock) -> Vec<&'a CodeKind> {
     let mut code_origins = Vec::new();
-    if let JsonValue::Array(spans) = &json["spans"] {
+    if let Value::Array(spans) = &json["spans"] {
         for span in spans {
             code_origins.extend(
                 get_code_origins_for_span(span, code_block)
@@ -165,7 +171,7 @@ fn get_code_origins<'a>(json: &JsonValue, code_block: &'a CodeBlock) -> Vec<&'a 
 }
 
 impl CompilationError {
-    pub(crate) fn opt_new(mut json: JsonValue, code_block: &CodeBlock) -> Option<CompilationError> {
+    pub(crate) fn opt_new(mut json: Value, code_block: &CodeBlock) -> Option<CompilationError> {
         // From Cargo 1.36 onwards, errors emitted as JSON get wrapped by Cargo.
         // Retrieve the inner message emitted by the compiler.
         if json["message"].is_object() {
@@ -173,7 +179,7 @@ impl CompilationError {
         }
         let mut code_origins = get_code_origins(&json, code_block);
         let mut user_error_json = None;
-        if let JsonValue::Array(children) = &json["children"] {
+        if let Value::Array(children) = &json["children"] {
             for child in children {
                 let child_origins = get_code_origins(child, code_block);
                 if !code_origins.iter().any(|k| k.is_user_supplied())
@@ -204,7 +210,7 @@ impl CompilationError {
         Some(CompilationError {
             spanned_messages: build_spanned_messages(&json, code_block),
             spanned_helps: {
-                if let JsonValue::Array(children) = &json["children"] {
+                if let Value::Array(children) = &json["children"] {
                     children
                         .iter()
                         .flat_map(|x| build_spanned_messages(x, code_block))
@@ -242,7 +248,7 @@ impl CompilationError {
             spanned_messages: vec![spanned_message],
             spanned_helps: vec![],
             message,
-            json: JsonValue::Null,
+            json: Value::Null,
             code_origins: vec![segment.kind.clone()],
             level: "error".to_owned(),
         }
@@ -263,14 +269,14 @@ impl CompilationError {
     }
 
     pub fn code(&self) -> Option<&str> {
-        if let JsonValue::Object(code) = &self.json["code"] {
+        if let Value::Object(code) = &self.json["code"] {
             return code["code"].as_str();
         }
         None
     }
 
     pub fn explanation(&self) -> Option<&str> {
-        if let JsonValue::Object(code) = &self.json["code"] {
+        if let Value::Object(code) = &self.json["code"] {
             return code["explanation"].as_str();
         }
         None
@@ -313,7 +319,7 @@ impl CompilationError {
     }
 
     pub fn help(&self) -> Vec<String> {
-        if let JsonValue::Array(children) = &self.json["children"] {
+        if let Value::Array(children) = &self.json["children"] {
             children
                 .iter()
                 .filter_map(|child| {
@@ -350,7 +356,7 @@ fn sanitize_message(message: &str) -> String {
     message.replace("`evcxr_variable_store`", "<end of input>")
 }
 
-fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<SpannedMessage> {
+fn build_spanned_messages(json: &Value, code_block: &CodeBlock) -> Vec<SpannedMessage> {
     let mut output_spans = Vec::new();
     let mut only_one_span = false;
     let level_label: Option<String> = (|| {
@@ -362,7 +368,7 @@ fn build_spanned_messages(json: &JsonValue, code_block: &CodeBlock) -> Vec<Spann
         let message = json["message"].as_str()?;
         Some(format!("{level}: {message}"))
     })();
-    if let JsonValue::Array(spans) = &json["spans"]
+    if let Value::Array(spans) = &json["spans"]
         && (!only_one_span || spans.len() == 1)
     {
         for span_json in spans {
@@ -465,14 +471,18 @@ pub struct SpannedMessage {
 
 impl SpannedMessage {
     fn from_json(
-        span_json: &JsonValue,
+        span_json: &Value,
         code_block: &CodeBlock,
         fallback_label: Option<String>,
     ) -> SpannedMessage {
         let span = if let (Some(file_name), Some(start_column), Some(end_column)) = (
             span_json["file_name"].as_str(),
-            span_json["column_start"].as_usize(),
-            span_json["column_end"].as_usize(),
+            span_json["column_start"]
+                .as_u64()
+                .and_then(|value| usize::try_from(value).ok()),
+            span_json["column_end"]
+                .as_u64()
+                .and_then(|value| usize::try_from(value).ok()),
         ) {
             if file_name.ends_with("lib.rs") {
                 let origins = get_code_origins_for_span(span_json, code_block);
@@ -510,7 +520,7 @@ impl SpannedMessage {
         };
         if span.is_none() {
             let expansion_span_json = &span_json["expansion"]["span"];
-            if !expansion_span_json.is_empty() {
+            if !expansion_span_json.is_null() {
                 let mut message = SpannedMessage::from_json(expansion_span_json, code_block, None);
                 if message.span.is_some() {
                     if let Some(label) = span_json["label"].as_str() {
@@ -592,8 +602,8 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<json::Error> for Error {
-    fn from(error: json::Error) -> Self {
+impl From<serde_json::Error> for Error {
+    fn from(error: serde_json::Error) -> Self {
         Error::Message(error.to_string())
     }
 }

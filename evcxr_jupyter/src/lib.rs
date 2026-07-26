@@ -5,8 +5,23 @@
 // or https://opensource.org/licenses/MIT>, at your option. This file may not be
 // copied, modified, or distributed except according to those terms.
 
-#[macro_use]
-extern crate json;
+macro_rules! object {
+    () => {
+        serde_json::json!({})
+    };
+    ($($key:tt => $value:expr),* $(,)?) => {
+        serde_json::json!({$($key: $value),*})
+    };
+    ($($key:tt : $value:expr),* $(,)?) => {
+        serde_json::json!({$($key: $value),*})
+    };
+}
+
+macro_rules! array {
+    ($($value:expr),* $(,)?) => {
+        serde_json::json!([$($value),*])
+    };
+}
 
 use anyhow::Result;
 use anyhow::anyhow;
