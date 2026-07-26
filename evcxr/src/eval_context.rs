@@ -204,6 +204,8 @@ impl Config {
             .arg(command_name)
             .current_dir(self.crate_dir())
             .env("CARGO_TARGET_DIR", "target")
+            // Ignore global build.build-dir, since we rely on stuff being under "target".
+            .env("CARGO_BUILD_BUILD_DIR", "target")
             .env("RUSTC", &self.rustc_path)
             .env("RUSTFLAGS", rustflags.join(" "))
             .envs(&self.build_envs)
