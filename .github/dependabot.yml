@@ -8,6 +8,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+      day: wednesday
+      time: "09:20"
+      timezone: Australia/Sydney      
     groups:
       weekly-updates:
         patterns:
