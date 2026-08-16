@@ -30,6 +30,8 @@ pub(crate) mod cache;
 
 pub(crate) const CORE_EXTERN_ENV: &str = "EVCXR_CORE_EXTERN";
 pub(crate) const CACHE_ENABLED_ENV: &str = "EVCXR_CACHE_ENABLED";
+const EXECUTION_SO_PATH_FILE: &str = ".evcxr-execution-so";
+const EXECUTION_SO_PATH_ENV: &str = "EVCXR_EXECUTION_SO_PATH";
 
 pub(crate) fn shared_object_prefix() -> &'static str {
     if cfg!(target_os = "macos") {
@@ -133,12 +135,6 @@ impl Module {
         })
     }
 
-    pub(crate) fn so_path(&self, config: &Config) -> PathBuf {
-        config
-            .deps_dir()
-            .join(shared_object_name_from_crate_name(CRATE_NAME))
-    }
-
     // Writes Cargo.toml. Should be called before compile.
     pub(crate) fn write_cargo_toml(&self, state: &ContextState) -> Result<(), Error> {
         write_file(
@@ -185,32 +181,48 @@ impl Module {
             config.cargo_command("clean").output()?;
         }
         self.last_allow_static = Some(config.allow_static_linking);
-        let command = config.cargo_command("build");
+        let mut command = config.cargo_command("build");
         if config.time_passes && config.toolchain != "nightly" {
             bail!("time_passes option requires nightly compiler");
         }
 
         self.write_code(code_block, config)?;
+
+        let next_build_num = self.build_num + 1;
+        let so_path_file = config.crate_dir().join(EXECUTION_SO_PATH_FILE);
+        command.env(EXECUTION_SO_PATH_ENV, &so_path_file);
+
+        match fs::remove_file(&so_path_file) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+
         let cargo_output = run_cargo(command, code_block)?;
         if config.time_passes {
             let output = String::from_utf8_lossy(&cargo_output.stderr);
             eprintln!("{output}");
         }
-        self.build_num += 1;
-        let copied_so_file = config
-            .deps_dir()
-            .join(shared_object_name_from_crate_name(&format!(
-                "code_{}",
-                self.build_num
-            )));
+
+        let so_file = match fs::read_to_string(&so_path_file) {
+            Ok(path) => PathBuf::from(path),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                compiled_so_path(&cargo_output.stdout)?
+            }
+            Err(error) => return Err(error.into()),
+        };
+
+        let copied_so_file = so_file.with_file_name(shared_object_name_from_crate_name(&format!(
+            "code_{next_build_num}"
+        )));
+
+        rename_or_copy_so_file(&so_file, &copied_so_file)?;
+        self.build_num = next_build_num;
+
         if config.cache_bytes() > 0 {
             crate::module::cache::cleanup(config.cache_bytes())?;
         }
-        // Every time we compile, the output file is the same. We need to rename it so that we have
-        // a unique filename, otherwise we wouldn't be able to load the result of the next
-        // compilation. Also, on Windows, a loaded dll gets locked, so we couldn't even compile a
-        // second time if we didn't load a different file.
-        rename_or_copy_so_file(&self.so_path(config), &copied_so_file)?;
+
         Ok(SoFile {
             path: copied_so_file,
         })
@@ -303,6 +315,7 @@ pub(crate) fn wrap_rustc_helper() -> Result<i32> {
 
     let cache_result = cache::access_cache(&command)?;
     if matches!(cache_result, CacheResult::Hit) {
+        report_execution_so(&command)?;
         return Ok(0);
     }
 
@@ -317,9 +330,77 @@ pub(crate) fn wrap_rustc_helper() -> Result<i32> {
         if let CacheResult::Miss(cache_miss) = cache_result {
             cache_miss.update_cache(&artifacts)?;
         }
+        report_execution_so(&command)?;
     }
 
     Ok(output.status.code().unwrap_or(-1))
+}
+
+fn report_execution_so(command: &Command) -> Result<()> {
+    let Some(source) = execution_so_source(command) else {
+        return Ok(());
+    };
+
+    let Some(path_file) = std::env::var_os(EXECUTION_SO_PATH_ENV) else {
+        return Ok(());
+    };
+    fs::write(path_file, source.to_string_lossy().as_bytes())?;
+
+    Ok(())
+}
+
+fn compiled_so_path(cargo_stdout: &[u8]) -> Result<PathBuf, Error> {
+    let expected_name = shared_object_name_from_crate_name(CRATE_NAME);
+
+    for line in String::from_utf8_lossy(cargo_stdout).lines().rev() {
+        let Ok(message) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+
+        if message["reason"] != "compiler-artifact" || message["target"]["name"] != CRATE_NAME {
+            continue;
+        }
+
+        let Some(filenames) = message["filenames"].as_array() else {
+            continue;
+        };
+
+        if let Some(path) = filenames
+            .iter()
+            .filter_map(|filename| filename.as_str())
+            .map(PathBuf::from)
+            .find(|path| {
+                path.file_name()
+                    .is_some_and(|name| name == std::ffi::OsStr::new(&expected_name))
+            })
+        {
+            return Ok(path);
+        }
+    }
+
+    bail!(
+        "Cargo did not report the path of the compiled shared object '{}'. Cargo stdout:\n{}",
+        expected_name,
+        String::from_utf8_lossy(cargo_stdout)
+    );
+}
+
+fn execution_so_source(command: &Command) -> Option<PathBuf> {
+    let mut args = command.get_args();
+    let mut is_ctx = false;
+    let mut out_dir = None;
+    while let Some(arg) = args.next() {
+        if arg == "--crate-name" {
+            is_ctx = args.next().is_some_and(|name| name == CRATE_NAME);
+        } else if arg == "--out-dir" {
+            out_dir = args.next().map(PathBuf::from);
+        }
+    }
+    if is_ctx {
+        Some(out_dir?.join(shared_object_name_from_crate_name(CRATE_NAME)))
+    } else {
+        None
+    }
 }
 
 fn rustc_command() -> Result<Command> {
