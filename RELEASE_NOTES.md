@@ -1,3 +1,12 @@
+# Version 0.22.0
+* Update rust-analyzer (fixes problems with newer rust versions)
+* Fixed failures when global build.build-dir is set
+* Jupyter kernel: Support rich completions (#468)
+* Jupyter kernel: Send status in response to interrupt request (#440)
+* Fix panic on derive without item (#427)
+* Fix panic on incomplete variable declaration
+* Fix for recent nightly change to build dir structure
+
 # Version 0.21.1
 * Fix compilation on Windows.
 * Reinstate CI for Windows and Mac.
