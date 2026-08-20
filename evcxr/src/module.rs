@@ -470,8 +470,11 @@ fn rustc_command() -> Result<Command> {
         // Make paths to our dependencies to use dylibs rather than rlibs.
         if arg == "--extern" {
             let ext = args.next().ok_or_else(|| anyhow!("Insufficient args"))?;
-            let so_arg = map_extern_arg(&ext);
+            let (so_arg, rmeta_arg) = map_extern_arg(&ext);
             command.arg(so_arg);
+            if let Some(rmeta_arg) = rmeta_arg {
+                command.arg("--extern").arg(rmeta_arg);
+            }
         }
     }
     command.arg("--extern").arg(core_extern);
@@ -485,7 +488,7 @@ fn should_force_dylibs() -> bool {
     std::env::var(crate::runtime::FORCE_DYLIB_ENV).is_ok()
 }
 
-fn map_extern_arg(ext: &str) -> OsString {
+fn map_extern_arg(ext: &str) -> (OsString, Option<OsString>) {
     if let Some((crate_name, path)) = ext.split_once('=') {
         let mut path = PathBuf::from(path);
         let mut so_arg = OsString::from(crate_name);
@@ -505,11 +508,19 @@ fn map_extern_arg(ext: &str) -> OsString {
         // The shared object might not exist yet if we're doing a `cargo check`, so we only attempt
         // to use it if it actually exists.
         if path.exists() {
+            let rmeta_path = path.with_extension("rmeta");
             so_arg.push(path);
-            return so_arg;
+            // Handle embed-metadata=no
+            let rmeta_arg = rmeta_path.exists().then(|| {
+                let mut arg = OsString::from(crate_name);
+                arg.push("=");
+                arg.push(rmeta_path);
+                arg
+            });
+            return (so_arg, rmeta_arg);
         }
     }
-    OsString::from(ext)
+    (OsString::from(ext), None)
 }
 
 /// Run a cargo command prepared for the provided `code_block`, processing the
