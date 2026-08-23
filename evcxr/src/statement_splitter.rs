@@ -26,6 +26,11 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode<'_>> {
         &(prelude.to_owned() + code + "\n}"),
         crate::rust_analyzer::EDITION,
     );
+    let first_error_byte = parsed_file
+        .errors()
+        .iter()
+        .map(|error| usize::from(error.range().start()).saturating_sub(prelude.len()))
+        .min();
     let mut start_byte = 0;
     if let Some(stmt_list) = parsed_file
         .syntax_node()
@@ -42,10 +47,17 @@ pub(crate) fn split_into_statements(code: &str) -> Vec<OriginalUserCode<'_>> {
             // With the possible exception of the first node, We want to include
             // whitespace after nodes rather than before, so our end is the
             // start of the next node, or failing that the end of the code.
-            let end = next
+            let mut end = next
                 .map(|next| usize::from(next.text_range().start()) - prelude.len())
                 .unwrap_or(code.len())
                 .min(code.len());
+            let child_end = usize::from(child.text_range().end())
+                .saturating_sub(prelude.len())
+                .min(code.len());
+            // Keep error-recovery nodes together so rustc sees the original invalid code.
+            if first_error_byte.is_some_and(|first_error| first_error <= child_end) {
+                end = code.len();
+            }
             if start_byte == end {
                 break;
             }
@@ -180,6 +192,18 @@ mod test {
         let out = split_into_statements(code);
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].code, "#[derive(Debug)]");
+    }
+
+    #[test]
+    fn invalid_function_parameter_is_not_split() {
+        let code = "fn do_it(in: u8) {}";
+        assert_eq!(split_and_get_text(code), vec![code]);
+
+        let code = "let a = 1; fn do_it(in: u8) {}";
+        assert_eq!(
+            split_and_get_text(code),
+            vec!["let a = 1; ", "fn do_it(in: u8) {}"]
+        );
     }
 
     fn node_kinds(statements: &[OriginalUserCode]) -> Vec<SyntaxKind> {

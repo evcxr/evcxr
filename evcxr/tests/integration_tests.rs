@@ -1052,6 +1052,26 @@ fn assert_no_errors(ctx: &mut CommandContext, code: &str) {
 }
 
 #[test]
+fn check_reports_invalid_parameter_name() {
+    let mut ctx = new_context();
+    let errors = ctx.check("fn do_it(in: u8) {}").unwrap();
+    let messages: Vec<String> = errors.iter().map(|error| error.message()).collect();
+
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.contains("expected parameter name") && message.contains("`in`")),
+        "{messages:#?}"
+    );
+    assert!(
+        messages
+            .iter()
+            .all(|message| !message.contains("closing delimiter")),
+        "{messages:#?}"
+    );
+}
+
+#[test]
 fn check_for_errors() {
     let mut ctx = new_context();
 
