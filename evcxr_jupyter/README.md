@@ -1,6 +1,8 @@
 # Evcxr Jupyter Kernel
 
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/evcxr/evcxr/blob/main/evcxr_jupyter/samples/evcxr_jupyter_tour.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/evcxr/evcxr/blob/main/evcxr_jupyter/samples/evcxr_jupyter_tour_colab.ipynb)
+
+The Colab notebook runs on Colab's Python kernel through [colab-rust](https://github.com/xavierforge/colab-rust), a community maintained `%%rust` cell magic.
 
 [![Binder](https://mybinder.org/badge.svg)](https://mybinder.org/v2/gh/evcxr/evcxr/main?filepath=evcxr_jupyter%2Fsamples%2Fevcxr_jupyter_tour.ipynb)
 
