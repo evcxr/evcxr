@@ -106,6 +106,15 @@ fn num_lines(code: &str) -> usize {
     code.chars().filter(|ch| *ch == '\n').count()
 }
 
+/// Returns whether `line`, ignoring any leading whitespace, starts an outer doc comment. Note that
+/// `////` starts a plain comment, not a doc comment. Inner doc comments (`//!`) aren't included,
+/// since they'd document the module that we generate around the user's code rather than anything
+/// the user wrote.
+fn is_outer_doc_comment(line: &str) -> bool {
+    let line = line.trim_start();
+    line.starts_with("///") && !line.starts_with("////")
+}
+
 pub(crate) fn count_columns(code: &str) -> usize {
     // We use characters here, not graphemes because seems to be how columns are counted by the rust
     // compiler, which we need to be consistent with. It also works well with the inline error
@@ -199,33 +208,45 @@ impl CodeBlock {
         let mut line_number = 1;
         let mut current_line = lines.next().unwrap_or(user_code);
 
+        // The start of the run of outer doc comments that we're currently in, if any. They belong
+        // to whatever code comes next, so we can't decide where the code starts until we find it.
+        let mut doc_comment_start_byte = None;
+
         for (command_line_offset, line) in user_code.lines().enumerate() {
+            let line_start_byte = line.as_ptr() as usize - user_code.as_ptr() as usize;
             if line.starts_with('!') {
+                doc_comment_start_byte = None;
                 // Handle shell command line
                 code_block = code_block.with(
                     CodeKind::ShellCommand(ShellCommand {
                         command: line.trim_start_matches('!').trim().to_owned(),
-                        start_byte: line.as_ptr() as usize - user_code.as_ptr() as usize,
+                        start_byte: line_start_byte,
                         line_number: command_line_offset + 1,
                     }),
                     line,
                 );
             } else if let Some(captures) = COMMAND_RE.captures(line) {
+                doc_comment_start_byte = None;
                 code_block = code_block.with(
                     CodeKind::Command(CommandCall {
                         command: captures[1].to_owned(),
                         args: captures.get(3).map(|m| m.as_str().to_owned()),
-                        start_byte: line.as_ptr() as usize - user_code.as_ptr() as usize,
+                        start_byte: line_start_byte,
                         line_number: command_line_offset + 1,
                     }),
                     line,
                 );
-            } else if line.starts_with(r"//") || line.trim().is_empty() {
+            } else if is_outer_doc_comment(line) {
+                // A doc comment documents the code that follows it, so it needs to be passed on to
+                // the compiler together with that code. If a command follows instead, then there's
+                // nothing for it to document and we drop it like any other comment.
+                doc_comment_start_byte.get_or_insert(line_start_byte);
+            } else if line.trim_start().starts_with("//") || line.trim().is_empty() {
                 // Ignore blank lines, otherwise we can't have blank lines before :dep commands.
                 // We also ignore lines that start with //, because those are line comments.
             } else {
                 // Anything else, we treat as Rust code to be executed. Since we don't accept commands after Rust code, we're done looking for commands.
-                let non_command_start_byte = line.as_ptr() as usize - user_code.as_ptr() as usize;
+                let non_command_start_byte = doc_comment_start_byte.unwrap_or(line_start_byte);
                 for OriginalUserCode {
                     code,
                     start_byte,
@@ -425,6 +446,44 @@ mod test {
             user_code
         );
     }
+
+    #[test]
+    fn indented_comment_before_command() {
+        let (code_block, _info) =
+            CodeBlock::from_original_user_code("    // Bring in a crate.\n    :dep foo = \"1\"");
+        let commands: Vec<&str> = code_block
+            .segments
+            .iter()
+            .filter_map(|segment| match &segment.kind {
+                CodeKind::Command(command) => Some(command.command.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(commands, vec![":dep"]);
+    }
+
+    #[test]
+    fn doc_comment_stays_with_its_item() {
+        let (code_block, _info) = CodeBlock::from_original_user_code("/// Some docs.\nstruct Foo;");
+        assert_eq!(code_block.code_string(), "/// Some docs.\nstruct Foo;\n");
+    }
+
+    #[test]
+    fn doc_comment_before_command_is_dropped() {
+        let (code_block, _info) =
+            CodeBlock::from_original_user_code("/// Some docs.\n:dep foo = \"1\"");
+        assert_eq!(code_block.code_string(), ":dep foo = \"1\"\n");
+    }
+
+    #[test]
+    fn comments_that_arent_outer_doc_comments_are_dropped() {
+        let (code_block, _info) =
+            CodeBlock::from_original_user_code("//! Module docs.\nstruct Foo;");
+        assert_eq!(code_block.code_string(), "struct Foo;\n");
+        let (code_block, _info) = CodeBlock::from_original_user_code("//// Not docs.\nstruct Foo;");
+        assert_eq!(code_block.code_string(), "struct Foo;\n");
+    }
+
     #[test]
     fn test_shell_command() {
         let user_code = "!echo 'Hello, World!'";

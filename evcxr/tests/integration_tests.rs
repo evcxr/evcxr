@@ -1156,6 +1156,24 @@ let s2 = "さび  äää"; let s2: String = 42; fn foo() -> i32 {
 }
 
 #[test]
+fn command_after_indented_comment() {
+    let mut ctx = new_context();
+    // If the comment stopped us looking for commands, we'd get a syntax error for the colon here
+    // instead of an error about the command.
+    assert_eq!(
+        strs(&check(
+            &mut ctx,
+            "    // An indented comment\n    :an_invalid_command\n"
+        )),
+        vec!["error 2:1-2:20"]
+    );
+    assert_no_errors(
+        &mut ctx,
+        "    // An indented comment\n    :version\n    42\n",
+    );
+}
+
+#[test]
 fn check_for_doc() {
     let (mut e, _) = new_command_context_and_outputs();
     eval_and_unwrap(
@@ -1165,6 +1183,19 @@ fn check_for_doc() {
     struct MyStruct(usize);
     "#,
     );
+    let res = eval_and_unwrap(&mut e, r#":doc MyStruct"#);
+    assert_eq!(
+        res.get("text/plain"),
+        Some(&String::from(
+            "ctx\n\nstruct MyStruct(usize)\n\n\nthis is my struct"
+        )),
+    );
+}
+
+#[test]
+fn check_for_doc_starting_at_column_zero() {
+    let (mut e, _) = new_command_context_and_outputs();
+    eval_and_unwrap(&mut e, "///this is my struct\nstruct MyStruct(usize);");
     let res = eval_and_unwrap(&mut e, r#":doc MyStruct"#);
     assert_eq!(
         res.get("text/plain"),
