@@ -1881,9 +1881,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_base_db"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66ea2530975931ee91f88584a99d05a570074c9f9b2d018c317b18f11e5f4642"
+checksum = "7e1111eb890d26c4c2a13466d8e4c0fb82435b4fb0bfef0b170c6ff9a85974a1"
 dependencies = [
  "dashmap",
  "indexmap",
@@ -1902,9 +1902,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_cfg"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "54317eafa914412984671c7626124342e5cfb7f5bf97a795069e887c3d78a8be"
+checksum = "b5e9055cc89be4c7641883506d77a7d4b8e763f2ac50689ff78cd4526a0e67e5"
 dependencies = [
  "ra_ap_intern",
  "ra_ap_syntax",
@@ -1915,15 +1915,15 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_edition"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3922d4471e356f59a838d538e6bc3bbe7c92267333f3696053b512816525ccd"
+checksum = "e7b7def8f7824aca5c7de77f53c384fe81d3f6ec46ebf4aa571b9f150404fa14"
 
 [[package]]
 name = "ra_ap_hir"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9bf92b7c637b27880b1e57b94fccd045dc1fc7c7357075aa0312f0ef9590af0"
+checksum = "94f2e71efc4424bd8a5869730af3cf6f53603f906e32201da97d2429e52e2ee6"
 dependencies = [
  "arrayvec",
  "either",
@@ -1950,9 +1950,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_hir_def"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24cc923a498c9b4bfd369fc7ec7642f1de744ff858c6f56dc163a817a06cae6f"
+checksum = "f565afecb8e3f4c122ff2ebda0f9c668b2768bde29e57351b86d5f69e6b8e5e6"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -1985,9 +1985,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_hir_expand"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "90e752e3bbc4a47a3dfbbcc8d4bb34ead3f1a2f6ce8f3e1601e3c018759d3859"
+checksum = "cf4aa17f738b36236328ea19f090692ade6a13b18770a5c2584b1260d253f77b"
 dependencies = [
  "cov-mark",
  "either",
@@ -2012,9 +2012,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_hir_ty"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d185b215de0bb53281e0a8663335f09c44691a3e60ac6dea1b8b31941510e8cd"
+checksum = "801101846095f9755cce25aa8c150998215c1358c79cc3853afcaff48fd57c13"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -2056,9 +2056,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_ide"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6aeab2972e0ca361a2aac589c6f624b3b410484d27d797970086e790ed390a8"
+checksum = "84058f1533b6c3bc9c3550f7de94952789b488aa73bb28190f5202aeb3568b03"
 dependencies = [
  "arrayvec",
  "cov-mark",
@@ -2091,9 +2091,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_ide_assists"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "327d01f579b12d9bccecb82322de889af00795c732a65f55ba7c0b2108449937"
+checksum = "c7fe42a0caf65be207445898e7f8f0cdc314ba12a81cd65262d201f71cb0ee1f"
 dependencies = [
  "cov-mark",
  "either",
@@ -2108,9 +2108,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_ide_completion"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "399c107b4cedfc7b5825817ce6368b84317b32212d1b3c3d97046e28f69c7410"
+checksum = "66e1dba07b68c8d80dd7e257938e14e61935c88579df32cd020873166f3f020d"
 dependencies = [
  "cov-mark",
  "itertools",
@@ -2126,9 +2126,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_ide_db"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c69e35d6fdf8fb9e360f577919795c160123fedd132e2bead46d17495e4c079"
+checksum = "e78d97d0de86d5e0724281ad17efe99d0fdcf35947d7e5067e418a661c4defff"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -2161,9 +2161,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_ide_diagnostics"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbdf6772deadc4c283eacca5acff11eeb2e377afa51fa320d1670fb9b6a8ed1a"
+checksum = "9e86b9303a10f75d3039d5b3f44529bfb731d35be9f5013f208d657c3e8db13f"
 dependencies = [
  "cov-mark",
  "either",
@@ -2181,9 +2181,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_ide_ssr"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc05b61d36e257ac6952c2927f99a8ad5273a40976eb35b99e85490e2365e17c"
+checksum = "7be6c565e5aa3b0c3077eeeff3285f72c2c5789855e6e91173b2dc56fd83566f"
 dependencies = [
  "cov-mark",
  "itertools",
@@ -2195,9 +2195,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_intern"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bf133fcd843ab2711757f74e25f16a55e3fd64c869df8d0fa2622a2e346375c"
+checksum = "4d15d774f1e5d25c257732a61a5a7e066a1c565419a3780f0ac1ae8966a4c7b9"
 dependencies = [
  "arrayvec",
  "dashmap",
@@ -2209,9 +2209,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_macros"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12bb7e8fd92e53a1566b7737147397485232d0e4229680b3192dcfd2c34efa99"
+checksum = "79292edaec2859f9144404935b18930c12ca73b2b4638eba1be3e741c8945a9d"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2221,9 +2221,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_mbe"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39aa0bf07d29e0d8b30a02dcccb19f53fcaebbcda03e86dc3a8ae23f455effd0"
+checksum = "7679c9393a286d7a74f160c76836762f44da035bfefc1b634de9c2c637e73b47"
 dependencies = [
  "arrayvec",
  "bitflags",
@@ -2242,9 +2242,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_parser"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "beaa91573d97ee99eed34170e1d1721a03b6e64fe0261876a3dd6ec73ee6d128"
+checksum = "b47d3d6aeeccacda850ed07374b170a309d7960547b652befdb0b67934d7e963"
 dependencies = [
  "drop_bomb",
  "ra-ap-rustc_lexer",
@@ -2256,18 +2256,18 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_paths"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "488f5410cad95b7fe8994422e0fd2413d6915803ca3aec0828d0dc4996de37e4"
+checksum = "77a2bff1816f358660cb356e8517c2de4db9282c50b74304cf552678678e0a83"
 dependencies = [
  "camino",
 ]
 
 [[package]]
 name = "ra_ap_profile"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98e1554a2a5ae7078041654825901910fb8b18d15e4f568d0cb53b9b47f6226e"
+checksum = "d25a15d67a8f64da0f717b16b06be1e009a0e9085afd584f14ef3337f4bfe3a2"
 dependencies = [
  "libc",
  "perf-event",
@@ -2276,9 +2276,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_project_model"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a833146f7c9eb5f38eac8fd74fb1508ff882f8c1125c2d9bade1b5126aaa43ec"
+checksum = "9a1252ceead30b3b1c00ddeebb5b4ae90f002459df4096624ccea356e552af0d"
 dependencies = [
  "anyhow",
  "cargo_metadata",
@@ -2303,9 +2303,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_span"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dab1e77cc1291d520520184ced459b633227fd06c3640a19c76109dd16b18d7d"
+checksum = "32ab6941b00fd04b84bba7c76adf19d6429a0aea8162bc422063f48ed77b2a88"
 dependencies = [
  "hashbrown 0.17.1",
  "la-arena",
@@ -2319,9 +2319,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_stdx"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81efb9ddd7fba67a8b5261d6d561523735071c20344eacb7fe09ec3e38086f2b"
+checksum = "240b82a8cf926d56716dd37339e8751007665175f446027fe8e5d641b12eb0ea"
 dependencies = [
  "crossbeam-channel",
  "crossbeam-utils",
@@ -2335,9 +2335,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_syntax"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "190528f027659121feb7f04f364e972755077dfefd21d1c029648d481637333e"
+checksum = "3f482b7dc99e305a4c1b04256e9d7c16f5bbd42f583136bc54a7aaa8e6f1ad84"
 dependencies = [
  "either",
  "itertools",
@@ -2355,9 +2355,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_syntax-bridge"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3ae008cea8576a43b5c61ca379dc39154036943b7d779b5ce492ae30335fc1e"
+checksum = "df59f87f85b199d3eec60f9c942313d6ce389a6dbf119605620c4c406ec4020c"
 dependencies = [
  "ra_ap_intern",
  "ra_ap_parser",
@@ -2370,9 +2370,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_test_fixture"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ccbae5fdea07b43c34f5490a05149a798e1256dc1ee9797eec520c7fdde729ae"
+checksum = "f89a38301120c3b6853cc091214a7cb9347633b471bdd0501e7d587100652821"
 dependencies = [
  "ra_ap_base_db",
  "ra_ap_cfg",
@@ -2388,9 +2388,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_test_utils"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecb4bb5eea73cee2751e17ee899695320dae4a659c89407fbb93a94db26ec61c"
+checksum = "78490a68a4d39934d70cb9d360ed511d279c035c230cd65dd7c9fc24379a2add"
 dependencies = [
  "dissimilar",
  "ra_ap_paths",
@@ -2402,9 +2402,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_toolchain"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "121a7ebcbc748ef5c0885c58b43d3d891a34ffc6eb1af8978536b11a64245bca"
+checksum = "80799c6d7e95322d57fa18f1b11e3bf3e662475261babe3833aef5fa1b448731"
 dependencies = [
  "camino",
  "semver",
@@ -2412,9 +2412,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_tt"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c315d45d00be5affc04fec76dfcb605401c04ac73273209d6a9bf66f0f765028"
+checksum = "1290179ce15eb7efe804597024fff6db59504fe1ec572c14d03cb601b0982d49"
 dependencies = [
  "arrayvec",
  "ra-ap-rustc_lexer",
@@ -2427,9 +2427,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_vfs"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da3201712e3703934744211db9f47055f22665255098a448fcdab9ef6e1c4105"
+checksum = "bf1f8ff44a53553f850aa65ce8d2705d15cbf9611f15e86a51f2c81b65870632"
 dependencies = [
  "crossbeam-channel",
  "fst",
@@ -2443,9 +2443,9 @@ dependencies = [
 
 [[package]]
 name = "ra_ap_vfs-notify"
-version = "0.0.350"
+version = "0.0.351"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2061e5962efeef3ae38c8e08ac3771795b4670e9dd1695bdcb23d82b5acdda58"
+checksum = "b790e88e0a8783ab907fc1acea5158d4fa67a0de853cb86f997da83bb8137ba5"
 dependencies = [
  "crossbeam-channel",
  "notify",
@@ -3094,9 +3094,9 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "1.1.5+spec-1.1.0"
+version = "1.1.6+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "12c0ba9680044b4ce98d391a62094047eada0d64860b80166c39f4a6b5640785"
+checksum = "920602543f0911ab71da12c50d59701da54c196d1a2bf5cb4b75667f137a406a"
 dependencies = [
  "indexmap",
  "serde_core",
@@ -3289,9 +3289,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.26.0"
+version = "1.26.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b5772d71c9be8a8a6ac2117d949c5b224c1b72241bb611d9a3012edcf8af7812"
+checksum = "2ef6dac1e96601b4fb3acccccff2139741fcb757cb9a36089bf5be91cfb285ce"
 dependencies = [
  "getrandom 0.4.2",
  "js-sys",
