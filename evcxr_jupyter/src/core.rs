@@ -217,6 +217,16 @@ impl Server {
                 let eval_result = context.lock().unwrap().execute_with_callbacks(
                     message.code(),
                     &mut evcxr::EvalCallbacks {
+                        display: Some(&|content| {
+                            server.tokio_handle.block_on(async {
+                                if let Err(error) = display_message(&message, content)
+                                    .send(&mut *server.iopub.lock().await)
+                                    .await
+                                {
+                                    eprintln!("display output error: {error}");
+                                }
+                            });
+                        }),
                         input_reader: &|input_request| {
                             server.tokio_handle.block_on(async {
                                 server
@@ -241,17 +251,7 @@ impl Server {
                         // less hacky alternative would be to add a print statement, then block
                         // waiting for it.
                         tokio::time::sleep(Duration::from_millis(1)).await;
-                        let mut data = HashMap::new();
-                        for (k, v) in output.content_by_mime_type {
-                            if k.contains("json") {
-                                data.insert(
-                                    k,
-                                    serde_json::from_str(&v).unwrap_or_else(|_| Value::from(v)),
-                                );
-                            } else {
-                                data.insert(k, Value::from(v));
-                            }
-                        }
+                        let data = mime_bundle_data(output.content_by_mime_type);
                         message
                             .new_message("execute_result")
                             .with_content(object! {
@@ -863,9 +863,47 @@ fn byte_offset_to_grapheme_offset(code: &str, target_byte_offset: usize) -> Resu
     Ok(grapheme_offset)
 }
 
+fn mime_bundle_data(content: HashMap<String, String>) -> HashMap<String, Value> {
+    content
+        .into_iter()
+        .map(|(mime_type, content)| {
+            let value = if mime_type.contains("json") {
+                serde_json::from_str(&content).unwrap_or_else(|_| Value::from(content))
+            } else {
+                Value::from(content)
+            };
+            (mime_type, value)
+        })
+        .collect()
+}
+
+fn display_message(request: &JupyterMessage, content: HashMap<String, String>) -> JupyterMessage {
+    request.new_message("display_data").with_content(object! {
+        "data" => mime_bundle_data(content),
+        "metadata" => object!(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_mime_bundle_data() {
+        let data = mime_bundle_data(HashMap::from([
+            ("application/json".to_owned(), "{\"value\":42}".to_owned()),
+            (
+                "application/example+json".to_owned(),
+                "invalid json".to_owned(),
+            ),
+            ("text/plain".to_owned(), "42".to_owned()),
+            ("image/png".to_owned(), "aW1hZ2U=".to_owned()),
+        ]));
+        assert_eq!(data["application/json"], serde_json::json!({"value": 42}));
+        assert_eq!(data["application/example+json"], "invalid json");
+        assert_eq!(data["text/plain"], "42");
+        assert_eq!(data["image/png"], "aW1hZ2U=");
+    }
 
     #[test]
     fn grapheme_offsets() {

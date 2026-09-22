@@ -8,6 +8,10 @@ particular inside the Evcxr Jupyter kernel.
 At the moment, all that's provided is functions and traits for emitting
 mime-typed data to Evcxr.
 
+Call `evcxr_runtime::flush_output()` after emitting all MIME representations of
+an object to display it immediately and start a separate output for the next
+object.
+
 ```
 impl evcxr_runtime::Display for MyType {
     fn evcxr_display(&self) {
