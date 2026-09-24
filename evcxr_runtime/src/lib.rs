@@ -29,6 +29,20 @@ pub fn mime_type<S: Into<String>>(mime_type: S) -> ContentMimeType {
     }
 }
 
+/// Displays the pending MIME representations as one output and starts a new output.
+/// Call after emitting all representations of an object to display it before
+/// execution finishes. An empty flush does nothing.
+///
+/// ```
+/// evcxr_runtime::mime_type("text/plain").text("First object");
+/// evcxr_runtime::flush_output();
+/// evcxr_runtime::mime_type("text/plain").text("Second object");
+/// evcxr_runtime::flush_output();
+/// ```
+pub fn flush_output() {
+    println!("EVCXR_FLUSH_OUTPUT");
+}
+
 impl ContentMimeType {
     /// Emits the supplied content, which should be of the mime type already
     /// specified. If the type is a binary format (e.g. image/png), the content

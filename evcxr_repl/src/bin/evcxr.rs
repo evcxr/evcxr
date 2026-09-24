@@ -93,7 +93,17 @@ impl Repl {
     }
     fn execute(&mut self, to_run: &str) -> Result<(), Error> {
         let execution_result = match &mut *self.command_context.lock() {
-            Ok(context) => context.execute(to_run),
+            Ok(context) => context.execute_with_callbacks(
+                to_run,
+                &mut evcxr::EvalCallbacks {
+                    display: Some(&|content| {
+                        if let Some(text) = content.get("text/plain") {
+                            println!("{text}");
+                        }
+                    }),
+                    ..Default::default()
+                },
+            ),
             Err(error) => return Err(error.clone()),
         };
         let success = match execution_result {

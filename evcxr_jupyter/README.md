@@ -112,6 +112,18 @@ Rust code).
 
 If the content is binary (e.g. mime type "image/png") then it should be base64 encoded.
 
+If you'd like to print multiple objects, each containing MIME-typed content, you can flush the
+output in between by printing a line with `EVCXR_FLUSH_OUTPUT`. e.g.
+
+```rust
+object1.show(); // Emits EVCXR_BEGIN_CONTENT ... EVCXR_END_CONTENT blocks
+println!("EVCXR_FLUSH_OUTPUT");
+object2.show();
+```
+
+Any output at the end is implicitly flushed.
+
+
 ## Prompting for input
 
 ```rust

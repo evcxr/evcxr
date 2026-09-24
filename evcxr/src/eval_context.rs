@@ -348,6 +348,8 @@ pub struct InputRequest {
 
 pub struct EvalCallbacks<'a> {
     pub input_reader: &'a dyn Fn(InputRequest) -> String,
+    /// Receives a MIME bundle when user code emits `EVCXR_FLUSH_OUTPUT`.
+    pub display: Option<&'a dyn Fn(HashMap<String, String>)>,
 }
 
 fn default_input_reader(_: InputRequest) -> String {
@@ -358,6 +360,7 @@ impl Default for EvalCallbacks<'_> {
     fn default() -> Self {
         EvalCallbacks {
             input_reader: &default_input_reader,
+            display: None,
         }
     }
 }
@@ -904,7 +907,14 @@ impl EvalContext {
             if line == runtime::EVCXR_EXECUTION_COMPLETE {
                 break;
             }
-            if line == PANIC_NOTIFICATION {
+
+            if line == "EVCXR_FLUSH_OUTPUT" {
+                if let Some(display) = callbacks.display
+                    && !output.content_by_mime_type.is_empty()
+                {
+                    display(std::mem::take(&mut output.content_by_mime_type));
+                }
+            } else if line == PANIC_NOTIFICATION {
                 got_panic = true;
             } else if line.starts_with(evcxr_input::GET_CMD) {
                 let is_password = line.starts_with(evcxr_input::GET_CMD_PASSWORD);

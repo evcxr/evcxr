@@ -210,6 +210,82 @@ fn missing_semicolon_on_let_stmt() {
 }
 
 #[test]
+fn flush_output() {
+    let mut e = new_context();
+    let displays = std::cell::RefCell::new(Vec::new());
+    let output = e
+        .execute_with_callbacks(
+            r#"
+        println!("EVCXR_FLUSH_OUTPUT");
+        println!("EVCXR_BEGIN_CONTENT text/plain\nold\nEVCXR_END_CONTENT");
+        println!("EVCXR_BEGIN_CONTENT text/plain\nfirst\nEVCXR_END_CONTENT");
+        println!("EVCXR_BEGIN_CONTENT text/html\n<b>first</b>\nEVCXR_END_CONTENT");
+        println!("EVCXR_FLUSH_OUTPUT");
+        println!("EVCXR_FLUSH_OUTPUT");
+        println!("EVCXR_INPUT_REQUEST:continue");
+        let mut answer = String::new();
+        std::io::stdin().read_line(&mut answer).unwrap();
+        assert_eq!(answer.trim(), "continue");
+        println!("EVCXR_BEGIN_CONTENT text/plain\nsecond\nEVCXR_END_CONTENT");
+        println!("EVCXR_FLUSH_OUTPUT");
+        println!("EVCXR_BEGIN_CONTENT text/plain\nEVCXR_FLUSH_OUTPUT\nEVCXR_END_CONTENT");
+        println!("EVCXR_FLUSH_OUTPUT");
+        "final"
+        "#,
+            &mut evcxr::EvalCallbacks {
+                display: Some(&|bundle| displays.borrow_mut().push(bundle)),
+                input_reader: &|_| {
+                    assert_eq!(displays.borrow().len(), 1);
+                    "continue".to_owned()
+                },
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        *displays.borrow(),
+        vec![
+            HashMap::from([
+                ("text/plain".to_owned(), "first".to_owned()),
+                ("text/html".to_owned(), "<b>first</b>".to_owned()),
+            ]),
+            text_plain("second"),
+            text_plain("EVCXR_FLUSH_OUTPUT"),
+        ]
+    );
+    assert_eq!(output.content_by_mime_type, text_plain("\"final\""));
+}
+
+#[test]
+fn flush_output_without_callback() {
+    let mut e = new_context();
+    let output = eval!(e,
+        println!("EVCXR_BEGIN_CONTENT text/plain\nretained\nEVCXR_END_CONTENT");
+        println!("EVCXR_FLUSH_OUTPUT");
+    );
+    assert_eq!(output, text_plain("retained"));
+}
+
+#[test]
+fn flush_output_leaves_no_final_result() {
+    let mut e = new_context();
+    let displays = std::cell::RefCell::new(Vec::new());
+    let output = e
+        .execute_with_callbacks(
+            r#"
+            println!("EVCXR_BEGIN_CONTENT text/plain\nfirst\nEVCXR_END_CONTENT");
+            println!("EVCXR_FLUSH_OUTPUT");
+            "#,
+            &mut evcxr::EvalCallbacks {
+                display: Some(&|bundle| displays.borrow_mut().push(bundle)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(*displays.borrow(), vec![text_plain("first")]);
+    assert!(output.is_empty());
+}
+
+#[test]
 fn printing() {
     let (mut e, outputs) = new_command_context_and_outputs();
 
