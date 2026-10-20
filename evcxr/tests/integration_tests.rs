@@ -1263,7 +1263,7 @@ fn check_for_doc() {
     assert_eq!(
         res.get("text/plain"),
         Some(&String::from(
-            "ctx\n\nstruct MyStruct(usize)\n\n\nthis is my struct"
+            "ctx\n\nstruct MyStruct(usize);\n\n\nthis is my struct"
         )),
     );
 }
@@ -1276,7 +1276,7 @@ fn check_for_doc_starting_at_column_zero() {
     assert_eq!(
         res.get("text/plain"),
         Some(&String::from(
-            "ctx\n\nstruct MyStruct(usize)\n\n\nthis is my struct"
+            "ctx\n\nstruct MyStruct(usize);\n\n\nthis is my struct"
         )),
     );
 }
