@@ -310,6 +310,7 @@ impl RustAnalyzer {
             limit: None,
             prefer_prelude: false,
             enable_term_search: true,
+            enable_turbofish: false,
             term_search_fuel: 400,
             prefer_absolute: false,
             add_semicolon_to_unit: true,
