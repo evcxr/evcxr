@@ -466,7 +466,11 @@ impl TmpCrate {
         let path = self.tempdir.path().to_string_lossy().replace('\\', "\\\\");
         self.path = Some(path.clone());
         if extra_options.is_empty() {
-            format!(":dep {path}")
+            if cfg!(windows) {
+                format!(":dep {} = {{ path = \"{path}\" }}", self.name)
+            } else {
+                format!(":dep {path}")
+            }
         } else {
             format!(
                 ":dep {} = {{ path = \"{}\", {} }}",
@@ -475,6 +479,7 @@ impl TmpCrate {
         }
     }
 
+    #[cfg(not(windows))]
     fn last_path(&self) -> Option<&String> {
         self.path.as_ref()
     }
@@ -1125,6 +1130,36 @@ fn strs(input: &[String]) -> Vec<&str> {
 #[track_caller]
 fn assert_no_errors(ctx: &mut CommandContext, code: &str) {
     assert_eq!(strs(&check(ctx, code)), Vec::<&str>::new());
+}
+
+#[test]
+fn cargo_failure_after_warning_is_reported() {
+    let mut dependency = TmpCrate::new("failing_build_script", "").unwrap();
+    std::fs::write(
+        dependency.tempdir.path().join("build.rs"),
+        r#"
+            fn unused_function() {}
+            fn main() { panic!("build script failure after compiler warning"); }
+        "#,
+    )
+    .unwrap();
+    let mut ctx = new_context();
+    let command = dependency.dep_command("");
+    let check_error = ctx
+        .check(&command)
+        .expect_err("cargo check should report the failing build script");
+    let execute_error = ctx
+        .execute(&command)
+        .expect_err("cargo build should report the failing build script");
+    for error in [check_error, execute_error] {
+        let Error::Message(message) = error else {
+            panic!("Expected Cargo failure, got {error:?}");
+        };
+        assert!(
+            message.contains("build script failure after compiler warning"),
+            "{message}"
+        );
+    }
 }
 
 #[test]

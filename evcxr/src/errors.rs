@@ -177,6 +177,9 @@ impl CompilationError {
         if json["message"].is_object() {
             json = json["message"].clone();
         }
+        // A child note may provide a better location, but the parent determines
+        // whether this diagnostic is an error or a warning.
+        let level = json["level"].as_str().unwrap_or("").to_owned();
         let mut code_origins = get_code_origins(&json, code_block);
         let mut user_error_json = None;
         if let Value::Array(children) = &json["children"] {
@@ -220,7 +223,7 @@ impl CompilationError {
                 }
             },
             message,
-            level: json["level"].as_str().unwrap_or("").to_owned(),
+            level,
             json,
             code_origins: code_origins.into_iter().cloned().collect(),
         })
