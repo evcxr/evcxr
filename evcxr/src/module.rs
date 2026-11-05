@@ -17,7 +17,6 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use once_cell::sync::Lazy;
-use regex::Regex;
 use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
@@ -167,8 +166,7 @@ impl Module {
             Ok(out) => out,
             Err(err) => bail!("Error running 'cargo check': {}", err),
         };
-        let (errors, _non_json_error) = errors_from_cargo_output(&cargo_output, code_block);
-        Ok(errors)
+        diagnostics_from_cargo_output(&cargo_output, code_block)
     }
 
     pub(crate) fn compile(
@@ -570,21 +568,11 @@ fn run_cargo(
     if cargo_output.status.success() {
         Ok(cargo_output)
     } else {
-        let (errors, non_json_error) = errors_from_cargo_output(&cargo_output, code_block);
-        if errors.is_empty() {
-            if let Some(error) = non_json_error {
-                bail!(Error::Message(error));
-            } else {
-                bail!(Error::Message(format!(
-                    "Compilation failed, but no parsable errors were found. STDERR:\n\
-                     {}\nSTDOUT:{}\n",
-                    String::from_utf8_lossy(&cargo_output.stderr),
-                    String::from_utf8_lossy(&cargo_output.stdout)
-                )));
-            }
-        } else {
-            bail!(Error::CompilationErrors(errors));
-        }
+        let errors = diagnostics_from_cargo_output(&cargo_output, code_block)?
+            .into_iter()
+            .filter(|diagnostic| diagnostic.level() == "error")
+            .collect();
+        bail!(Error::CompilationErrors(errors));
     }
 }
 
@@ -606,37 +594,175 @@ fn tee_error_line(line: &[u8]) {
     }
 }
 
-fn errors_from_cargo_output(
+// Keep warnings for callers of `check`, but don't let them hide a Cargo failure
+// that has no compiler error diagnostics.
+fn diagnostics_from_cargo_output(
     cargo_output: &std::process::Output,
     code_block: &CodeBlock,
-) -> (Vec<CompilationError>, Option<String>) {
-    // Our compiler errors should all be in JSON format, but for errors from
-    // Cargo errors, we need to add explicit matching for those errors that we
-    // expect we might see.
-    static KNOWN_NON_JSON_ERRORS: Lazy<Regex> =
-        Lazy::new(|| Regex::new("(error: no matching package named)").unwrap());
-
+) -> Result<Vec<CompilationError>, Error> {
     let stderr = String::from_utf8_lossy(&cargo_output.stderr);
     let stdout = String::from_utf8_lossy(&cargo_output.stdout);
-    let mut non_json_error = None;
-    let errors = stderr
+    let diagnostics: Vec<CompilationError> = stderr
         .lines()
         .chain(stdout.lines())
         .filter_map(|line| {
             serde_json::from_str(line)
                 .ok()
                 .and_then(|json| CompilationError::opt_new(json, code_block))
-                .or_else(|| {
-                    if KNOWN_NON_JSON_ERRORS.is_match(line) {
-                        non_json_error = Some(line.to_owned());
-                    }
-                    None
-                })
         })
         .collect();
-    (errors, non_json_error)
+    if !cargo_output.status.success()
+        && !diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.level() == "error")
+    {
+        bail!(Error::Message(format!(
+            "Compilation failed, but no error-level compiler diagnostics were found. STDERR:\n\
+             {stderr}\nSTDOUT:{stdout}\n"
+        )));
+    }
+    Ok(diagnostics)
 }
 
 pub(crate) struct SoFile {
     pub(crate) path: PathBuf,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::process::ExitStatus;
+    use std::process::Output;
+
+    fn cargo_output(success: bool, diagnostics: &[serde_json::Value], stderr: &str) -> Output {
+        #[cfg(unix)]
+        use std::os::unix::process::ExitStatusExt;
+        #[cfg(windows)]
+        use std::os::windows::process::ExitStatusExt;
+
+        Output {
+            status: ExitStatus::from_raw(if success { 0 } else { 1 << 8 }),
+            stdout: diagnostics
+                .iter()
+                .map(|diagnostic| format!("{diagnostic}\n"))
+                .collect::<String>()
+                .into_bytes(),
+            stderr: stderr.as_bytes().to_vec(),
+        }
+    }
+
+    fn diagnostic(level: &str) -> serde_json::Value {
+        json!({
+            "reason": "compiler-message",
+            "message": {
+                "level": level,
+                "message": format!("a compiler {level}"),
+                "spans": [],
+                "children": [],
+            },
+        })
+    }
+
+    #[test]
+    fn cargo_failure_preserves_output_without_compiler_errors() {
+        for diagnostics in [vec![], vec![diagnostic("warning")]] {
+            for stderr in [
+                "error while loading shared libraries: libmissing.so",
+                "error: no matching package named `missing` found\nlocation searched: registry",
+            ] {
+                let output = cargo_output(false, &diagnostics, stderr);
+                let error = diagnostics_from_cargo_output(&output, &CodeBlock::new()).unwrap_err();
+                let Error::Message(message) = error else {
+                    panic!("Expected Cargo failure, got {error:?}");
+                };
+                assert!(message.contains(stderr), "{message}");
+                assert!(message.contains(std::str::from_utf8(&output.stdout).unwrap()));
+            }
+        }
+    }
+
+    #[test]
+    fn check_diagnostics_preserve_warnings() {
+        for success in [false, true] {
+            let mut diagnostics = vec![diagnostic("warning")];
+            if !success {
+                diagnostics.push(diagnostic("error"));
+            }
+            let output = cargo_output(success, &diagnostics, "");
+            let parsed = diagnostics_from_cargo_output(&output, &CodeBlock::new()).unwrap();
+            assert_eq!(parsed.len(), diagnostics.len());
+            assert_eq!(parsed[0].level(), "warning");
+            if !success {
+                assert_eq!(parsed[1].level(), "error");
+            }
+        }
+    }
+
+    #[test]
+    fn child_note_retains_parent_severity() {
+        let code = CodeBlock::new().other_user_code("fn user_code() {}".to_owned());
+        for level in ["error", "warning"] {
+            let mut parent = diagnostic(level);
+            parent["message"]["children"] = json!([{
+                "level": "note",
+                "message": "required by this user code",
+                "spans": [{
+                    "file_name": "src/lib.rs",
+                    "line_start": 1,
+                    "line_end": 1,
+                    "column_start": 1,
+                    "column_end": 2,
+                }],
+            }]);
+            let output = cargo_output(level != "error", &[parent], "");
+            let parsed = diagnostics_from_cargo_output(&output, &code).unwrap();
+            assert_eq!(parsed.len(), 1);
+            assert_eq!(parsed[0].level(), level);
+            assert_eq!(parsed[0].message(), "required by this user code");
+            assert!(parsed[0].is_from_user_code());
+        }
+    }
+
+    #[cfg(unix)]
+    fn run_fake_cargo(success: bool, diagnostics: &[serde_json::Value]) -> Result<Output, Error> {
+        let output = cargo_output(success, diagnostics, "missing shared library");
+        let mut command = Command::new("sh");
+        command
+            .arg("-c")
+            .arg("printf '%s' \"$1\"; printf '%s' \"$2\" >&2; exit \"$3\"")
+            .arg("fake-cargo")
+            .arg(String::from_utf8(output.stdout).unwrap())
+            .arg(String::from_utf8(output.stderr).unwrap())
+            .arg(if success { "0" } else { "1" });
+        run_cargo(command, &CodeBlock::new())
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn failed_build_with_warnings_reports_cargo_failure() {
+        let error = run_fake_cargo(false, &[diagnostic("warning")]).unwrap_err();
+        let Error::Message(message) = error else {
+            panic!("Expected Cargo failure, got {error:?}");
+        };
+        assert!(message.contains("missing shared library"), "{message}");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn failed_build_returns_only_compiler_errors() {
+        let error =
+            run_fake_cargo(false, &[diagnostic("warning"), diagnostic("error")]).unwrap_err();
+        let Error::CompilationErrors(errors) = error else {
+            panic!("Expected compiler errors, got {error:?}");
+        };
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].level(), "error");
+    }
+
+    #[test]
+    #[cfg(unix)]
+    fn successful_build_with_warnings_succeeds() {
+        assert!(run_fake_cargo(true, &[diagnostic("warning")]).is_ok());
+    }
 }
