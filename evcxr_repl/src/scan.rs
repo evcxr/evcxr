@@ -388,8 +388,9 @@ fn do_eat_char(input: &mut Peekable<CharIndices<'_>>) -> Option<EatCharRes> {
         // Hit end of string.
         None
     } else {
-        // Not an escape sequence
-        let could_be_lifetime = UnicodeXID::is_xid_start(nextc);
+        // Not an escape sequence. A lifetime can also start with an underscore
+        // (e.g. the anonymous lifetime `'_`), which isn't XID_Start.
+        let could_be_lifetime = nextc == '_' || UnicodeXID::is_xid_start(nextc);
         // The first char inside the quote was not a backslash, so it's either
         // some sort of lifetime, or a char literal. If it's a char literal, the
         // very *next* thing should be a closing quote...
@@ -514,6 +515,9 @@ mod test {
         char_scan_test("'static", "static", Some(SawLifetime));
         char_scan_test("'s'abc", "abc", Some(AteChar));
         char_scan_test("'a ", "a ", Some(SawLifetime));
+        char_scan_test("'_>", "_>", Some(SawLifetime));
+        char_scan_test("'_a,", "_a,", Some(SawLifetime));
+        char_scan_test("'_'", "", Some(AteChar));
         char_scan_test("'\\\\' foo", " foo", Some(AteChar));
         char_scan_test("'\\\'' foo", " foo", Some(AteChar));
         char_scan_test("'\\u{1234}' foo", " foo", Some(AteChar));
@@ -589,6 +593,9 @@ mod test {
         valid("'a\n");
         // Invalid, as '3 could not.
         invalid("'3\n");
+        // `'_` is the anonymous lifetime, not the start of an invalid char literal.
+        partial("fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {");
+        valid("fn name(&self) -> Cow<'_, str> { Cow::Borrowed(&self.name) }");
         // This is invalid, but the important thing is that we don't say
         // incomplete.
         invalid("foo('a ')\n");
