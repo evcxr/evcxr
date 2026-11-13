@@ -485,6 +485,9 @@ allow_apis = [
     "nix",
 ]
 
+[pkg.buffer-redux]
+allow_unsafe = true
+
 [pkg.tokio]
 allow_unsafe = true
 
