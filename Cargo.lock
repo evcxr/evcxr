@@ -661,7 +661,6 @@ dependencies = [
  "tempfile",
  "toml",
  "triomphe",
- "unicode-segmentation",
  "which",
 ]
 

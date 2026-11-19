@@ -1,13 +1,13 @@
 [package]
 name = "evcxr"
-version = "0.22.0"
-license = "MIT OR Apache-2.0"
 description = "An Evaluation Context for Rust"
-repository = "https://github.com/evcxr/evcxr"
 readme = "README.md"
-authors = ["The Evcxr Authors"]
-edition = "2024"
-rust-version = "1.95"
+version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 anyhow = "1.0.33"
@@ -20,7 +20,6 @@ libloading = "0.9.0"
 dirs = "7.0.0"
 which = "8.0.0"
 evcxr_input = "1.0.0"
-unicode-segmentation = "1.7.1"
 crossbeam-channel = "0.5.15"
 toml = { version = "1.1.2" }
 serde = { version = "1.0.207", features = [ "derive" ] }
