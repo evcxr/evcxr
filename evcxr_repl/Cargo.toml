@@ -13,7 +13,7 @@ rust-version.workspace = true
 default = ["mimalloc"]
 
 [dependencies]
-evcxr = { version = "=0.22.0", path = "../evcxr" }
+evcxr = { version = "=0.23.0", path = "../evcxr" }
 rustyline = { version = "19.0.0", features = ["buffer-redux"] }
 once_cell = "1.5.2"
 regex = { version = "1.4.1", default-features = false, features = [ "std" ] }

@@ -1,3 +1,10 @@
+# Version 0.23.0
+* MSRV now 1.98
+* Enable rustyline's buffer-redux feature (#526)
+* Preserve cargo diagnostics when rustc emits only warnings (#524)
+* Don't submit incomplete REPL input that uses the `'_` lifetime (#519)
+* Updates dependencies, in particular rust-analyzer
+
 # Version 0.22.0
 * Update rust-analyzer (fixes problems with newer rust versions)
 * Fixed failures when global build.build-dir is set
