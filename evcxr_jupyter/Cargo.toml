@@ -9,7 +9,7 @@ authors.workspace = true
 edition.workspace = true
 
 [dependencies]
-evcxr = { version = "=0.22.0", path = "../evcxr" }
+evcxr = { version = "=0.23.0", path = "../evcxr" }
 serde_json = "1.0.145"
 anyhow = "1.0.33"
 bytes = "1.11.1"
