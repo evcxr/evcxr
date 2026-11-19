@@ -37,6 +37,35 @@ jobs:
       - run: cargo build
       - run: cargo test
 
+  msrv:
+    name: Build and test (MSRV)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Read MSRV
+        id: msrv
+        run: |
+          rust_version=$(cargo metadata --no-deps --format-version 1 | jq -er '.packages[] | select(.name == "evcxr") | .rust_version')
+          echo "rust-version=$rust_version" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@master
+        id: rust-toolchain
+        with:
+          toolchain: ${{ steps.msrv.outputs.rust-version }}
+          components: rust-src
+      - name: Cache cargo registry and git trees
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Cache target dir
+        uses: actions/cache@v6
+        with:
+          path: target/
+          key: ${{ runner.os }}-cargo-msrv-${{ steps.rust-toolchain.outputs.cachekey }}-${{ hashFiles('**/Cargo.lock') }}
+      - run: cargo test --workspace --locked -- --test-threads 1
+
   rustfmt:
     name: Check formatting
     runs-on: ubuntu-latest
