@@ -459,6 +459,9 @@ allow_unsafe = true
 
 [pkg.socket2]
 allow_unsafe = true
+allow_apis = [
+    "fs",
+]
 
 [pkg.ra_ap_syntax]
 allow_unsafe = true
@@ -594,12 +597,43 @@ allow_apis = [
     "fs",
 ]
 
-[pkg.zeromq]
+[pkg.arc-swap]
+allow_unsafe = true
+
+[pkg.atomic-waker]
+allow_unsafe = true
+
+[pkg.chacha20]
+allow_unsafe = true
+
+[pkg.concurrent-queue]
+allow_unsafe = true
+
+[pkg.omq-proto]
+allow_apis = [
+    "fs",
+]
+
+[pkg.omq-shm]
 allow_unsafe = true
 allow_apis = [
     "fs",
-    "net",
+    "process",
 ]
+
+[pkg.omq-tokio]
+allow_apis = [
+    "fs",
+    "net",
+    "nix",
+    "process",
+]
+
+[pkg.patricia_tree]
+allow_unsafe = true
+
+[pkg.yring]
+allow_unsafe = true
 
 [pkg.mimalloc]
 allow_unsafe = true
@@ -797,6 +831,10 @@ allow_proc_macro = true
 
 [pkg.rustversion]
 allow_proc_macro = true
+build.allow_apis = [
+    "fs",
+    "process",
+]
 
 [pkg.windows-implement]
 allow_proc_macro = true

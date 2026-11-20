@@ -18,6 +18,7 @@ use crossbeam_channel::RecvTimeoutError;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
 use evcxr::Theme;
+use omq_tokio::{Message, Options, Socket, SocketType};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,8 +29,8 @@ use yansi::Paint as _;
 // Note, to avoid potential deadlocks, each thread should lock at most one mutex at a time.
 #[derive(Clone)]
 pub(crate) struct Server {
-    iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
-    stdin: Arc<Mutex<Connection<zeromq::RouterSocket>>>,
+    iopub: Arc<Mutex<Connection>>,
+    stdin: Arc<Mutex<Connection>>,
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
     io_thread_shutdown_sender: Arc<Mutex<Option<crossbeam_channel::Sender<()>>>>,
     tokio_handle: tokio::runtime::Handle,
@@ -61,28 +62,29 @@ impl Server {
         tokio_handle: tokio::runtime::Handle,
     ) -> Result<()> {
         let (connection_group, group_shutdown) = ConnectionGroup::new();
-        let mut heartbeat = bind_socket::<zeromq::RepSocket>(
+        let mut heartbeat = bind_socket(
+            SocketType::Rep,
             config,
             config.hb_port,
             Some(connection_group.clone()),
         )
         .await?;
-        let shell_socket = bind_socket::<zeromq::RouterSocket>(
+        let shell_socket = bind_socket(
+            SocketType::Router,
             config,
             config.shell_port,
             Some(connection_group.clone()),
         )
         .await?;
-        let control_socket = bind_socket::<zeromq::RouterSocket>(
+        let control_socket = bind_socket(
+            SocketType::Router,
             config,
             config.control_port,
             Some(connection_group.clone()),
         )
         .await?;
-        let stdin_socket =
-            bind_socket::<zeromq::RouterSocket>(config, config.stdin_port, None).await?;
-        let iopub_socket =
-            bind_socket::<zeromq::PubSocket>(config, config.iopub_port, None).await?;
+        let stdin_socket = bind_socket(SocketType::Router, config, config.stdin_port, None).await?;
+        let iopub_socket = bind_socket(SocketType::Pub, config, config.iopub_port, None).await?;
         let iopub = Arc::new(Mutex::new(iopub_socket));
 
         // Create a channel pair that's used to signal to the IO thread when to shut down. This
@@ -167,16 +169,14 @@ impl Server {
         self.io_thread_shutdown_sender.lock().await.take();
     }
 
-    async fn handle_hb(connection: &mut Connection<zeromq::RepSocket>) -> Result<()> {
+    async fn handle_hb(connection: &mut Connection) -> Result<()> {
         loop {
             match connection.recv().await {
                 Ok(_) => {}
                 Err(RecvError::ShutdownRequested) => return Ok(()),
                 Err(RecvError::Other(e)) => return Err(e),
             }
-            connection
-                .send(zeromq::ZmqMessage::from(b"ping".to_vec()))
-                .await?;
+            connection.send(Message::single("ping")).await?;
         }
     }
 
@@ -316,17 +316,17 @@ impl Server {
                 "prompt" => prompt,
                 "password" => password,
             });
-        stdin_request.send(&mut *stdin).await.ok()?;
+        stdin_request.send(&mut stdin).await.ok()?;
 
-        let input_response = JupyterMessage::read(&mut *stdin).await.ok()?;
+        let input_response = JupyterMessage::read(&mut stdin).await.ok()?;
         input_response.get_content()["value"]
             .as_str()
             .map(|value| value.to_owned())
     }
 
-    async fn handle_shell<S: zeromq::Socket + zeromq::SocketRecv + zeromq::SocketSend>(
+    async fn handle_shell(
         self,
-        mut connection: Connection<S>,
+        mut connection: Connection,
         execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
         execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
         context: Arc<std::sync::Mutex<CommandContext>>,
@@ -356,10 +356,10 @@ impl Server {
         }
     }
 
-    async fn handle_shell_message<S: zeromq::SocketRecv + zeromq::SocketSend>(
+    async fn handle_shell_message(
         &self,
         message: JupyterMessage,
-        connection: &mut Connection<S>,
+        connection: &mut Connection,
         execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
         execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
         context: &Arc<std::sync::Mutex<CommandContext>>,
@@ -437,7 +437,7 @@ impl Server {
 
     async fn handle_control(
         mut self,
-        mut connection: Connection<zeromq::RouterSocket>,
+        mut connection: Connection,
         process_handle: Arc<std::sync::Mutex<std::process::Child>>,
         group_shutdown: ConnectionShutdownRequester,
     ) -> Result<()> {
@@ -468,6 +468,7 @@ impl Server {
                         .with_content(response)
                         .send(&mut connection)
                         .await?;
+                    connection.close(Duration::from_secs(1)).await?;
                     return Ok(());
                 }
                 "interrupt_request" => {
@@ -648,7 +649,7 @@ impl Server {
 async fn comm_open(
     message: JupyterMessage,
     context: &Arc<std::sync::Mutex<CommandContext>>,
-    iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
+    iopub: Arc<Mutex<Connection>>,
 ) -> Result<()> {
     if message.target_name() == "evcxr-cargo-check" {
         let context = Arc::clone(context);
@@ -721,14 +722,20 @@ async fn cargo_check(code: String, context: Arc<std::sync::Mutex<CommandContext>
     }
 }
 
-async fn bind_socket<S: zeromq::Socket>(
+async fn bind_socket(
+    socket_type: SocketType,
     config: &control_file::Control,
     port: u16,
     group: Option<ConnectionGroup>,
-) -> Result<Connection<S>> {
-    let endpoint = format!("{}://{}:{}", config.transport, config.ip, port);
-    let mut socket = S::new();
-    socket.bind(&endpoint).await?;
+) -> Result<Connection> {
+    let endpoint = match config.transport.as_str() {
+        "ipc" if cfg!(unix) => format!("ipc://{}-{port}", config.ip),
+        "ipc" => bail!("Jupyter IPC requires Unix domain sockets"),
+        transport => format!("{transport}://{}:{port}", config.ip),
+    };
+    let options = Options::default().router_mandatory(socket_type == SocketType::Router);
+    let socket = Socket::new(socket_type, options);
+    socket.bind(endpoint.as_str()).await?;
     Connection::new(socket, &config.key, group)
 }
 
@@ -887,6 +894,42 @@ fn display_message(request: &JupyterMessage, content: HashMap<String, String>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn binds_jupyter_ipc_endpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = dir.path().join("kernel");
+        let config = control_file::Control {
+            control_port: 1,
+            shell_port: 2,
+            stdin_port: 3,
+            hb_port: 4,
+            iopub_port: 5,
+            transport: "ipc".to_owned(),
+            ip: prefix.to_str().unwrap().to_owned(),
+            key: String::new(),
+        };
+        let mut connection = bind_socket(SocketType::Rep, &config, config.hb_port, None)
+            .await
+            .unwrap();
+        assert!(dir.path().join("kernel-4").exists());
+        let client = Socket::new(SocketType::Req, Options::default());
+        let endpoint = format!("ipc://{}-4", prefix.display());
+        client.connect(endpoint.as_str()).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            client.send(Message::single("ping")).await.unwrap();
+            let ping = connection.recv().await.ok().unwrap();
+            connection.send(ping).await.unwrap();
+            assert_eq!(
+                client.recv().await.unwrap().get(0),
+                Some(b"ping".as_slice())
+            );
+        })
+        .await
+        .unwrap();
+        connection.close(Duration::ZERO).await.unwrap();
+    }
 
     #[test]
     fn display_mime_bundle_data() {
