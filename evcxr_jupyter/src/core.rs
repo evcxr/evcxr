@@ -728,15 +728,29 @@ async fn bind_socket(
     port: u16,
     group: Option<ConnectionGroup>,
 ) -> Result<Connection> {
-    let endpoint = match config.transport.as_str() {
-        "ipc" if cfg!(unix) => format!("ipc://{}-{port}", config.ip),
-        "ipc" => bail!("Jupyter IPC requires Unix domain sockets"),
-        transport => format!("{transport}://{}:{port}", config.ip),
-    };
-    let options = Options::default().router_mandatory(socket_type == SocketType::Router);
+    let endpoint = endpoint(config, port)?;
+    // Shell and control drop replies to clients that are gone. Stdin reports
+    // them, so that an input request does not wait for a reply forever.
+    let mut options = Options::default()
+        .router_mandatory(socket_type == SocketType::Router && port == config.stdin_port);
+    // IOPub carries every output line and the busy/idle status. Wait for slow
+    // subscribers instead of dropping messages at the high-water mark.
+    options.xpub_nodrop = socket_type == SocketType::Pub;
     let socket = Socket::new(socket_type, options);
     socket.bind(endpoint.as_str()).await?;
     Connection::new(socket, &config.key, group)
+}
+
+fn endpoint(config: &control_file::Control, port: u16) -> Result<String> {
+    Ok(match config.transport.as_str() {
+        "ipc" if cfg!(unix) => format!("ipc://{}-{port}", config.ip),
+        "ipc" => bail!("Jupyter IPC requires Unix domain sockets"),
+        // Jupyter writes IPv6 addresses without brackets.
+        transport if config.ip.contains(':') && !config.ip.starts_with('[') => {
+            format!("{transport}://[{}]:{port}", config.ip)
+        }
+        transport => format!("{transport}://{}:{port}", config.ip),
+    })
 }
 
 /// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)
@@ -895,21 +909,25 @@ fn display_message(request: &JupyterMessage, content: HashMap<String, String>) -
 mod tests {
     use super::*;
 
-    #[cfg(unix)]
-    #[tokio::test]
-    async fn binds_jupyter_ipc_endpoint() {
-        let dir = tempfile::tempdir().unwrap();
-        let prefix = dir.path().join("kernel");
-        let config = control_file::Control {
+    fn test_config(transport: &str, ip: &str) -> control_file::Control {
+        control_file::Control {
             control_port: 1,
             shell_port: 2,
             stdin_port: 3,
             hb_port: 4,
             iopub_port: 5,
-            transport: "ipc".to_owned(),
-            ip: prefix.to_str().unwrap().to_owned(),
+            transport: transport.to_owned(),
+            ip: ip.to_owned(),
             key: String::new(),
-        };
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn binds_jupyter_ipc_endpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = dir.path().join("kernel");
+        let config = test_config("ipc", prefix.to_str().unwrap());
         let mut connection = bind_socket(SocketType::Rep, &config, config.hb_port, None)
             .await
             .unwrap();
@@ -929,6 +947,83 @@ mod tests {
         .await
         .unwrap();
         connection.close(Duration::ZERO).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn iopub_waits_for_slow_subscriber() {
+        const COUNT: usize = 20_000;
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = dir.path().join("kernel");
+        let config = test_config("ipc", prefix.to_str().unwrap());
+        let mut iopub = bind_socket(SocketType::Pub, &config, config.iopub_port, None)
+            .await
+            .unwrap();
+        let subscriber = Socket::new(SocketType::Sub, Options::default());
+        subscriber.subscribe("").await.unwrap();
+        let endpoint = format!("ipc://{}-5", prefix.display());
+        subscriber.connect(endpoint.as_str()).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                iopub.send(Message::single("probe")).await.unwrap();
+                let probe = tokio::time::timeout(Duration::from_millis(10), subscriber.recv());
+                if probe.await.is_ok() {
+                    return;
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        let mut sender = tokio::spawn(async move {
+            for index in 0..COUNT {
+                let parts = [index.to_string().into_bytes(), vec![0; 1024]];
+                iopub.send(Message::multipart(parts)).await.unwrap();
+            }
+            iopub
+        });
+        // Let the publisher run ahead of the subscriber, which is not reading yet.
+        let _ = tokio::time::timeout(Duration::from_millis(200), &mut sender).await;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let mut expected = 0;
+            while expected < COUNT {
+                let message = subscriber.recv().await.unwrap();
+                if message.get(0) == Some(b"probe".as_slice()) {
+                    continue;
+                }
+                assert_eq!(message.get(0), Some(expected.to_string().as_bytes()));
+                expected += 1;
+            }
+        })
+        .await
+        .unwrap();
+        sender.await.unwrap().close(Duration::ZERO).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn only_stdin_rejects_replies_to_gone_clients() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config("ipc", dir.path().join("kernel").to_str().unwrap());
+        let reply = || Message::multipart([b"gone".to_vec(), b"reply".to_vec()]);
+        let mut control = bind_socket(SocketType::Router, &config, config.control_port, None)
+            .await
+            .unwrap();
+        control.send(reply()).await.unwrap();
+        control.close(Duration::ZERO).await.unwrap();
+        let mut stdin = bind_socket(SocketType::Router, &config, config.stdin_port, None)
+            .await
+            .unwrap();
+        assert!(stdin.send(reply()).await.is_err());
+        stdin.close(Duration::ZERO).await.unwrap();
+    }
+
+    #[test]
+    fn brackets_ipv6_tcp_endpoint() {
+        let mut config = test_config("tcp", "::1");
+        assert_eq!(endpoint(&config, 4).unwrap(), "tcp://[::1]:4");
+        config.ip = "127.0.0.1".to_owned();
+        assert_eq!(endpoint(&config, 4).unwrap(), "tcp://127.0.0.1:4");
     }
 
     #[test]

@@ -24,7 +24,7 @@ unicode-segmentation = "1.7.1"
 mimalloc = { version = "0.1", default-features = false, optional = true }
 crossbeam-channel = "0.5.15"
 ariadne = "0.6.0"
-omq-tokio = "0.37.1"
+omq-tokio = "0.38.0"
 tokio-util = "0.7.8"
 yansi = "1.0.1"
 
