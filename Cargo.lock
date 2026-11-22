@@ -744,9 +744,9 @@ dependencies = [
 
 [[package]]
 name = "fanring"
-version = "0.3.11"
+version = "0.3.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "822dd8c68f1f0b90a3c2d60a21f703f125cae4c7feecdb259ea8548b274667ad"
+checksum = "c6e4e1667d04b51f74904b2bff5245040f3effdb70ef0fc8b0bb9c7d5e7598be"
 dependencies = [
  "arc-swap",
  "atomic-waker",
@@ -1589,9 +1589,9 @@ dependencies = [
 
 [[package]]
 name = "omq-proto"
-version = "0.41.0"
+version = "0.41.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be7564e77fef4a059ff0676838f5ce0ad5e2d3b458bd7c046e9cecfbc2b03416"
+checksum = "a09f860f62d697173637af2f106b5a6362af1ba86e867fa1435bcb06ad219682"
 dependencies = [
  "bytes",
  "concurrent-queue",
@@ -1605,9 +1605,9 @@ dependencies = [
 
 [[package]]
 name = "omq-shm"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c77d872064f046d2a08e4839b2ebc38b1b65dba157af94412cfaa565f1e4d28"
+checksum = "d8622eead4af01739312de626e7ca15b77d46691a513a5c032b3c049f34faddf"
 dependencies = [
  "arc-swap",
  "bytes",
@@ -1619,9 +1619,9 @@ dependencies = [
 
 [[package]]
 name = "omq-tokio"
-version = "0.38.0"
+version = "0.38.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d8590bedaffce31a19d8b3b906c238b6fdf92df4b6c08be705e6ed0094a3287"
+checksum = "626778d429c68d70196182e659d9b2dc1decb05a53b7f212ec9100411a3a964e"
 dependencies = [
  "arc-swap",
  "bytes",
@@ -3831,9 +3831,9 @@ dependencies = [
 
 [[package]]
 name = "yring"
-version = "0.3.21"
+version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbf3b929ee32afe8b4f4c47e3647071775e59bcf67e0cbbbd360d30180bf1e91"
+checksum = "d9711debb4e69f22b935b1de5a5c8d0329ec79bb9de7a585b513e39aee19eed3"
 dependencies = [
  "loom",
 ]
