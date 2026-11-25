@@ -40,7 +40,8 @@ jobs:
 
       - run: cargo build
       - run: cargo test
-      - run: cargo fmt --all -- --check
+      - run: cargo +nightly fmt --all -- --check
+        if: matrix.rust == 'nightly'
       - run: cargo clippy
 
 

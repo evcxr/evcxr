@@ -8,7 +8,8 @@
 use anyhow::Result;
 use hmac::Hmac;
 use hmac::digest::KeyInit;
-use omq_tokio::{Message, Socket};
+use omq_tokio::Message;
+use omq_tokio::Socket;
 use sha2::Sha256;
 use std::time::Duration;
 use tokio::sync::mpsc::Receiver;
