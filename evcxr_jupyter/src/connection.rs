@@ -8,12 +8,12 @@
 use anyhow::Result;
 use hmac::Hmac;
 use hmac::digest::KeyInit;
+use omq_tokio::{Message, Socket};
 use sha2::Sha256;
+use std::time::Duration;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::mpsc::Sender;
 use tokio_util::sync::CancellationToken;
-use zeromq::ZmqMessage;
-use zeromq::ZmqResult;
 
 pub(crate) type HmacSha256 = Hmac<Sha256>;
 
@@ -35,8 +35,8 @@ pub(crate) struct ConnectionShutdownRequester {
     shutdown_complete: Receiver<()>,
 }
 
-pub(crate) struct Connection<S> {
-    socket: Option<S>,
+pub(crate) struct Connection {
+    socket: Option<Socket>,
     /// Will be None if our key was empty (digest authentication disabled).
     pub(crate) mac: Option<HmacSha256>,
     group: Option<ConnectionGroup>,
@@ -57,7 +57,7 @@ impl ConnectionGroup {
     }
 }
 
-impl<S> Connection<S> {
+impl Connection {
     /// Requests that all other connections in the same group shut down. Waits for them all to shut
     /// down. Note, the connection on which this is called isn't shut down, since it needs to send a
     /// response to the shutdown request before it does so.
@@ -79,10 +79,8 @@ impl<S> Connection<S> {
         // Wait for all other connections to be dropped.
         let _ = requester.shutdown_complete.recv().await;
     }
-}
 
-impl<S: zeromq::Socket> Connection<S> {
-    pub(crate) fn new(socket: S, key: &str, group: Option<ConnectionGroup>) -> Result<Self> {
+    pub(crate) fn new(socket: Socket, key: &str, group: Option<ConnectionGroup>) -> Result<Self> {
         let mac = if key.is_empty() {
             None
         } else {
@@ -94,10 +92,8 @@ impl<S: zeromq::Socket> Connection<S> {
             group,
         })
     }
-}
 
-impl<S: zeromq::Socket + zeromq::SocketRecv> Connection<S> {
-    pub(crate) async fn recv(&mut self) -> Result<ZmqMessage, RecvError> {
+    pub(crate) async fn recv(&mut self) -> Result<Message, RecvError> {
         let Some(socket) = self.socket.as_mut() else {
             return Err(RecvError::ShutdownRequested);
         };
@@ -107,9 +103,7 @@ impl<S: zeromq::Socket + zeromq::SocketRecv> Connection<S> {
         };
         tokio::select! {
             _ = group.token.cancelled() => {
-                if let Some(socket) = self.socket.take() {
-                    socket.close().await;
-                }
+                self.close(Duration::ZERO).await.map_err(|e| RecvError::Other(e.into()))?;
                 Err(RecvError::ShutdownRequested)
             }
             recv_result = socket.recv() => {
@@ -117,10 +111,15 @@ impl<S: zeromq::Socket + zeromq::SocketRecv> Connection<S> {
             }
         }
     }
-}
 
-impl<S: zeromq::SocketSend> Connection<S> {
-    pub(crate) async fn send(&mut self, message: ZmqMessage) -> ZmqResult<()> {
+    pub(crate) async fn close(&mut self, linger: Duration) -> omq_tokio::Result<()> {
+        if let Some(socket) = self.socket.take() {
+            socket.close_with_linger(Some(linger)).await?;
+        }
+        Ok(())
+    }
+
+    pub(crate) async fn send(&mut self, message: Message) -> omq_tokio::Result<()> {
         let Some(socket) = self.socket.as_mut() else {
             // For now, we just silently ignore send requests on a socket after we've started
             // shutdown.

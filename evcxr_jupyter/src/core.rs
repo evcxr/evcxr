@@ -18,6 +18,7 @@ use crossbeam_channel::RecvTimeoutError;
 use crossbeam_channel::Select;
 use evcxr::CommandContext;
 use evcxr::Theme;
+use omq_tokio::{Message, Options, Socket, SocketType};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,8 +29,8 @@ use yansi::Paint as _;
 // Note, to avoid potential deadlocks, each thread should lock at most one mutex at a time.
 #[derive(Clone)]
 pub(crate) struct Server {
-    iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
-    stdin: Arc<Mutex<Connection<zeromq::RouterSocket>>>,
+    iopub: Arc<Mutex<Connection>>,
+    stdin: Arc<Mutex<Connection>>,
     latest_execution_request: Arc<Mutex<Option<JupyterMessage>>>,
     io_thread_shutdown_sender: Arc<Mutex<Option<crossbeam_channel::Sender<()>>>>,
     tokio_handle: tokio::runtime::Handle,
@@ -61,28 +62,29 @@ impl Server {
         tokio_handle: tokio::runtime::Handle,
     ) -> Result<()> {
         let (connection_group, group_shutdown) = ConnectionGroup::new();
-        let mut heartbeat = bind_socket::<zeromq::RepSocket>(
+        let mut heartbeat = bind_socket(
+            SocketType::Rep,
             config,
             config.hb_port,
             Some(connection_group.clone()),
         )
         .await?;
-        let shell_socket = bind_socket::<zeromq::RouterSocket>(
+        let shell_socket = bind_socket(
+            SocketType::Router,
             config,
             config.shell_port,
             Some(connection_group.clone()),
         )
         .await?;
-        let control_socket = bind_socket::<zeromq::RouterSocket>(
+        let control_socket = bind_socket(
+            SocketType::Router,
             config,
             config.control_port,
             Some(connection_group.clone()),
         )
         .await?;
-        let stdin_socket =
-            bind_socket::<zeromq::RouterSocket>(config, config.stdin_port, None).await?;
-        let iopub_socket =
-            bind_socket::<zeromq::PubSocket>(config, config.iopub_port, None).await?;
+        let stdin_socket = bind_socket(SocketType::Router, config, config.stdin_port, None).await?;
+        let iopub_socket = bind_socket(SocketType::Pub, config, config.iopub_port, None).await?;
         let iopub = Arc::new(Mutex::new(iopub_socket));
 
         // Create a channel pair that's used to signal to the IO thread when to shut down. This
@@ -167,16 +169,14 @@ impl Server {
         self.io_thread_shutdown_sender.lock().await.take();
     }
 
-    async fn handle_hb(connection: &mut Connection<zeromq::RepSocket>) -> Result<()> {
+    async fn handle_hb(connection: &mut Connection) -> Result<()> {
         loop {
             match connection.recv().await {
                 Ok(_) => {}
                 Err(RecvError::ShutdownRequested) => return Ok(()),
                 Err(RecvError::Other(e)) => return Err(e),
             }
-            connection
-                .send(zeromq::ZmqMessage::from(b"ping".to_vec()))
-                .await?;
+            connection.send(Message::single("ping")).await?;
         }
     }
 
@@ -316,17 +316,17 @@ impl Server {
                 "prompt" => prompt,
                 "password" => password,
             });
-        stdin_request.send(&mut *stdin).await.ok()?;
+        stdin_request.send(&mut stdin).await.ok()?;
 
-        let input_response = JupyterMessage::read(&mut *stdin).await.ok()?;
+        let input_response = JupyterMessage::read(&mut stdin).await.ok()?;
         input_response.get_content()["value"]
             .as_str()
             .map(|value| value.to_owned())
     }
 
-    async fn handle_shell<S: zeromq::Socket + zeromq::SocketRecv + zeromq::SocketSend>(
+    async fn handle_shell(
         self,
-        mut connection: Connection<S>,
+        mut connection: Connection,
         execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
         execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
         context: Arc<std::sync::Mutex<CommandContext>>,
@@ -356,10 +356,10 @@ impl Server {
         }
     }
 
-    async fn handle_shell_message<S: zeromq::SocketRecv + zeromq::SocketSend>(
+    async fn handle_shell_message(
         &self,
         message: JupyterMessage,
-        connection: &mut Connection<S>,
+        connection: &mut Connection,
         execution_channel: &tokio::sync::mpsc::UnboundedSender<JupyterMessage>,
         execution_reply_receiver: &mut tokio::sync::mpsc::UnboundedReceiver<JupyterMessage>,
         context: &Arc<std::sync::Mutex<CommandContext>>,
@@ -437,7 +437,7 @@ impl Server {
 
     async fn handle_control(
         mut self,
-        mut connection: Connection<zeromq::RouterSocket>,
+        mut connection: Connection,
         process_handle: Arc<std::sync::Mutex<std::process::Child>>,
         group_shutdown: ConnectionShutdownRequester,
     ) -> Result<()> {
@@ -468,6 +468,7 @@ impl Server {
                         .with_content(response)
                         .send(&mut connection)
                         .await?;
+                    connection.close(Duration::from_secs(1)).await?;
                     return Ok(());
                 }
                 "interrupt_request" => {
@@ -648,7 +649,7 @@ impl Server {
 async fn comm_open(
     message: JupyterMessage,
     context: &Arc<std::sync::Mutex<CommandContext>>,
-    iopub: Arc<Mutex<Connection<zeromq::PubSocket>>>,
+    iopub: Arc<Mutex<Connection>>,
 ) -> Result<()> {
     if message.target_name() == "evcxr-cargo-check" {
         let context = Arc::clone(context);
@@ -721,15 +722,35 @@ async fn cargo_check(code: String, context: Arc<std::sync::Mutex<CommandContext>
     }
 }
 
-async fn bind_socket<S: zeromq::Socket>(
+async fn bind_socket(
+    socket_type: SocketType,
     config: &control_file::Control,
     port: u16,
     group: Option<ConnectionGroup>,
-) -> Result<Connection<S>> {
-    let endpoint = format!("{}://{}:{}", config.transport, config.ip, port);
-    let mut socket = S::new();
-    socket.bind(&endpoint).await?;
+) -> Result<Connection> {
+    let endpoint = endpoint(config, port)?;
+    // Shell and control drop replies to clients that are gone. Stdin reports
+    // them, so that an input request does not wait for a reply forever.
+    let mut options = Options::default()
+        .router_mandatory(socket_type == SocketType::Router && port == config.stdin_port);
+    // IOPub carries every output line and the busy/idle status. Wait for slow
+    // subscribers instead of dropping messages at the high-water mark.
+    options.xpub_nodrop = socket_type == SocketType::Pub;
+    let socket = Socket::new(socket_type, options);
+    socket.bind(endpoint.as_str()).await?;
     Connection::new(socket, &config.key, group)
+}
+
+fn endpoint(config: &control_file::Control, port: u16) -> Result<String> {
+    Ok(match config.transport.as_str() {
+        "ipc" if cfg!(unix) => format!("ipc://{}-{port}", config.ip),
+        "ipc" => bail!("Jupyter IPC requires Unix domain sockets"),
+        // Jupyter writes IPv6 addresses without brackets.
+        transport if config.ip.contains(':') && !config.ip.starts_with('[') => {
+            format!("{transport}://[{}]:{port}", config.ip)
+        }
+        transport => format!("{transport}://{}:{port}", config.ip),
+    })
 }
 
 /// See [Kernel info documentation](https://jupyter-client.readthedocs.io/en/stable/messaging.html#kernel-info)
@@ -887,6 +908,123 @@ fn display_message(request: &JupyterMessage, content: HashMap<String, String>) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn test_config(transport: &str, ip: &str) -> control_file::Control {
+        control_file::Control {
+            control_port: 1,
+            shell_port: 2,
+            stdin_port: 3,
+            hb_port: 4,
+            iopub_port: 5,
+            transport: transport.to_owned(),
+            ip: ip.to_owned(),
+            key: String::new(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn binds_jupyter_ipc_endpoint() {
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = dir.path().join("kernel");
+        let config = test_config("ipc", prefix.to_str().unwrap());
+        let mut connection = bind_socket(SocketType::Rep, &config, config.hb_port, None)
+            .await
+            .unwrap();
+        assert!(dir.path().join("kernel-4").exists());
+        let client = Socket::new(SocketType::Req, Options::default());
+        let endpoint = format!("ipc://{}-4", prefix.display());
+        client.connect(endpoint.as_str()).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            client.send(Message::single("ping")).await.unwrap();
+            let ping = connection.recv().await.ok().unwrap();
+            connection.send(ping).await.unwrap();
+            assert_eq!(
+                client.recv().await.unwrap().get(0),
+                Some(b"ping".as_slice())
+            );
+        })
+        .await
+        .unwrap();
+        connection.close(Duration::ZERO).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn iopub_waits_for_slow_subscriber() {
+        const COUNT: usize = 20_000;
+        let dir = tempfile::tempdir().unwrap();
+        let prefix = dir.path().join("kernel");
+        let config = test_config("ipc", prefix.to_str().unwrap());
+        let mut iopub = bind_socket(SocketType::Pub, &config, config.iopub_port, None)
+            .await
+            .unwrap();
+        let subscriber = Socket::new(SocketType::Sub, Options::default());
+        subscriber.subscribe("").await.unwrap();
+        let endpoint = format!("ipc://{}-5", prefix.display());
+        subscriber.connect(endpoint.as_str()).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                iopub.send(Message::single("probe")).await.unwrap();
+                let probe = tokio::time::timeout(Duration::from_millis(10), subscriber.recv());
+                if probe.await.is_ok() {
+                    return;
+                }
+            }
+        })
+        .await
+        .unwrap();
+
+        let mut sender = tokio::spawn(async move {
+            for index in 0..COUNT {
+                let parts = [index.to_string().into_bytes(), vec![0; 1024]];
+                iopub.send(Message::multipart(parts)).await.unwrap();
+            }
+            iopub
+        });
+        // Let the publisher run ahead of the subscriber, which is not reading yet.
+        let _ = tokio::time::timeout(Duration::from_millis(200), &mut sender).await;
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let mut expected = 0;
+            while expected < COUNT {
+                let message = subscriber.recv().await.unwrap();
+                if message.get(0) == Some(b"probe".as_slice()) {
+                    continue;
+                }
+                assert_eq!(message.get(0), Some(expected.to_string().as_bytes()));
+                expected += 1;
+            }
+        })
+        .await
+        .unwrap();
+        sender.await.unwrap().close(Duration::ZERO).await.unwrap();
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn only_stdin_rejects_replies_to_gone_clients() {
+        let dir = tempfile::tempdir().unwrap();
+        let config = test_config("ipc", dir.path().join("kernel").to_str().unwrap());
+        let reply = || Message::multipart([b"gone".to_vec(), b"reply".to_vec()]);
+        let mut control = bind_socket(SocketType::Router, &config, config.control_port, None)
+            .await
+            .unwrap();
+        control.send(reply()).await.unwrap();
+        control.close(Duration::ZERO).await.unwrap();
+        let mut stdin = bind_socket(SocketType::Router, &config, config.stdin_port, None)
+            .await
+            .unwrap();
+        assert!(stdin.send(reply()).await.is_err());
+        stdin.close(Duration::ZERO).await.unwrap();
+    }
+
+    #[test]
+    fn brackets_ipv6_tcp_endpoint() {
+        let mut config = test_config("tcp", "::1");
+        assert_eq!(endpoint(&config, 4).unwrap(), "tcp://[::1]:4");
+        config.ip = "127.0.0.1".to_owned();
+        assert_eq!(endpoint(&config, 4).unwrap(), "tcp://127.0.0.1:4");
+    }
 
     #[test]
     fn display_mime_bundle_data() {

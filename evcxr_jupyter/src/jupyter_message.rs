@@ -13,6 +13,7 @@ use anyhow::anyhow;
 use anyhow::bail;
 use bytes::Bytes;
 use chrono::Utc;
+use omq_tokio::Message;
 use serde_json::Value;
 use std::fmt;
 use std::{self};
@@ -24,21 +25,22 @@ struct RawMessage {
 }
 
 impl RawMessage {
-    pub(crate) async fn read<S: zeromq::Socket + zeromq::SocketRecv>(
-        connection: &mut Connection<S>,
-    ) -> Result<RawMessage, RecvError> {
+    pub(crate) async fn read(connection: &mut Connection) -> Result<RawMessage, RecvError> {
         Ok(Self::from_multipart(connection.recv().await?, connection)?)
     }
 
-    pub(crate) fn from_multipart<S>(
-        multipart: zeromq::ZmqMessage,
-        connection: &Connection<S>,
+    pub(crate) fn from_multipart(
+        multipart: Message,
+        connection: &Connection,
     ) -> Result<RawMessage> {
         let delimiter_index = multipart
             .iter()
             .position(|part| &part[..] == DELIMITER)
             .ok_or_else(|| anyhow!("Missing delimeter"))?;
-        let mut parts = multipart.into_vec();
+        let mut parts: Vec<_> = multipart.iter().collect();
+        if parts.len() < delimiter_index + 2 {
+            bail!("Missing HMAC frame");
+        }
         let jparts: Vec<_> = parts.drain(delimiter_index + 2..).collect();
         let hmac = parts.pop().unwrap();
         // Remove delimiter, so that what's left is just the identities.
@@ -62,7 +64,7 @@ impl RawMessage {
         Ok(raw_message)
     }
 
-    async fn send<S: zeromq::SocketSend>(self, connection: &mut Connection<S>) -> Result<()> {
+    async fn send(self, connection: &mut Connection) -> Result<()> {
         use hmac::Mac;
         let hmac = if let Some(mac_template) = &connection.mac {
             let mut mac = mac_template.clone();
@@ -71,19 +73,12 @@ impl RawMessage {
         } else {
             String::new()
         };
-        let mut parts: Vec<bytes::Bytes> = Vec::new();
-        for part in &self.zmq_identities {
-            parts.push(part.to_vec().into());
-        }
-        parts.push(DELIMITER.into());
-        parts.push(hmac.as_bytes().to_vec().into());
-        for part in &self.jparts {
-            parts.push(part.to_vec().into());
-        }
-        // ZmqMessage::try_from only fails if parts is empty, which it never
-        // will be here.
-        let message = zeromq::ZmqMessage::try_from(parts).unwrap();
-        connection.send(message).await?;
+        let parts = self
+            .zmq_identities
+            .into_iter()
+            .chain([Bytes::from_static(DELIMITER), Bytes::from(hmac)])
+            .chain(self.jparts);
+        connection.send(Message::multipart(parts)).await?;
         Ok(())
     }
 
@@ -107,9 +102,7 @@ pub(crate) struct JupyterMessage {
 const DELIMITER: &[u8] = b"<IDS|MSG>";
 
 impl JupyterMessage {
-    pub(crate) async fn read<S: zeromq::Socket + zeromq::SocketRecv>(
-        connection: &mut Connection<S>,
-    ) -> Result<JupyterMessage, RecvError> {
+    pub(crate) async fn read(connection: &mut Connection) -> Result<JupyterMessage, RecvError> {
         Ok(Self::from_raw_message(RawMessage::read(connection).await?)?)
     }
 
@@ -209,12 +202,7 @@ impl JupyterMessage {
         self
     }
 
-    pub(crate) async fn send<S: zeromq::SocketSend>(
-        &self,
-        connection: &mut Connection<S>,
-    ) -> Result<()> {
-        // If performance is a concern, we can probably avoid the clone and to_vec calls with a bit
-        // of refactoring.
+    pub(crate) async fn send(&self, connection: &mut Connection) -> Result<()> {
         let raw_message = RawMessage {
             zmq_identities: self.zmq_identities.clone(),
             jparts: vec![
