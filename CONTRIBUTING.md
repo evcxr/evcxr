@@ -17,8 +17,9 @@ best to squash any fixups into the relevant original commit.
 
 When you send a pull request a github action will make sure it builds and passes
 tests. It will also check that the code is formatted according to rustfmt. To
-save extra cycles, it's recommended to run `cargo fmt` before you commit your
-changes.
+save extra cycles, it's recommended to run `cargo +nightly fmt --all` before you
+commit your changes. Our formatting configuration uses nightly-only rustfmt
+options.
 
 ## Community Guidelines
 
